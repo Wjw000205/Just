@@ -93,10 +93,20 @@
         >
           模板创建
         </a>
-        <a class="nav-item has-drop">
-          数据上传
-          <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
+        <div class="nav-upload-wrap" ref="uploadDropRef">
+          <a
+            class="nav-item has-drop"
+            :class="{ active: uploadDropOpen || currentPage === 'create-dataset' || currentPage === 'upload-dataset' }"
+            @click="toggleUploadDrop"
+          >
+            数据上传
+            <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+          </a>
+          <ul v-if="uploadDropOpen" class="nav-dropdown">
+            <li class="nav-dropdown-item" @click="onUploadDropSelect('create')">创建数据集</li>
+            <li class="nav-dropdown-item" @click="onUploadDropSelect('upload')">上传数据集</li>
+          </ul>
+        </div>
         <a class="nav-item">数据发布</a>
         <a class="nav-item">模板库</a>
         <a class="nav-item">数据库</a>
@@ -325,7 +335,6 @@
 
       <!-- 数据检索页面 -->
       <SearchPage v-else-if="currentPage === 'search'" />
-
       <!-- 模板创建页面 - 基础设置 -->
       <TemplateCreatePage v-else-if="currentPage === 'template'" @next="(type) => { templateType = type; goPage('template-design') }" />
 
@@ -337,6 +346,10 @@
 
       <!-- 注册页面 -->
       <RegisterPage v-else-if="currentPage === 'register'" />
+      <!-- 创建数据集页面 -->
+      <CreateDataset v-else-if="currentPage === 'create-dataset'" />
+      <!-- 上传数据页面 -->
+      <UploadData v-else-if="currentPage === 'upload-data'" />
     </main>
 
     <!-- 登录弹层：覆盖在内容之上 -->
@@ -345,16 +358,20 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import SearchPage from './components/SearchPage.vue'
 import TemplateCreatePage from './components/TemplateCreatePage.vue'
 import TemplateDesignPage from './components/TemplateDesignPage.vue'
 import DataRuleConfigPage from './components/DataRuleConfigPage.vue'
 import RegisterPage from './components/RegisterPage.vue'
 import LoginPage from './components/LoginPage.vue'
+import CreateDataset from './components/CreateDataset.vue'
+import UploadData from './components/UploadData.vue'
 
 const currentPage = ref('home')
 const templateType = ref('dataset') // 'dataset' 或 'fragment'
+const uploadDropOpen = ref(false)
+const uploadDropRef = ref(null)
 
 const goPage = (page) => {
   currentPage.value = page
@@ -364,6 +381,33 @@ const handleCreate = () => {
   alert('模板创建成功！')
   currentPage.value = 'home'
 }
+
+function toggleUploadDrop() {
+  uploadDropOpen.value = !uploadDropOpen.value
+}
+
+function onUploadDropSelect(type) {
+  uploadDropOpen.value = false
+  if (type === 'create') {
+    currentPage.value = 'create-dataset'
+  }
+  if (type === 'upload') {
+    currentPage.value = 'upload-data'
+  }
+}
+
+function onDocClick(e) {
+  if (uploadDropRef.value && !uploadDropRef.value.contains(e.target)) {
+    uploadDropOpen.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocClick)
+})
 </script>
 
 <style scoped>
@@ -371,6 +415,39 @@ const handleCreate = () => {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.nav-upload-wrap {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.nav-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 140px;
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  background: var(--white);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+}
+
+.nav-dropdown-item {
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--text-gray);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-dropdown-item:hover {
+  background: rgba(26, 92, 230, 0.08);
+  color: var(--primary);
 }
 
 </style>
