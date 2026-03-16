@@ -42,25 +42,28 @@
           <div class="org-name">新一代生物医用材料数据资源节点</div>
         </div>
 
-        <!-- 右：帮助 + 用户 -->
+        <!-- 右：帮助 + 用户 / 登录注册 -->
         <div class="header-right">
           <button class="help-btn">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
               <text x="6" y="10" text-anchor="middle" fill="white" font-size="11" font-weight="700" font-family="Arial, sans-serif">?</text>
             </svg>
           </button>
-          <div class="user-block">
-            <div class="user-avatar">
-              <svg viewBox="0 0 32 32" fill="none">
-                <circle cx="16" cy="16" r="16" fill="#5b9bd5"/>
-                <circle cx="16" cy="12" r="5.5" fill="white" opacity="0.92"/>
-                <path d="M5 30c0-6.1 4.9-11 11-11s11 4.9 11 11" fill="white" opacity="0.92"/>
-              </svg>
-            </div>
-            <span class="user-name">朱向东</span>
-            <svg class="user-caret" width="10" height="6" viewBox="0 0 10 6">
-              <path d="M1 1l4 4 4-4" stroke="#555" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          <div class="auth-links">
+            <svg class="auth-icon" width="18" height="18" viewBox="0 0 24 24">
+              <circle cx="12" cy="8" r="4.2" fill="none" stroke="#1a5ce6" stroke-width="1.6" />
+              <path
+                d="M6.2 18.4C7 16 9.3 14.5 12 14.5c2.7 0 5 1.5 5.8 3.9"
+                fill="none"
+                stroke="#1a5ce6"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
+              <circle cx="12" cy="12" r="10" fill="none" stroke="#1a5ce6" stroke-width="1.2" />
             </svg>
+            <button class="auth-link" @click="goPage('login')">登录</button>
+            <span class="auth-sep">|</span>
+            <button class="auth-link" @click="goPage('register')">注册</button>
           </div>
         </div>
       </div>
@@ -83,7 +86,13 @@
         >
           数据检索
         </a>
-        <a class="nav-item">模板创建</a>
+        <a
+          class="nav-item"
+          :class="{ active: currentPage === 'template' }"
+          @click="goPage('template')"
+        >
+          模板创建
+        </a>
         <a class="nav-item has-drop">
           数据上传
           <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
@@ -316,18 +325,44 @@
 
       <!-- 数据检索页面 -->
       <SearchPage v-else-if="currentPage === 'search'" />
+
+      <!-- 模板创建页面 - 基础设置 -->
+      <TemplateCreatePage v-else-if="currentPage === 'template'" @next="(type) => { templateType = type; goPage('template-design') }" />
+
+      <!-- 模板设计页面 -->
+      <TemplateDesignPage v-else-if="currentPage === 'template-design'" :template-type="templateType" @back="goPage('template')" @next="goPage('data-rule')" @submit="handleCreate" />
+
+      <!-- 数据量规则配置页面 -->
+      <DataRuleConfigPage v-else-if="currentPage === 'data-rule'" @back="goPage('template-design')" @create="handleCreate" />
+
+      <!-- 注册页面 -->
+      <RegisterPage v-else-if="currentPage === 'register'" />
     </main>
+
+    <!-- 登录弹层：覆盖在内容之上 -->
+    <LoginPage v-if="currentPage === 'login'" />
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
 import SearchPage from './components/SearchPage.vue'
+import TemplateCreatePage from './components/TemplateCreatePage.vue'
+import TemplateDesignPage from './components/TemplateDesignPage.vue'
+import DataRuleConfigPage from './components/DataRuleConfigPage.vue'
+import RegisterPage from './components/RegisterPage.vue'
+import LoginPage from './components/LoginPage.vue'
 
 const currentPage = ref('home')
+const templateType = ref('dataset') // 'dataset' 或 'fragment'
 
 const goPage = (page) => {
   currentPage.value = page
+}
+
+const handleCreate = () => {
+  alert('模板创建成功！')
+  currentPage.value = 'home'
 }
 </script>
 

@@ -167,6 +167,35 @@ button {
   flex-shrink: 0;
 }
 
+.auth-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #1a5ce6;
+}
+
+.auth-icon {
+  display: block;
+}
+
+.auth-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  color: #1a5ce6;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
+.auth-sep {
+  color: #1a5ce6;
+  padding: 0 2px;
+}
+
 .help-btn {
   width: 28px;
   height: 28px;
