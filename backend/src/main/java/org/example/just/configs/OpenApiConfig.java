@@ -15,7 +15,7 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("Just 后端接口文档")
                         .description("用户注册接口文档")
-                        .version("1.0.0"))
+                        .version("1.0.1"))
                 .externalDocs(new ExternalDocumentation()
                         .description("Project Wiki"));
     }

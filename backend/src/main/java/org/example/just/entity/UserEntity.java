@@ -47,4 +47,12 @@ public class UserEntity {
     @TableField("deleted")
     @Schema(description = "逻辑删除标记")
     private Integer deleted;
+
+    @TableField("real_name")
+    @Schema(description = "真实姓名")
+    private String realName;
+
+    @TableField("second_password")
+    @Schema(description = "二级密码")
+    private String secondPassword;
 }
