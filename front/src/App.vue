@@ -108,17 +108,42 @@
           </ul>
         </div>
         <a class="nav-item">数据发布</a>
-        <a class="nav-item">模板库</a>
-        <a class="nav-item">数据库</a>
-        <a class="nav-item has-drop">
-          审核管理
-          <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        <a
+          class="nav-item"
+          :class="{ active: currentPage === 'template-library' }"
+          @click="goPage('template-library')"
+        >
+          模板库
         </a>
+        <a class="nav-item">数据库</a>
+        <div
+          class="nav-audit-wrap"
+          ref="auditDropRef"
+          @mouseenter="auditDropOpen = true"
+          @mouseleave="auditDropOpen = false"
+        >
+          <a
+            class="nav-item has-drop"
+            :class="{ active: auditDropOpen || isAuditPage }"
+          >
+            审核管理
+            <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+          </a>
+          <ul v-if="auditDropOpen" class="nav-dropdown">
+            <li class="nav-dropdown-item" @click="onAuditSelect('template-audit')">模板审核</li>
+            <li class="nav-dropdown-item" @click="onAuditSelect('template-disable')">模板停用</li>
+            <li class="nav-dropdown-item" @click="onAuditSelect('fragment-audit')">模板片段审核</li>
+            <li class="nav-dropdown-item" @click="onAuditSelect('fragment-disable')">模板片段停用</li>
+            <li class="nav-dropdown-item" @click="onAuditSelect('data-audit')">数据审核</li>
+            <li class="nav-dropdown-item" @click="onAuditSelect('data-disable')">数据停用</li>
+            <li class="nav-dropdown-item" @click="onAuditSelect('template-publish')">模板发布</li>
+            <li class="nav-dropdown-item" @click="onAuditSelect('catalog-publish')">目录发布</li>
+          </ul>
+        </div>
         <a class="nav-item has-drop">
           系统管理
           <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
-        <a class="nav-item">数据治理</a>
       </div>
     </nav>
 
@@ -350,15 +375,36 @@
       <CreateDataset v-else-if="currentPage === 'create-dataset'" />
       <!-- 上传数据页面 -->
       <UploadData v-else-if="currentPage === 'upload-data'" />
+
+      <!-- 模板库页面 -->
+      <TemplateLibraryPage v-else-if="currentPage === 'template-library'" @go-home="goPage('home')" />
+
+      <!-- 模板审核页面 -->
+      <TemplateAuditPage v-else-if="currentPage === 'template-audit'" @go-home="goPage('home')" />
+
+      <!-- 模板停用页面 -->
+      <TemplateDisablePage v-else-if="currentPage === 'template-disable'" @go-home="goPage('home')" />
+
+      <!-- 模板片段审核页面 -->
+      <FragmentAuditPage v-else-if="currentPage === 'fragment-audit'" @go-home="goPage('home')" />
+
+      <!-- 模板片段停用页面 -->
+      <FragmentDisablePage v-else-if="currentPage === 'fragment-disable'" @go-home="goPage('home')" />
+
+      <!-- 模板发布页面 -->
+      <TemplatePublishPage v-else-if="currentPage === 'template-publish'" @go-home="goPage('home')" />
     </main>
 
     <!-- 登录弹层：覆盖在内容之上 -->
-    <LoginPage v-if="currentPage === 'login'" />
+    <LoginPage
+      v-if="currentPage === 'login'"
+      @go-register="goPage('register')"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import SearchPage from './components/SearchPage.vue'
 import TemplateCreatePage from './components/TemplateCreatePage.vue'
 import TemplateDesignPage from './components/TemplateDesignPage.vue'
@@ -367,11 +413,25 @@ import RegisterPage from './components/RegisterPage.vue'
 import LoginPage from './components/LoginPage.vue'
 import CreateDataset from './components/CreateDataset.vue'
 import UploadData from './components/UploadData.vue'
+import TemplateLibraryPage from './components/TemplateLibraryPage.vue'
+import TemplateAuditPage from './components/TemplateAuditPage.vue'
+import TemplateDisablePage from './components/TemplateDisablePage.vue'
+import FragmentAuditPage from './components/FragmentAuditPage.vue'
+import FragmentDisablePage from './components/FragmentDisablePage.vue'
+import TemplatePublishPage from './components/TemplatePublishPage.vue'
 
 const currentPage = ref('home')
 const templateType = ref('dataset') // 'dataset' 或 'fragment'
 const uploadDropOpen = ref(false)
 const uploadDropRef = ref(null)
+const auditDropOpen = ref(false)
+const auditDropRef = ref(null)
+
+// 判断当前是否在审核管理相关页面
+const isAuditPage = computed(() => {
+  return ['template-audit', 'template-disable', 'fragment-audit', 'fragment-disable',
+          'data-audit', 'data-disable', 'template-publish', 'catalog-publish'].includes(currentPage.value)
+})
 
 const goPage = (page) => {
   currentPage.value = page
@@ -396,9 +456,21 @@ function onUploadDropSelect(type) {
   }
 }
 
+function toggleAuditDrop() {
+  auditDropOpen.value = !auditDropOpen.value
+}
+
+function onAuditSelect(page) {
+  auditDropOpen.value = false
+  currentPage.value = page
+}
+
 function onDocClick(e) {
   if (uploadDropRef.value && !uploadDropRef.value.contains(e.target)) {
     uploadDropOpen.value = false
+  }
+  if (auditDropRef.value && !auditDropRef.value.contains(e.target)) {
+    auditDropOpen.value = false
   }
 }
 
@@ -417,7 +489,8 @@ onBeforeUnmount(() => {
   gap: 24px;
 }
 
-.nav-upload-wrap {
+.nav-upload-wrap,
+.nav-audit-wrap {
   position: relative;
   display: flex;
   align-items: stretch;
@@ -432,22 +505,22 @@ onBeforeUnmount(() => {
   padding: 6px 0;
   list-style: none;
   background: var(--white);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   z-index: 100;
 }
 
 .nav-dropdown-item {
   padding: 8px 16px;
   font-size: 13px;
-  color: var(--text-gray);
+  color: #333;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
 .nav-dropdown-item:hover {
-  background: rgba(26, 92, 230, 0.08);
-  color: var(--primary);
+  background: #1a5ce6;
+  color: #fff;
 }
 
 </style>
