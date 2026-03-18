@@ -1,10 +1,12 @@
 package org.example.just.service.imp;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import lombok.RequiredArgsConstructor;
 import org.example.just.dto.userDto.*;
 import org.example.just.dao.UserDao;
 import org.example.just.entity.UserEntity;
 import org.example.just.service.UserService;
+import org.example.just.utils.JwtUtil;
 import org.example.just.utils.Result;
 import org.springframework.beans.BeanUtils;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -21,18 +23,15 @@ import org.example.just.entity.UserDepartmentEntity;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 
+@RequiredArgsConstructor
 @Service
 public class UserServiceImp implements UserService {
 
     private final UserDao userDao;
     private final BCryptPasswordEncoder passwordEncoder;
     private final UserDepartmentDao userDepartmentDao;
+    private final JwtUtil jwtUtil;
 
-    public UserServiceImp(UserDao userDao, BCryptPasswordEncoder passwordEncoder, UserDepartmentDao userDepartmentDao) {
-        this.userDao = userDao;
-        this.passwordEncoder = passwordEncoder;
-        this.userDepartmentDao = userDepartmentDao;
-    }
 
     @Override
     public Result<String> register(UserRegisterDTO dto) {
@@ -120,8 +119,9 @@ public class UserServiceImp implements UserService {
         if (!match) {
             return Result.fail("用户名或密码错误");
         }
-
-        return Result.success("登录成功");
+        // 生成 JWT Token
+        String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
+        return Result.success(token);
     }
 
     @Override
