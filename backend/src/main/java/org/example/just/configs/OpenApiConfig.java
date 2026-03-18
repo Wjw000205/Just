@@ -31,6 +31,5 @@ public class OpenApiConfig {
                                         .in(SecurityScheme.In.HEADER)
                                         .name("Authorization")
                                         .description("请输入 JWT Token，格式：Bearer {token}")));
-
     }
 }
