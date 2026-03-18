@@ -83,7 +83,7 @@
               class="search-input"
               placeholder="请输入检索内容"
             />
-            <button class="search-btn primary">搜索</button>
+            <button class="search-btn primary" @click="doSearch(true)">搜索</button>
             <button class="search-btn ghost">在结果中搜索</button>
             <button
               class="search-btn ghost"
@@ -126,7 +126,7 @@
                 class="advanced-select-dropdown"
               >
                 <li
-                  v-for="mode in searchModes"
+                  v-for="mode in advancedFieldOptions"
                   :key="mode.value"
                   class="advanced-select-item"
                   :class="{ active: mode.value === advancedField }"
@@ -228,7 +228,7 @@
             >
               {{ tagsCollapsed ? '展开标签' : '收起标签' }}
             </button>
-            <button class="advanced-btn primary">
+            <button class="advanced-btn primary" @click="doSearch(true)">
               检索
             </button>
           </div>
@@ -236,16 +236,103 @@
 
         <!-- 结果类型标签 -->
         <div class="result-tabs">
-          <button class="tab-btn active">数据集</button>
-          <button class="tab-btn">科技论文</button>
-          <button class="tab-btn">专利文献</button>
-          <button class="tab-btn">标准规范</button>
-          <button class="tab-btn">学术专著</button>
-          <button class="tab-btn">学位论文</button>
+          <button
+            v-for="tab in resultTypes"
+            :key="tab.value"
+            class="tab-btn"
+            :class="{ active: tab.value === currentResultType }"
+            @click="
+              currentResultType = tab.value;
+              doSearch(true);
+            "
+          >
+            {{ tab.label }}
+          </button>
         </div>
 
+        <!-- 加载中 -->
+        <div v-if="loading" class="search-loading">
+          <span class="loading-text">加载中…</span>
+        </div>
+
+        <!-- 结果列表 -->
+        <template v-else-if="hasSearched && resultItems.length > 0">
+          <ul class="result-list">
+            <li
+              v-for="item in resultItems"
+              :key="item.id"
+              class="result-item"
+            >
+              <h4 class="result-item-title">{{ item.title }}</h4>
+              <p v-if="item.abstract" class="result-item-abstract">
+                {{ item.abstract }}
+              </p>
+              <div v-if="item.tags?.length" class="result-item-tags">
+                <span
+                  v-for="(tag, i) in item.tags"
+                  :key="i"
+                  class="result-tag"
+                >
+                  {{ tag }}
+                </span>
+              </div>
+              <div class="result-item-meta">
+                <span v-if="item.publishTime">{{ item.publishTime }}</span>
+                <span v-if="item.creator">{{ item.creator }}</span>
+                <span v-if="item.organization">{{ item.organization }}</span>
+              </div>
+            </li>
+          </ul>
+
+          <!-- 分页 -->
+          <div class="pagination">
+            <span class="pagination-total">共 {{ total }} 条</span>
+            <span class="pagination-size">
+              每页
+              <select
+                :value="pageSize"
+                class="pagination-select"
+                @change="(e) => changePageSize(Number(e.target.value))"
+              >
+                <option
+                  v-for="opt in pageSizeOptions"
+                  :key="opt"
+                  :value="opt"
+                >
+                  {{ opt }}
+                </option>
+              </select>
+              条
+            </span>
+            <div class="pagination-nav">
+              <button
+                type="button"
+                class="pagination-btn"
+                :disabled="page <= 1"
+                @click="goToPage(page - 1)"
+              >
+                上一页
+              </button>
+              <span class="pagination-pages">
+                第 {{ page }} / {{ totalPages }} 页
+              </span>
+              <button
+                type="button"
+                class="pagination-btn"
+                :disabled="page >= totalPages"
+                @click="goToPage(page + 1)"
+              >
+                下一页
+              </button>
+            </div>
+          </div>
+        </template>
+
         <!-- 空状态 -->
-        <div class="search-empty">
+        <div
+          v-else-if="hasSearched && resultItems.length === 0"
+          class="search-empty"
+        >
           <div class="empty-icon">
             <div class="empty-paper"></div>
             <div class="empty-circle"></div>
@@ -272,6 +359,39 @@ const searchModes = [
   { label: '摘要', value: 'abstract' },
   { label: '篇关键词', value: 'paragraph_keyword' },
 ]
+
+// 高级检索下拉框字段（题名、关键词、摘要、发布者、机构）
+const advancedFieldOptions = [
+  { label: '题名', value: 'title' },
+  { label: '关键词', value: 'keyword_field' },
+  { label: '摘要', value: 'abstract' },
+  { label: '发布者', value: 'publisher' },
+  { label: '机构', value: 'organization' },
+]
+
+// 结果类型 Tab
+const resultTypes = [
+  { label: '数据集', value: 'dataset' },
+  { label: '科技论文', value: 'paper' },
+  { label: '专利文献', value: 'patent' },
+  { label: '标准规范', value: 'standard' },
+  { label: '学术专著', value: 'monograph' },
+  { label: '学位论文', value: 'thesis' },
+]
+const currentResultType = ref('dataset')
+
+// 分页与结果
+const page = ref(1)
+const pageSize = ref(10)
+const pageSizeOptions = [10, 20, 50]
+const total = ref(0)
+const resultItems = ref([])
+const loading = ref(false)
+const hasSearched = ref(false)
+
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(total.value / pageSize.value))
+)
 
 const currentMode = ref('fulltext')
 const modeDropdownVisible = ref(false)
@@ -301,7 +421,7 @@ const advancedFieldDropdownVisible = ref(false)
 const tagsCollapsed = ref(false)
 
 const currentAdvancedFieldLabel = computed(() => {
-  const found = searchModes.find((m) => m.value === advancedField.value)
+  const found = advancedFieldOptions.find((m) => m.value === advancedField.value)
   return found ? found.label : ''
 })
 
@@ -345,8 +465,79 @@ const toggleTags = () => {
 }
 
 const getModeLabel = (value) => {
-  const found = searchModes.find((m) => m.value === value)
+  const found =
+    advancedFieldOptions.find((m) => m.value === value) ||
+    searchModes.find((m) => m.value === value)
   return found ? found.label : value
+}
+
+// 调用 3.1 接口：POST /api/search/datasets
+const doSearch = async (resetPage = false) => {
+  if (resetPage) page.value = 1
+  loading.value = true
+  hasSearched.value = true
+  try {
+    const body = {
+      keyword: keyword.value?.trim() || undefined,
+      searchField: currentMode.value,
+      categoryIds: [], // 后续与左侧分类勾选联动
+      searchScope: 'all',
+      resultType: currentResultType.value,
+      page: page.value,
+      pageSize: pageSize.value,
+      sortField: 'relevance',
+      sortOrder: 'desc',
+    }
+    if (
+      advancedConditions.value.length > 0 ||
+      dateStart.value ||
+      dateEnd.value
+    ) {
+      body.advanced = {
+        conditions:
+          advancedConditions.value.length > 0
+            ? advancedConditions.value.map(({ field, value }) => ({
+                field,
+                value,
+              }))
+            : undefined,
+        publishDateStart: dateStart.value || undefined,
+        publishDateEnd: dateEnd.value || undefined,
+      }
+    }
+    const res = await fetch('/api/search/datasets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const json = await res.json()
+    if (json.code === 0 && json.data) {
+      total.value = json.data.total ?? 0
+      resultItems.value = json.data.items ?? []
+    } else {
+      total.value = 0
+      resultItems.value = []
+    }
+  } catch (_) {
+    total.value = 0
+    resultItems.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+const goToPage = (p) => {
+  const next = Math.max(1, Math.min(p, totalPages.value))
+  if (next === page.value) return
+  page.value = next
+  doSearch()
+}
+
+const changePageSize = (size) => {
+  if (size === pageSize.value) return
+  pageSize.value = size
+  page.value = 1
+  doSearch()
 }
 
 const handleClickOutside = (e) => {
@@ -608,6 +799,131 @@ onBeforeUnmount(() => {
   background: #1a5ce6;
   border-color: #1a5ce6;
   color: #fff;
+}
+
+.search-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  color: #8b92a6;
+  font-size: 13px;
+}
+
+.loading-text {
+  display: inline-block;
+}
+
+.result-list {
+  list-style: none;
+  margin: 0 0 16px 0;
+  padding: 0;
+}
+
+.result-item {
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e8ecf4;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.result-item-title {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.result-item-abstract {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  color: #555;
+  line-height: 1.5;
+}
+
+.result-item-tags {
+  margin-bottom: 6px;
+}
+
+.result-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: #e8f0fe;
+  color: #1a5ce6;
+  border-radius: 4px;
+}
+
+.result-item-meta {
+  font-size: 11px;
+  color: #8b92a6;
+}
+
+.result-item-meta span + span::before {
+  content: ' · ';
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 0;
+  font-size: 12px;
+  color: #555;
+}
+
+.pagination-total {
+  margin-right: 8px;
+}
+
+.pagination-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pagination-select {
+  padding: 4px 8px;
+  border: 1px solid #d4dae6;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.pagination-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.pagination-btn {
+  padding: 4px 12px;
+  border: 1px solid #d4dae6;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #fff;
+  cursor: pointer;
+  color: #333;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  border-color: #1a5ce6;
+  color: #1a5ce6;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-pages {
+  color: #8b92a6;
 }
 
 .search-empty {

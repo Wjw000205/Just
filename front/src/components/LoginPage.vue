@@ -13,35 +13,55 @@
       <div class="login-right">
         <h2 class="login-title">欢迎登录材料数据库系统</h2>
 
-        <form class="login-form">
+        <form class="login-form" @submit.prevent="handleLogin">
           <div class="form-row">
             <input
+              v-model="username"
               class="form-input"
               placeholder="请输入用户名"
+              autocomplete="username"
             />
           </div>
           <div class="form-row">
             <input
+              v-model="password"
               type="password"
               class="form-input"
               placeholder="请输入密码"
+              autocomplete="current-password"
             />
           </div>
 
           <div class="form-row verify-row">
             <input
+              v-model="captcha"
               class="form-input"
-              placeholder="请输入验证码"
+              placeholder="请输入右侧算式结果"
             />
-            <div class="verify-img">3Y2A</div>
+            <div
+              class="verify-img"
+              @click="refreshCaptcha"
+              title="看不清？点击换一题"
+            >
+              {{ captchaQuestion }}
+            </div>
           </div>
 
-          <button type="button" class="login-btn">登录</button>
+          <button
+            type="submit"
+            class="login-btn"
+            :disabled="submitting"
+          >
+            {{ submitting ? '登录中…' : '登录' }}
+          </button>
 
           <div class="login-extra">
-            <button type="button" class="text-btn">注册</button>
-            <button type="button" class="text-btn">
-              忘记密码？
+            <button
+              type="button"
+              class="text-btn"
+              @click="emit('go-register')"
+            >
+              注册
             </button>
           </div>
         </form>
@@ -51,6 +71,97 @@
 </template>
 
 <script setup>
+import { ref, onMounted } from 'vue'
+
+const emit = defineEmits(['login-success', 'go-register'])
+
+const username = ref('')
+const password = ref('')
+const captcha = ref('')
+const submitting = ref(false)
+const captchaQuestion = ref('')
+let captchaAnswer = 0
+
+function generateCaptcha() {
+  const a = Math.floor(Math.random() * 9) + 1
+  const b = Math.floor(Math.random() * 9) + 1
+  const ops = ['+', '-', '×']
+  const op = ops[Math.floor(Math.random() * ops.length)]
+
+  if (op === '+') {
+    captchaAnswer = a + b
+    captchaQuestion.value = `${a} + ${b} = ?`
+  } else if (op === '-') {
+    const max = Math.max(a, b)
+    const min = Math.min(a, b)
+    captchaAnswer = max - min
+    captchaQuestion.value = `${max} - ${min} = ?`
+  } else {
+    captchaAnswer = a * b
+    captchaQuestion.value = `${a} × ${b} = ?`
+  }
+}
+
+function refreshCaptcha() {
+  captcha.value = ''
+  generateCaptcha()
+}
+
+onMounted(() => {
+  generateCaptcha()
+})
+
+async function handleLogin() {
+  if (!username.value.trim() || !password.value.trim()) {
+    alert('请输入用户名和密码')
+    return
+  }
+  if (!captcha.value.trim()) {
+    alert('请输入验证码答案')
+    return
+  }
+  if (Number(captcha.value) !== captchaAnswer) {
+    alert('验证码错误，请重新输入')
+    refreshCaptcha()
+    return
+  }
+  if (submitting.value) return
+  submitting.value = true
+  try {
+    const res = await fetch('http://localhost:8083/user/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: username.value.trim(),
+        password: password.value,
+      }),
+    })
+
+    let json = null
+    try {
+      json = await res.json()
+    } catch (_) {
+      // 后端可能返回空体或非 JSON，忽略解析错误
+    }
+
+    if (!res.ok) {
+      alert((json && json.message) || `登录接口请求失败（HTTP ${res.status}）`)
+      return
+    }
+
+    if (json && json.code === 0) {
+      alert(json.message || '登录成功')
+      emit('login-success', json)
+    } else {
+      alert((json && json.message) || '登录失败')
+    }
+  } catch (e) {
+    console.error('login error', e)
+    alert('登录请求失败，请稍后重试')
+  } finally {
+    submitting.value = false
+  }
+}
 </script>
 
 <style scoped>
