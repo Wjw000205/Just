@@ -13,6 +13,9 @@ public class UpdateDepartmentDTO {
     @Schema(description = "部门名称", example = "研发部")
     private String departmentName;
 
-    @Schema(description = "部门负责人", example = "李四")
-    private String leader;
+    @Schema(description = "部门负责人id", example = "1")
+    private String leaderId;
+
+    @Schema(description = "部门负责人姓名", example = "李四")
+    private String leaderName;
 }

@@ -10,6 +10,9 @@ public class CreateDepartmentDTO {
     @Schema(description = "部门名称", example = "技术部")
     private String departmentName;
 
-    @Schema(description = "部门负责人", example = "张三")
-    private String leader;
+    @Schema(description = "部门负责人id", example = "1")
+    private String leaderId;
+
+    @Schema(description = "部门负责人姓名", example = "张三")
+    private String leaderName;
 }

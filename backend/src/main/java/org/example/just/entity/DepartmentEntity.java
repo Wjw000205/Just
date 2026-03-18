@@ -23,9 +23,13 @@ public class DepartmentEntity {
     @Schema(description = "部门名称")
     private String departmentName;
 
-    @TableField("leader")
-    @Schema(description = "负责人")
-    private String leader;
+    @TableField("leader_id")
+    @Schema(description = "负责人id")
+    private String leaderId;
+
+    @TableField("leader_name")
+    @Schema(description = "负责人名字")
+    private String leaderName;
 
     @TableLogic
     @TableField("deleted")

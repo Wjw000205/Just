@@ -32,8 +32,11 @@ public class DepartmentServiceImp implements DepartmentService {
         if (!StringUtils.hasText(dto.getDepartmentName())) {
             return Result.fail("部门名称不能为空");
         }
-        if (!StringUtils.hasText(dto.getLeader())) {
-            return Result.fail("部门负责人不能为空");
+        if (!StringUtils.hasText(dto.getLeaderId())) {
+            return Result.fail("部门负责人id不能为空");
+        }
+        if (!StringUtils.hasText(dto.getLeaderName())) {
+            return Result.fail("部门负责人姓名不能为空");
         }
 
         LambdaQueryWrapper<DepartmentEntity> wrapper = new LambdaQueryWrapper<>();
@@ -45,7 +48,8 @@ public class DepartmentServiceImp implements DepartmentService {
 
         DepartmentEntity department = new DepartmentEntity();
         department.setDepartmentName(dto.getDepartmentName());
-        department.setLeader(dto.getLeader());
+        department.setLeaderId(dto.getLeaderId());
+        department.setLeaderName(dto.getLeaderName());
         department.setDeleted(0);
         department.setCreatedTime(LocalDateTime.now());
 
@@ -69,8 +73,11 @@ public class DepartmentServiceImp implements DepartmentService {
         if (!StringUtils.hasText(dto.getDepartmentName())) {
             return Result.fail("部门名称不能为空");
         }
-        if (!StringUtils.hasText(dto.getLeader())) {
-            return Result.fail("部门负责人不能为空");
+        if (!StringUtils.hasText(dto.getLeaderId())) {
+            return Result.fail("部门负责人id不能为空");
+        }
+        if (!StringUtils.hasText(dto.getLeaderName())) {
+            return Result.fail("部门负责人姓名不能为空");
         }
 
         DepartmentEntity oldDepartment = departmentDao.selectById(dto.getId());
@@ -89,7 +96,8 @@ public class DepartmentServiceImp implements DepartmentService {
         LambdaUpdateWrapper<DepartmentEntity> updateWrapper = new LambdaUpdateWrapper<>();
         updateWrapper.eq(DepartmentEntity::getId, dto.getId())
                 .set(DepartmentEntity::getDepartmentName, dto.getDepartmentName())
-                .set(DepartmentEntity::getLeader, dto.getLeader());
+                .set(DepartmentEntity::getLeaderName, dto.getLeaderName())
+                .set(DepartmentEntity::getLeaderId, dto.getLeaderId());
 
         int rows = departmentDao.update(null, updateWrapper);
         if (rows <= 0) {
