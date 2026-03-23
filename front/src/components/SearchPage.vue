@@ -1,3 +1,7 @@
+
+
+
+
 <template>
   <section class="search-page">
     <div class="search-header">
@@ -350,6 +354,14 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
 
+const getAuthHeader = () => {
+  // 后端 JwtInterceptor 从请求头 Authorization 读取 token
+  const token =
+    localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  if (!token) return {}
+  return { Authorization: `Bearer ${token}` }
+}
+
 const keyword = ref('')
 
 const searchModes = [
@@ -507,11 +519,22 @@ const doSearch = async (resetPage = false) => {
     }
     const res = await fetch('/api/search/datasets', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
       body: JSON.stringify(body),
     })
-    const json = await res.json()
-    if (json.code === 0 && json.data) {
+
+    const json = await res.json().catch(() => null)
+    if (res.status === 401 || json?.code === 401) {
+      alert(json?.message || '未登录或无权限')
+      total.value = 0
+      resultItems.value = []
+      return
+    }
+
+    if (json?.code === 200 && json?.data) {
       total.value = json.data.total ?? 0
       resultItems.value = json.data.items ?? []
     } else {

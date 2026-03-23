@@ -197,7 +197,14 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted, watch } from 'vue'
+import { reactive, ref, onMounted, onBeforeUnmount, watch } from 'vue'
+
+const getAuthHeader = () => {
+  const token =
+    localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  if (!token) return {}
+  return { Authorization: `Bearer ${token}` }
+}
 
 const form = reactive({
   scienceCategoryId: '',
@@ -212,16 +219,24 @@ const schemaLoading = ref(false)
 const schemaError = ref('')
 const onlineForm = reactive({})
 const templateMenuVisible = ref(false)
+const templateDownloadLoading = ref(false)
 
 async function loadScienceCategoryOptions() {
   try {
     const resp = await fetch('/api/categories/science/tree', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
       body: JSON.stringify({ keyword: '', page: 1, pageSize: 1000 }),
     })
-    const json = await resp.json()
-    if (json.code === 0 && Array.isArray(json.data)) {
+    const json = await resp.json().catch(() => null)
+    if (resp.status === 401 || json?.code === 401) {
+      alert(json?.message || '未登录或无权限')
+      return
+    }
+    if (json?.code === 200 && Array.isArray(json.data)) {
       // 简单展平为一级下拉：只取叶子节点或所有节点名称
       const opts = []
       const walk = (nodes) => {
@@ -250,7 +265,10 @@ async function loadDatasetOptions() {
   try {
     const resp = await fetch('/api/datasets/options', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
       body: JSON.stringify({
         scienceCategoryId: form.scienceCategoryId,
         keyword: '',
@@ -258,8 +276,12 @@ async function loadDatasetOptions() {
         pageSize: 200,
       }),
     })
-    const json = await resp.json()
-    if (json.code === 0 && Array.isArray(json.data)) {
+    const json = await resp.json().catch(() => null)
+    if (resp.status === 401 || json?.code === 401) {
+      alert(json?.message || '未登录或无权限')
+      return
+    }
+    if (json?.code === 200 && Array.isArray(json.data)) {
       datasetOptions.value = json.data.map((item) => ({
         value: item.id,
         label: item.name,
@@ -288,11 +310,19 @@ async function loadDatasetSchema() {
   try {
     const resp = await fetch('/api/data/online/schema', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
       body: JSON.stringify({ datasetId: form.datasetId }),
     })
-    const json = await resp.json()
-    if (json.code === 0 && json.data) {
+    const json = await resp.json().catch(() => null)
+    if (resp.status === 401 || json?.code === 401) {
+      alert(json?.message || '未登录或无权限')
+      datasetSchema.value = null
+      return
+    }
+    if (json?.code === 200 && json.data) {
       datasetSchema.value = json.data
       // 初始化在线填写表单默认值
       Object.keys(onlineForm).forEach((k) => {
@@ -331,14 +361,74 @@ function toggleTemplateMenu() {
   templateMenuVisible.value = !templateMenuVisible.value
 }
 
-function downloadTemplate(type) {
+function getFilenameFromContentDisposition(cd) {
+  if (!cd) return ''
+  // filename*=UTF-8''xxx  or filename="xxx"
+  const matchUtf8 = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i)
+  if (matchUtf8 && matchUtf8[1]) {
+    try {
+      return decodeURIComponent(matchUtf8[1].replace(/(^"|"$)/g, ''))
+    } catch (_) {
+      return matchUtf8[1].replace(/(^"|"$)/g, '')
+    }
+  }
+  const match = cd.match(/filename\s*=\s*("?)([^";]+)\1/i)
+  return match && match[2] ? match[2] : ''
+}
+
+async function downloadTemplate(type) {
   templateMenuVisible.value = false
-  // 这里预留真实下载逻辑，由后端提供下载地址
-  console.log('download template', type, 'for dataset', form.datasetId)
+  if (!form.datasetId) return
+  if (templateDownloadLoading.value) return
+
+  templateDownloadLoading.value = true
+  try {
+    const format = type === 'excel' ? 'excel' : 'json'
+    const url = `/api/data/batch/template?datasetId=${encodeURIComponent(
+      form.datasetId
+    )}&format=${encodeURIComponent(format)}`
+
+    const resp = await fetch(url, {
+      method: 'GET',
+      headers: getAuthHeader(),
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+
+    const blob = await resp.blob()
+    const cd = resp.headers.get('content-disposition') || ''
+    const fallbackName = `template_${form.datasetId}.${format === 'excel' ? 'xlsx' : 'json'}`
+    const filename = getFilenameFromContentDisposition(cd) || fallbackName
+
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(blobUrl)
+  } catch (e) {
+    console.error('downloadTemplate error', e)
+  } finally {
+    templateDownloadLoading.value = false
+  }
+}
+
+function onDocClickCloseMenus(e) {
+  if (!templateMenuVisible.value) return
+  // 点击到菜单区域之外就关闭
+  const el = e.target
+  if (!el.closest('.upload-template-download')) {
+    templateMenuVisible.value = false
+  }
 }
 
 onMounted(() => {
   loadScienceCategoryOptions()
+  document.addEventListener('click', onDocClickCloseMenus)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocClickCloseMenus)
 })
 
 watch(

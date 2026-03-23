@@ -397,6 +397,13 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 
+const getAuthHeader = () => {
+  const token =
+    localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  if (!token) return {}
+  return { Authorization: `Bearer ${token}` }
+}
+
 const coverInputRef = ref(null)
 const coverPreview = ref('')
 const dataLevelDropRef = ref(null)
@@ -428,9 +435,15 @@ const dataLevelOption = computed(() =>
 
 async function loadTemplateTags() {
   try {
-    const resp = await fetch('/api/dicts/template-tags')
-    const json = await resp.json()
-    if (json.code === 0 && Array.isArray(json.data)) {
+    const resp = await fetch('/api/dicts/template-tags', {
+      headers: getAuthHeader(),
+    })
+    const json = await resp.json().catch(() => null)
+    if (resp.status === 401 || json?.code === 401) {
+      alert(json?.message || '未登录或无权限')
+      return
+    }
+    if (json?.code === 200 && Array.isArray(json.data)) {
       templateTagOptions.value = json.data.map((item) => ({
         value: item.id,
         label: item.name,
@@ -443,9 +456,15 @@ async function loadTemplateTags() {
 
 async function loadTemplates() {
   try {
-    const resp = await fetch('/api/dicts/templates')
-    const json = await resp.json()
-    if (json.code === 0 && Array.isArray(json.data)) {
+    const resp = await fetch('/api/dicts/templates', {
+      headers: getAuthHeader(),
+    })
+    const json = await resp.json().catch(() => null)
+    if (resp.status === 401 || json?.code === 401) {
+      alert(json?.message || '未登录或无权限')
+      return
+    }
+    if (json?.code === 200 && Array.isArray(json.data)) {
       templateOptions.value = json.data.map((item) => ({
         value: item.id,
         label: item.name,
@@ -503,15 +522,22 @@ async function loadScienceCategory() {
   try {
     const resp = await fetch('/api/categories/science/tree', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
       body: JSON.stringify({
         keyword: scienceCategoryKeyword.value || '',
         page: scienceCategoryPage.value,
         pageSize: scienceCategoryPageSize.value,
       }),
     })
-    const json = await resp.json()
-    if (json.code === 0) {
+    const json = await resp.json().catch(() => null)
+    if (resp.status === 401 || json?.code === 401) {
+      alert(json?.message || '未登录或无权限')
+      return
+    }
+    if (json?.code === 200) {
       scienceCategoryRows.value = flattenScienceTree(json.data || [])
     }
   } catch (e) {
@@ -649,7 +675,10 @@ async function loadProductCategory() {
   try {
     const resp = await fetch('/api/categories/product/tree', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
       body: JSON.stringify({
         industryKeyword: productCategoryKeywordIndustry.value || '',
         sectorKeyword: productCategoryKeywordSector.value || '',
@@ -658,8 +687,12 @@ async function loadProductCategory() {
         pageSize: productCategoryPageSize.value,
       }),
     })
-    const json = await resp.json()
-    if (json.code === 0) {
+    const json = await resp.json().catch(() => null)
+    if (resp.status === 401 || json?.code === 401) {
+      alert(json?.message || '未登录或无权限')
+      return
+    }
+    if (json?.code === 200) {
       productCategoryRows.value = flattenProductTree(json.data || [])
     }
   } catch (e) {
