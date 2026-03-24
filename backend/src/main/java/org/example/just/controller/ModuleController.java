@@ -79,4 +79,9 @@ public class ModuleController {
     public Result<String> deleteModuleRow(@RequestBody DeleteModuleRowDTO dto) {
         return moduleService.deleteModuleRow(dto);
     }
+    @PostMapping("/audit-template")
+    @Operation(summary = "审核模板", description = "对指定模板进行状态变更，如通过或驳回")
+    public Result<AuditModuleResultVO> auditModule(@RequestBody AuditModuleDTO dto) {
+        return moduleService.auditModule(dto);
+    }
 }

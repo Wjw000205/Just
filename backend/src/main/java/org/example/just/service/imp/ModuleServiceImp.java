@@ -701,4 +701,66 @@ public class ModuleServiceImp implements ModuleService {
 
         return Result.success("删除行数据成功");
     }
+
+
+    @Transactional
+    @Override
+    public Result<AuditModuleResultVO> auditModule(AuditModuleDTO dto) {
+        if (dto == null) {
+            return Result.fail("请求参数不能为空");
+        }
+        if (!StringUtils.hasText(dto.getModuleName())) {
+            return Result.fail("模板名称不能为空");
+        }
+        if (dto.getStatus() == null) {
+            return Result.fail("审核状态不能为空");
+        }
+        if (!StringUtils.hasText(dto.getAuditor())) {
+            return Result.fail("审核人不能为空");
+        }
+
+        String moduleName = dto.getModuleName().trim();
+        Integer status = dto.getStatus();
+        String remark = dto.getRemark() != null ? dto.getRemark().trim() : null;
+        String auditor = dto.getAuditor().trim();
+
+        // 1. 校验模板存在，并且必须是模板，不是目录
+        LambdaQueryWrapper<ModuleEntity> moduleWrapper = new LambdaQueryWrapper<>();
+        moduleWrapper.eq(ModuleEntity::getModuleName, moduleName)
+                .eq(ModuleEntity::getIsMenu, 0)
+                .last("limit 1");
+
+        ModuleEntity module = moduleDao.selectOne(moduleWrapper);
+        if (module == null) {
+            return Result.fail("模板不存在");
+        }
+
+        // 2. 校验审核状态是否合法
+        if (status != 0 && status != 1) {
+            return Result.fail("审核状态必须为 0（驳回）或 1（通过）");
+        }
+
+        // 3. 更新审核信息
+        LocalDateTime auditTime = LocalDateTime.now();
+
+        LambdaUpdateWrapper<ModuleEntity> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.eq(ModuleEntity::getModuleName, moduleName)
+                .set(ModuleEntity::getAuditStatus, status == 0 ? 2 : status); // 0 转为 2（驳回），1 保持（通过）
+        int rows = moduleDao.update(null, updateWrapper);
+        if (rows <= 0) {
+            return Result.fail("更新审核信息失败");
+        }
+
+        // 4. 返回审核结果
+        AuditModuleResultVO resultVO = new AuditModuleResultVO();
+        resultVO.setId(module.getId());
+        resultVO.setModuleName(module.getModuleName());
+        resultVO.setStatus(status == 0 ? 2 : status);
+        resultVO.setRemark(remark);
+        resultVO.setAuditor(auditor);
+        resultVO.setAuditTime(auditTime);
+
+        return Result.success(resultVO);
+    }
+
 }

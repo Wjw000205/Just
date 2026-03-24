@@ -27,4 +27,6 @@ public interface ModuleService {
     Result<String> deleteModuleColumn(DeleteModuleColumnDTO dto);
 
     Result<String> deleteModuleRow(DeleteModuleRowDTO dto);
+
+    Result<AuditModuleResultVO> auditModule(AuditModuleDTO dto);
 }

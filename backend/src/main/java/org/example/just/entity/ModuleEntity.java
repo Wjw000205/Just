@@ -43,4 +43,8 @@ public class ModuleEntity {
     @TableField("deleted")
     @Schema(description = "逻辑删除：0未删除，1已删除")
     private Integer deleted;
+
+    @TableField("audit_status")
+    @Schema(description = "审核状态：0未审核，1审核通过，2审核未通过")
+    private Integer auditStatus;
 }
