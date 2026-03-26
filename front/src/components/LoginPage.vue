@@ -149,9 +149,23 @@ async function handleLogin() {
       return
     }
 
-    if (json && json.code === 0) {
-      alert(json.message || '登录成功')
-      emit('login-success', json)
+    const okCode = json && (json.code === 0 || json.code === 200)
+    if (okCode) {
+      // token 兼容：后端可能把 token 放在 data 或 message
+      const tokenCandidate =
+        (typeof json?.data === 'string' ? json.data : '') ||
+        (typeof json?.message === 'string' ? json.message : '')
+      const token =
+        typeof tokenCandidate === 'string' && tokenCandidate.split('.').length === 3
+          ? tokenCandidate
+          : ''
+      if (token) {
+        localStorage.setItem('token', token)
+        sessionStorage.removeItem('token')
+      }
+      // 先通知父组件跳转，再提示（alert 会阻塞）
+      emit('login-success', { token, raw: json })
+      alert('登录成功')
     } else {
       alert((json && json.message) || '登录失败')
     }
