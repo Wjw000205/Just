@@ -23,14 +23,14 @@ public class ModuleEntity {
     /**
      * 你的表字段是 Tag，大小写不规则，建议显式指定
      */
-    @TableField("Tag")
+    @TableField("tag")
     private String tag;
 
     @TableField("description")
     private String description;
 
     @TableField("creator")
-    private String creator;
+    private Integer creator;
 
     @TableField("visible_area")
     private Integer visibleArea;
@@ -43,4 +43,7 @@ public class ModuleEntity {
 
     @TableField("create_time")
     private LocalDateTime createTime;
+
+    @TableField("audit_state")
+    private Integer auditState;
 }

@@ -2,6 +2,7 @@ package org.example.just.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.example.just.dto.moduleDto.AuditModuleDTO;
 import org.example.just.dto.moduleDto.CreateModuleDTO;
 import org.example.just.dto.moduleDto.ModuleListVO;
 import org.example.just.service.ModuleService;
@@ -31,5 +32,23 @@ public class ModuleController {
     @Operation(summary = "获取当前标签下所有模板", description = "根据tag查询该标签下所有未删除模板")
     public Result<List<ModuleListVO>> getModuleListByTag(@RequestParam("tag") String tag) {
         return moduleService.getModuleListByTag(tag);
+    }
+
+    @GetMapping("/pending-audit-list")
+    @Operation(summary = "获取待审核模板列表", description = "查询所有审核状态为0的模板")
+    public Result<List<ModuleListVO>> getPendingAuditList() {
+        return moduleService.getPendingAuditList();
+    }
+
+    @PostMapping("/audit")
+    @Operation(summary = "审核模板", description = "更新模板审核状态：1-驳回，2-通过")
+    public Result<String> auditModule(@RequestBody AuditModuleDTO dto) {
+        return moduleService.auditModule(dto);
+    }
+
+    @GetMapping("/my-module")
+    @Operation(summary = "获取我的模板", description = "根据创建者id查询当前用户创建的所有未删除模板")
+    public Result<List<ModuleListVO>> getMyModuleList(@RequestParam("creatorId") Integer creatorId) {
+        return moduleService.getMyModuleList(creatorId);
     }
 }

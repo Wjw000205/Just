@@ -22,7 +22,7 @@ public class ModuleListVO {
     private String description;
 
     @Schema(description = "创建者")
-    private String creator;
+    private Integer creator;
 
     @Schema(description = "可见范围 1:public 0:private")
     private Integer visibleArea;

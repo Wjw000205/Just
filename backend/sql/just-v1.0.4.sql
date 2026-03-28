@@ -138,13 +138,14 @@ DROP TABLE IF EXISTS `module`;
 CREATE TABLE `module` (
   `id` int NOT NULL AUTO_INCREMENT,
   `module_name` varchar(255) NOT NULL COMMENT '模板名称',
-  `Tag` varchar(255) NOT NULL COMMENT '模板标签',
+  `tag` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '模板标签',
   `description` varchar(255) DEFAULT NULL COMMENT '模板说明',
-  `creator` varchar(255) NOT NULL COMMENT '创建者',
+  `creator` int NOT NULL COMMENT '创建者id',
   `visible_area` int NOT NULL COMMENT '1:public;0:private',
   `agree` int NOT NULL COMMENT '1:yes;0:no',
   `deleted` int NOT NULL DEFAULT '0' COMMENT '0:no;1:yes',
   `create_time` datetime NOT NULL,
+  `audit_state` int NOT NULL DEFAULT '0' COMMENT '审核状态',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -224,4 +225,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-03-28 12:38:33
+-- Dump completed on 2026-03-28 13:00:56
