@@ -35,6 +35,7 @@ CREATE TABLE `department`  (
 -- Records of department
 -- ----------------------------
 
+
 -- ----------------------------
 -- Table structure for module
 -- ----------------------------
