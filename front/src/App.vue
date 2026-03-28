@@ -61,9 +61,16 @@
               />
               <circle cx="12" cy="12" r="10" fill="none" stroke="#1a5ce6" stroke-width="1.2" />
             </svg>
-            <button class="auth-link" @click="goPage('login')">登录</button>
-            <span class="auth-sep">|</span>
-            <button class="auth-link" @click="goPage('register')">注册</button>
+            <template v-if="isLoggedIn">
+              <span class="auth-username">{{ currentUserName || '已登录' }}</span>
+              <span class="auth-sep">|</span>
+              <button class="auth-link" @click="handleLogout">退出</button>
+            </template>
+            <template v-else>
+              <button class="auth-link" @click="goPage('login')">登录</button>
+              <span class="auth-sep">|</span>
+              <button class="auth-link" @click="goPage('register')">注册</button>
+            </template>
           </div>
         </div>
       </div>
@@ -107,7 +114,13 @@
             <li class="nav-dropdown-item" @click="onUploadDropSelect('upload')">上传数据集</li>
           </ul>
         </div>
-        <a class="nav-item">数据发布</a>
+        <a
+          class="nav-item"
+          :class="{ active: currentPage === 'data-publish' }"
+          @click="goPage('data-publish')"
+        >
+          数据发布
+        </a>
         <a
           class="nav-item"
           :class="{ active: currentPage === 'template-library' }"
@@ -115,7 +128,13 @@
         >
           模板库
         </a>
-        <a class="nav-item">数据库</a>
+        <a
+          class="nav-item"
+          :class="{ active: currentPage === 'database' }"
+          @click="goPage('database')"
+        >
+          数据库
+        </a>
         <div
           class="nav-audit-wrap"
           ref="auditDropRef"
@@ -393,12 +412,19 @@
 
       <!-- 模板发布页面 -->
       <TemplatePublishPage v-else-if="currentPage === 'template-publish'" @go-home="goPage('home')" />
+
+      <!-- 数据发布页面 -->
+      <DataPublishPage v-else-if="currentPage === 'data-publish'" @go-home="goPage('home')" />
+
+      <!-- 数据库页面 -->
+      <DatabasePage v-else-if="currentPage === 'database'" @go-home="goPage('home')" />
     </main>
 
     <!-- 登录弹层：覆盖在内容之上 -->
     <LoginPage
       v-if="currentPage === 'login'"
       @go-register="goPage('register')"
+      @login-success="onLoginSuccess"
     />
   </div>
 </template>
@@ -419,6 +445,8 @@ import TemplateDisablePage from './components/TemplateDisablePage.vue'
 import FragmentAuditPage from './components/FragmentAuditPage.vue'
 import FragmentDisablePage from './components/FragmentDisablePage.vue'
 import TemplatePublishPage from './components/TemplatePublishPage.vue'
+import DataPublishPage from './components/DataPublishPage.vue'
+import DatabasePage from './components/DatabasePage.vue'
 
 const currentPage = ref('home')
 const templateType = ref('dataset') // 'dataset' 或 'fragment'
@@ -426,6 +454,13 @@ const uploadDropOpen = ref(false)
 const uploadDropRef = ref(null)
 const auditDropOpen = ref(false)
 const auditDropRef = ref(null)
+const currentUserName = ref('')
+
+const isLoggedIn = computed(() => {
+  const token =
+    localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  return Boolean(token)
+})
 
 // 判断当前是否在审核管理相关页面
 const isAuditPage = computed(() => {
@@ -435,6 +470,54 @@ const isAuditPage = computed(() => {
 
 const goPage = (page) => {
   currentPage.value = page
+}
+
+function onLoginSuccess(_payload) {
+  // 以收到事件为准：登录组件已做成功判定与 token 写入
+  syncUserFromToken()
+  goPage('home')
+}
+
+function base64UrlDecode(input) {
+  const s = String(input || '').replace(/-/g, '+').replace(/_/g, '/')
+  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4))
+  const b64 = s + pad
+  const binary = atob(b64)
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+  return new TextDecoder('utf-8').decode(bytes)
+}
+
+function syncUserFromToken() {
+  const token =
+    localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  if (!token || token.split('.').length !== 3) {
+    currentUserName.value = ''
+    return
+  }
+  try {
+    const payloadText = base64UrlDecode(token.split('.')[1])
+    const payload = JSON.parse(payloadText)
+    currentUserName.value = payload?.userName ? String(payload.userName) : ''
+  } catch (_) {
+    currentUserName.value = ''
+  }
+}
+
+function handleLogout() {
+  // 尝试通知后端使 token 失效（失败也不影响本地退出）
+  const token =
+    localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  if (token) {
+    fetch('http://localhost:8083/user/logout', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => {})
+  }
+
+  localStorage.removeItem('token')
+  sessionStorage.removeItem('token')
+  currentUserName.value = ''
+  goPage('login')
 }
 
 const handleCreate = () => {
@@ -476,6 +559,7 @@ function onDocClick(e) {
 
 onMounted(() => {
   document.addEventListener('click', onDocClick)
+  syncUserFromToken()
 })
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClick)
@@ -521,6 +605,38 @@ onBeforeUnmount(() => {
 .nav-dropdown-item:hover {
   background: #1a5ce6;
   color: #fff;
+}
+
+.auth-links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.auth-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #1a5ce6;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.auth-link:hover {
+  text-decoration: underline;
+}
+
+.auth-sep {
+  color: #9aa7bf;
+}
+
+.auth-username {
+  color: #1a5ce6;
+  font-weight: 600;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 </style>
