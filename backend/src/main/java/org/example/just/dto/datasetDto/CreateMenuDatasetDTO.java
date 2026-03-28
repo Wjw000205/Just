@@ -1,14 +1,14 @@
-package org.example.just.dto.moduleDto;
+package org.example.just.dto.datasetDto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 @Data
-@Schema(name = "CreateModuleMenuDTO", description = "创建模板目录请求参数")
-public class CreateModuleMenuDTO {
+@Schema(name = "CreateMenuDatasetDTO", description = "创建模板目录请求参数")
+public class CreateMenuDatasetDTO {
 
-    @Schema(description = "目录名称", example = "人物模板")
-    private String moduleName;
+    @Schema(description = "目录名称或数据库名称", example = "人物模板")
+    private String name;
 
     @Schema(description = "创建人", example = "admin")
     private String creator;

@@ -1,4 +1,4 @@
-package org.example.just.dto.moduleDto;
+package org.example.just.dto.datasetDto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -7,13 +7,13 @@ import java.time.LocalDateTime;
 
 @Data
 @Schema(name = "AuditModuleResultVO", description = "审核模板返回对象")
-public class AuditModuleResultVO {
+public class AuditDatasetResultVO {
 
-    @Schema(description = "模板 ID")
+    @Schema(description = "数据集 ID")
     private Integer id;
 
-    @Schema(description = "模板名称")
-    private String moduleName;
+    @Schema(description = "数据集名称")
+    private String datasetName;
 
     @Schema(description = "审核状态：0-驳回，1-通过")
     private Integer status;

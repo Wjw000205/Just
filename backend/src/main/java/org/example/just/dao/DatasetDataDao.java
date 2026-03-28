@@ -2,16 +2,16 @@ package org.example.just.dao;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.*;
-import org.example.just.entity.ModuleDataEntity;
+import org.example.just.entity.DatabaseDataEntity;
 
 import java.util.List;
 
 @Mapper
-public interface ModuleDataDao extends BaseMapper<ModuleDataEntity> {
+public interface DatasetDataDao extends BaseMapper<DatabaseDataEntity> {
 
     @Select({
             "<script>",
-            "SELECT COALESCE(MAX(row_id), 0) FROM module_data",
+            "SELECT COALESCE(MAX(row_id), 0) FROM dataset_data",
             "WHERE deleted = 0",
             "AND column_id IN",
             "<foreach collection='columnIds' item='id' open='(' separator=',' close=')'>",
@@ -23,18 +23,18 @@ public interface ModuleDataDao extends BaseMapper<ModuleDataEntity> {
 
     @Insert({
             "<script>",
-            "INSERT INTO module_data (column_id, row_id, data_type, data, deleted) VALUES ",
+            "INSERT INTO dataset_data (column_id, row_id, data_type, data, deleted) VALUES ",
             "<foreach collection='list' item='item' separator=','>",
             "(#{item.columnId}, #{item.rowId}, #{item.dataType}, #{item.data}, #{item.deleted})",
             "</foreach>",
             "</script>"
     })
-    int insertBatch(@Param("list") List<ModuleDataEntity> list);
+    int insertBatch(@Param("list") List<DatabaseDataEntity> list);
 
     @Select({
             "<script>",
             "SELECT COUNT(DISTINCT row_id) ",
-            "FROM module_data ",
+            "FROM dataset_data ",
             "WHERE deleted = 0 ",
             "AND column_id IN ",
             "<foreach collection='columnIds' item='id' open='(' separator=',' close=')'>",
@@ -47,7 +47,7 @@ public interface ModuleDataDao extends BaseMapper<ModuleDataEntity> {
     @Select({
             "<script>",
             "SELECT DISTINCT row_id ",
-            "FROM module_data ",
+            "FROM dataset_data ",
             "WHERE deleted = 0 ",
             "AND column_id IN ",
             "<foreach collection='columnIds' item='id' open='(' separator=',' close=')'>",
@@ -64,7 +64,7 @@ public interface ModuleDataDao extends BaseMapper<ModuleDataEntity> {
     @Select({
             "<script>",
             "SELECT id, column_id, row_id, data_type, data, deleted ",
-            "FROM module_data ",
+            "FROM dataset_data ",
             "WHERE deleted = 0 ",
             "AND column_id IN ",
             "<foreach collection='columnIds' item='id' open='(' separator=',' close=')'>",
@@ -77,6 +77,6 @@ public interface ModuleDataDao extends BaseMapper<ModuleDataEntity> {
             "ORDER BY row_id ASC, column_id ASC",
             "</script>"
     })
-    List<ModuleDataEntity> selectByColumnIdsAndRowIds(@Param("columnIds") List<Integer> columnIds,
-                                                      @Param("rowIds") List<Integer> rowIds);
+    List<DatabaseDataEntity> selectByColumnIdsAndRowIds(@Param("columnIds") List<Integer> columnIds,
+                                                        @Param("rowIds") List<Integer> rowIds);
 }

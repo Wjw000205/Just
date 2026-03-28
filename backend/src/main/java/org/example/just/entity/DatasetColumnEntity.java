@@ -9,26 +9,28 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 @Data
-@TableName("module_data")
-@Schema(name = "ModuleDataEntity", description = "模板数据实体")
-public class ModuleDataEntity {
+@TableName("dataset_column")
+@Schema(name = "ModuleColumnEntity", description = "模板列实体")
+public class DatasetColumnEntity {
 
     @TableId(value = "id", type = IdType.AUTO)
+    @Schema(description = "主键ID")
     private Integer id;
 
-    @TableField("column_id")
-    private Integer columnId;
+    @TableField("column_name")
+    @Schema(description = "列名")
+    private String columnName;
 
-    @TableField("row_id")
-    private Integer rowId;
+    @TableField("column_type")
+    @Schema(description = "列类型")
+    private String columnType;
 
-    @TableField("data_type")
-    private String dataType;
-
-    @TableField("data")
-    private String data;
+    @TableField("dataset_name")
+    @Schema(description = "所属数据集名称")
+    private String datasetName;
 
     @TableLogic
     @TableField("deleted")
+    @Schema(description = "逻辑删除")
     private Integer deleted;
 }

@@ -1,11 +1,11 @@
-package org.example.just.dto.moduleDto;
+package org.example.just.dto.datasetDto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 @Data
 @Schema(name = "ModuleColumnVO", description = "模板列返回对象")
-public class ModuleColumnVO {
+public class DatasetColumnVO {
 
     @Schema(description = "列ID")
     private Integer id;

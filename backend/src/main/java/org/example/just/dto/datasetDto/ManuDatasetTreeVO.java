@@ -1,4 +1,4 @@
-package org.example.just.dto.moduleDto;
+package org.example.just.dto.datasetDto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -8,14 +8,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Data
-@Schema(name = "ModuleTreeVO", description = "模板目录树形结构返回对象")
-public class ModuleMenuVO {
+@Schema(name = "ManuDatabaseTreeVO", description = "模板目录树形结构返回对象")
+public class ManuDatasetTreeVO {
 
     @Schema(description = "主键ID")
     private Integer id;
 
     @Schema(description = "目录名称")
-    private String moduleName;
+    private String name;
 
     @Schema(description = "创建人")
     private String creator;
@@ -30,5 +30,5 @@ public class ModuleMenuVO {
     private Integer isMenu;
 
     @Schema(description = "子目录")
-    private List<ModuleMenuVO> children = new ArrayList<>();
+    private List<ManuDatasetTreeVO> children = new ArrayList<>();
 }
