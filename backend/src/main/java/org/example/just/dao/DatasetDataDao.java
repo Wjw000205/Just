@@ -2,12 +2,12 @@ package org.example.just.dao;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.*;
-import org.example.just.entity.DatabaseDataEntity;
+import org.example.just.entity.DatasetDataEntity;
 
 import java.util.List;
 
 @Mapper
-public interface DatasetDataDao extends BaseMapper<DatabaseDataEntity> {
+public interface DatasetDataDao extends BaseMapper<DatasetDataEntity> {
 
     @Select({
             "<script>",
@@ -29,7 +29,7 @@ public interface DatasetDataDao extends BaseMapper<DatabaseDataEntity> {
             "</foreach>",
             "</script>"
     })
-    int insertBatch(@Param("list") List<DatabaseDataEntity> list);
+    int insertBatch(@Param("list") List<DatasetDataEntity> list);
 
     @Select({
             "<script>",
@@ -77,6 +77,6 @@ public interface DatasetDataDao extends BaseMapper<DatabaseDataEntity> {
             "ORDER BY row_id ASC, column_id ASC",
             "</script>"
     })
-    List<DatabaseDataEntity> selectByColumnIdsAndRowIds(@Param("columnIds") List<Integer> columnIds,
-                                                        @Param("rowIds") List<Integer> rowIds);
+    List<DatasetDataEntity> selectByColumnIdsAndRowIds(@Param("columnIds") List<Integer> columnIds,
+                                                       @Param("rowIds") List<Integer> rowIds);
 }

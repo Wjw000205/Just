@@ -1,8 +1,6 @@
 package org.example.just.service;
 
-import org.example.just.dto.moduleDto.AuditModuleDTO;
-import org.example.just.dto.moduleDto.CreateModuleDTO;
-import org.example.just.dto.moduleDto.ModuleListVO;
+import org.example.just.dto.moduleDto.*;
 import org.example.just.utils.Result;
 
 import java.util.List;
@@ -18,4 +16,10 @@ public interface ModuleService {
     Result<String> auditModule(AuditModuleDTO dto);
 
     Result<List<ModuleListVO>> getMyModuleList(Integer creatorId);
+
+    Result<String> designModule(ModuleDesignDTO dto);
+
+    Result<ModuleBaseInfoVO> getModuleBaseInfo(Integer id);
+
+    Result<ModuleDetailInfoVO> getModuleDetailInfo(Integer id);
 }

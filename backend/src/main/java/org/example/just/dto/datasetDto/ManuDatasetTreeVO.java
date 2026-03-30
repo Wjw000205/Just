@@ -24,7 +24,7 @@ public class ManuDatasetTreeVO {
     private LocalDateTime createTime;
 
     @Schema(description = "父级目录")
-    private String parent;
+    private Integer parent;
 
     @Schema(description = "是否目录：1是目录，0不是目录")
     private Integer isMenu;

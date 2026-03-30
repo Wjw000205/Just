@@ -15,8 +15,8 @@ public class CreateDatasetDTO {
     @Schema(description = "创建人", example = "admin")
     private String creator;
 
-    @Schema(description = "父目录名称", example = "基础模板")
-    private String parent;
+    @Schema(description = "父目录id", example = "1")
+    private Integer parent;
 
     @Schema(description = "所属module主键id", example = "1")
     private Integer module;

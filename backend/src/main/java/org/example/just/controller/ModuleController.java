@@ -2,9 +2,7 @@ package org.example.just.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.example.just.dto.moduleDto.AuditModuleDTO;
-import org.example.just.dto.moduleDto.CreateModuleDTO;
-import org.example.just.dto.moduleDto.ModuleListVO;
+import org.example.just.dto.moduleDto.*;
 import org.example.just.service.ModuleService;
 import org.example.just.utils.Result;
 import org.springframework.web.bind.annotation.*;
@@ -50,5 +48,23 @@ public class ModuleController {
     @Operation(summary = "获取我的模板", description = "根据创建者id查询当前用户创建的所有未删除模板")
     public Result<List<ModuleListVO>> getMyModuleList(@RequestParam("creatorId") Integer creatorId) {
         return moduleService.getMyModuleList(creatorId);
+    }
+
+    @PostMapping("/design")
+    @Operation(summary = "模板设计", description = "根据模板id保存模板设计，object、operation、result写入module_column表")
+    public Result<String> designModule(@RequestBody ModuleDesignDTO dto) {
+        return moduleService.designModule(dto);
+    }
+
+    @GetMapping("/base-info")
+    @Operation(summary = "获取模板基本信息", description = "根据模板ID获取模板基本信息")
+    public Result<ModuleBaseInfoVO> getModuleBaseInfo(@RequestParam("id") Integer id) {
+        return moduleService.getModuleBaseInfo(id);
+    }
+
+    @GetMapping("/detail-info")
+    @Operation(summary = "获取模板具体字段信息", description = "根据模板ID获取模板具体字段信息，按Object、Operation、Result分别返回")
+    public Result<ModuleDetailInfoVO> getModuleDetailInfo(@RequestParam("id") Integer id) {
+        return moduleService.getModuleDetailInfo(id);
     }
 }

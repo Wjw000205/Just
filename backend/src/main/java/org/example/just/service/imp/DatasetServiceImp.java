@@ -11,8 +11,8 @@ import org.example.just.dao.DatasetDataDao;
 import org.example.just.dao.ModuleDao;
 import org.example.just.dto.datasetDto.*;
 import org.example.just.entity.DatasetColumnEntity;
-import org.example.just.entity.DatabaseDataEntity;
-import org.example.just.entity.ManuDatabaseEntity;
+import org.example.just.entity.DatasetDataEntity;
+import org.example.just.entity.ManuDatasetEntity;
 import org.example.just.entity.ModuleEntity;
 import org.example.just.service.DatasetService;
 import org.example.just.utils.PageQuery;
@@ -64,46 +64,48 @@ public class DatasetServiceImp implements DatasetService {
 
         String name = dto.getName().trim();
         String creator = dto.getCreator().trim();
-        String parent = StringUtils.hasText(dto.getParent()) ? dto.getParent().trim() : null;
+        Integer parentId = dto.getParent();
 
-        // 1. 如果是创建次级目录，先校验父目录是否存在
-        if (StringUtils.hasText(parent)) {
-            LambdaQueryWrapper<ManuDatabaseEntity> parentWrapper = new LambdaQueryWrapper<>();
-            parentWrapper.eq(ManuDatabaseEntity::getName, parent)
-                    .eq(ManuDatabaseEntity::getIsMenu, 1)
+        // 根目录统一按0处理
+        if (parentId == null) {
+            parentId = 0;
+        }
+
+        // 1. 如果是创建次级目录，先校验父目录是否存在，并且必须是目录
+        if (parentId != 0) {
+            LambdaQueryWrapper<ManuDatasetEntity> parentWrapper = new LambdaQueryWrapper<>();
+            parentWrapper.eq(ManuDatasetEntity::getId, parentId)
+                    .eq(ManuDatasetEntity::getIsMenu, 1)
+                    .eq(ManuDatasetEntity::getDeleted, 0)
                     .last("limit 1");
 
-            ManuDatabaseEntity parentDataset = DatasetDao.selectOne(parentWrapper);
+            ManuDatasetEntity parentDataset = DatasetDao.selectOne(parentWrapper);
             if (parentDataset == null) {
                 return Result.fail("父级目录不存在");
             }
         }
 
         // 2. 校验同级目录名称不能重复
-        LambdaQueryWrapper<ManuDatabaseEntity> sameLevelWrapper = new LambdaQueryWrapper<>();
-        sameLevelWrapper.eq(ManuDatabaseEntity::getName, name)
-                .eq(ManuDatabaseEntity::getIsMenu, 1);
-
-        if (StringUtils.hasText(parent)) {
-            sameLevelWrapper.eq(ManuDatabaseEntity::getParent, parent);
-        } else {
-            sameLevelWrapper.isNull(ManuDatabaseEntity::getParent);
-        }
+        LambdaQueryWrapper<ManuDatasetEntity> sameLevelWrapper = new LambdaQueryWrapper<>();
+        sameLevelWrapper.eq(ManuDatasetEntity::getName, name)
+                .eq(ManuDatasetEntity::getIsMenu, 1)
+                .eq(ManuDatasetEntity::getParent, parentId)
+                .eq(ManuDatasetEntity::getDeleted, 0);
 
         if (DatasetDao.selectCount(sameLevelWrapper) > 0) {
             return Result.fail("同级目录下已存在同名目录");
         }
 
         // 3. 插入目录
-        ManuDatabaseEntity Dataset = new ManuDatabaseEntity();
-        Dataset.setName(name);
-        Dataset.setCreator(creator);
-        Dataset.setCreateTime(LocalDateTime.now());
-        Dataset.setParent(parent);
-        Dataset.setIsMenu(1);
-        Dataset.setDeleted(0);
+        ManuDatasetEntity dataset = new ManuDatasetEntity();
+        dataset.setName(name);
+        dataset.setCreator(creator);
+        dataset.setCreateTime(LocalDateTime.now());
+        dataset.setParent(parentId);
+        dataset.setIsMenu(1);
+        dataset.setDeleted(0);
 
-        int rows = DatasetDao.insert(Dataset);
+        int rows = DatasetDao.insert(dataset);
         if (rows <= 0) {
             return Result.fail("创建目录失败");
         }
@@ -113,45 +115,46 @@ public class DatasetServiceImp implements DatasetService {
 
     @Override
     public Result<List<ManuDatasetTreeVO>> getDatasetTree() {
-        LambdaQueryWrapper<ManuDatabaseEntity> wrapper = new LambdaQueryWrapper<>();
-        wrapper
-                .orderByAsc(ManuDatabaseEntity::getId);
+        LambdaQueryWrapper<ManuDatasetEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ManuDatasetEntity::getDeleted, 0)
+                .orderByAsc(ManuDatasetEntity::getId);
 
-        List<ManuDatabaseEntity> DatasetList = DatasetDao.selectList(wrapper);
+        List<ManuDatasetEntity> datasetList = DatasetDao.selectList(wrapper);
 
-        if (DatasetList == null || DatasetList.isEmpty()) {
+        if (datasetList == null || datasetList.isEmpty()) {
             return Result.success(new ArrayList<>());
         }
 
         // 先转成 VO
-        List<ManuDatasetTreeVO> voList = DatasetList.stream().map(Dataset -> {
+        List<ManuDatasetTreeVO> voList = datasetList.stream().map(dataset -> {
             ManuDatasetTreeVO vo = new ManuDatasetTreeVO();
-            vo.setId(Dataset.getId());
-            vo.setName(Dataset.getName());
-            vo.setCreator(Dataset.getCreator());
-            vo.setCreateTime(Dataset.getCreateTime());
-            vo.setParent(Dataset.getParent());
-            vo.setIsMenu(Dataset.getIsMenu());
+            vo.setId(dataset.getId());
+            vo.setName(dataset.getName());
+            vo.setCreator(dataset.getCreator());
+            vo.setCreateTime(dataset.getCreateTime());
+            vo.setParent(dataset.getParent());
+            vo.setIsMenu(dataset.getIsMenu());
             return vo;
         }).collect(Collectors.toList());
 
-        // 用 DatasetName 建索引，方便挂子节点
-        Map<String, ManuDatasetTreeVO> DatasetMap = voList.stream()
-                .collect(Collectors.toMap(ManuDatasetTreeVO::getName, item -> item, (a, b) -> a));
+        // 用 id 建索引
+        Map<Integer, ManuDatasetTreeVO> datasetMap = voList.stream()
+                .collect(Collectors.toMap(ManuDatasetTreeVO::getId, item -> item, (a, b) -> a));
 
         List<ManuDatasetTreeVO> rootList = new ArrayList<>();
 
         for (ManuDatasetTreeVO node : voList) {
-            if (!StringUtils.hasText(node.getParent())) {
-                // 一级目录
+            Integer parentId = node.getParent();
+
+            // parent为0或null，表示根节点
+            if (parentId == null || parentId == 0) {
                 rootList.add(node);
             } else {
-                // 子目录挂到父目录下面
-                ManuDatasetTreeVO parentNode = DatasetMap.get(node.getParent());
+                ManuDatasetTreeVO parentNode = datasetMap.get(parentId);
                 if (parentNode != null) {
                     parentNode.getChildren().add(node);
                 } else {
-                    // 如果父目录不存在，兜底当根节点返回，避免数据丢失
+                    // 父节点不存在时兜底挂到根节点，避免数据丢失
                     rootList.add(node);
                 }
             }
@@ -172,7 +175,7 @@ public class DatasetServiceImp implements DatasetService {
         if (!StringUtils.hasText(dto.getCreator())) {
             return Result.fail("创建人不能为空");
         }
-        if (!StringUtils.hasText(dto.getParent())) {
+        if (dto.getParent() == null || dto.getParent() == 0) {
             return Result.fail("父目录不能为空");
         }
         if (dto.getModule() == null) {
@@ -184,18 +187,18 @@ public class DatasetServiceImp implements DatasetService {
 
         String datasetName = dto.getName().trim();
         String creator = dto.getCreator().trim();
-        String parent = dto.getParent().trim();
+        Integer parentId = dto.getParent();
         Integer moduleId = dto.getModule();
         List<DatasetColumnDTO> columns = dto.getColumns();
 
         // 1. 校验父目录存在，并且必须是目录
-        LambdaQueryWrapper<ManuDatabaseEntity> parentWrapper = new LambdaQueryWrapper<>();
-        parentWrapper.eq(ManuDatabaseEntity::getName, parent)
-                .eq(ManuDatabaseEntity::getIsMenu, 1)
-                .eq(ManuDatabaseEntity::getDeleted, 0)
+        LambdaQueryWrapper<ManuDatasetEntity> parentWrapper = new LambdaQueryWrapper<>();
+        parentWrapper.eq(ManuDatasetEntity::getId, parentId)
+                .eq(ManuDatasetEntity::getIsMenu, 1)
+                .eq(ManuDatasetEntity::getDeleted, 0)
                 .last("limit 1");
 
-        ManuDatabaseEntity parentDataset = DatasetDao.selectOne(parentWrapper);
+        ManuDatasetEntity parentDataset = DatasetDao.selectOne(parentWrapper);
         if (parentDataset == null) {
             return Result.fail("父目录不存在");
         }
@@ -211,13 +214,13 @@ public class DatasetServiceImp implements DatasetService {
             return Result.fail("所属module不存在");
         }
 
-        // 3. 校验同一父目录下、同一module下模板名称不能重复
-        LambdaQueryWrapper<ManuDatabaseEntity> datasetWrapper = new LambdaQueryWrapper<>();
-        datasetWrapper.eq(ManuDatabaseEntity::getName, datasetName)
-                .eq(ManuDatabaseEntity::getParent, parent)
-                .eq(ManuDatabaseEntity::getModule, moduleId)
-                .eq(ManuDatabaseEntity::getIsMenu, 0)
-                .eq(ManuDatabaseEntity::getDeleted, 0);
+        // 3. 校验同一父目录下、同一module下数据集名称不能重复
+        LambdaQueryWrapper<ManuDatasetEntity> datasetWrapper = new LambdaQueryWrapper<>();
+        datasetWrapper.eq(ManuDatasetEntity::getName, datasetName)
+                .eq(ManuDatasetEntity::getParent, parentId)
+                .eq(ManuDatasetEntity::getModule, moduleId)
+                .eq(ManuDatasetEntity::getIsMenu, 0)
+                .eq(ManuDatasetEntity::getDeleted, 0);
 
         if (DatasetDao.selectCount(datasetWrapper) > 0) {
             return Result.fail("同一目录下该module已存在同名模板");
@@ -243,11 +246,11 @@ public class DatasetServiceImp implements DatasetService {
         }
 
         // 5. 插入 manu_dataset 表
-        ManuDatabaseEntity dataset = new ManuDatabaseEntity();
+        ManuDatasetEntity dataset = new ManuDatasetEntity();
         dataset.setName(datasetName);
         dataset.setCreator(creator);
         dataset.setCreateTime(LocalDateTime.now());
-        dataset.setParent(parent);
+        dataset.setParent(parentId);
         dataset.setIsMenu(0);
         dataset.setDeleted(0);
         dataset.setModule(moduleId);
@@ -273,7 +276,6 @@ public class DatasetServiceImp implements DatasetService {
 
         return Result.success("创建模板成功");
     }
-
     @Transactional
     @Override
     public Result<String> importDatasetData(String DatasetName, MultipartFile file) {
@@ -285,11 +287,11 @@ public class DatasetServiceImp implements DatasetService {
         }
 
         // 1. 校验模板存在，并且必须是模板，不是目录
-        LambdaQueryWrapper<ManuDatabaseEntity> DatasetWrapper = new LambdaQueryWrapper<>();
-        DatasetWrapper.eq(ManuDatabaseEntity::getName, DatasetName.trim())
-                .eq(ManuDatabaseEntity::getIsMenu, 0)
+        LambdaQueryWrapper<ManuDatasetEntity> DatasetWrapper = new LambdaQueryWrapper<>();
+        DatasetWrapper.eq(ManuDatasetEntity::getName, DatasetName.trim())
+                .eq(ManuDatasetEntity::getIsMenu, 0)
                 .last("limit 1");
-        ManuDatabaseEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
+        ManuDatasetEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
         if (Dataset == null) {
             return Result.fail("模板不存在");
         }
@@ -312,7 +314,7 @@ public class DatasetServiceImp implements DatasetService {
         Integer maxRowId = DatasetDataDao.selectMaxRowIdByColumnIds(columnIds);
         int nextRowId = (maxRowId == null ? 0 : maxRowId) + 1;
 
-        List<DatabaseDataEntity> batchList = new ArrayList<>();
+        List<DatasetDataEntity> batchList = new ArrayList<>();
         DataFormatter dataFormatter = new DataFormatter();
 
         try (InputStream inputStream = file.getInputStream();
@@ -359,7 +361,7 @@ public class DatasetServiceImp implements DatasetService {
                 }
 
                 boolean rowHasValue = false;
-                List<DatabaseDataEntity> currentRowDataList = new ArrayList<>();
+                List<DatasetDataEntity> currentRowDataList = new ArrayList<>();
 
                 for (Map.Entry<Integer, DatasetColumnEntity> entry : matchedColumnIndexMap.entrySet()) {
                     Integer cellIndex = entry.getKey();
@@ -375,7 +377,7 @@ public class DatasetServiceImp implements DatasetService {
                         rowHasValue = true;
                     }
 
-                    DatabaseDataEntity DatasetData = new DatabaseDataEntity();
+                    DatasetDataEntity DatasetData = new DatasetDataEntity();
                     DatasetData.setColumnId(DatasetColumn.getId());
                     DatasetData.setRowId(nextRowId);
                     DatasetData.setDataType(DatasetColumn.getColumnType());
@@ -417,11 +419,11 @@ public class DatasetServiceImp implements DatasetService {
         }
 
         // 1. 校验模板存在，并且必须是模板而不是目录
-        LambdaQueryWrapper<ManuDatabaseEntity> DatasetWrapper = new LambdaQueryWrapper<>();
-        DatasetWrapper.eq(ManuDatabaseEntity::getName, DatasetName.trim())
-                .eq(ManuDatabaseEntity::getIsMenu, 0)
+        LambdaQueryWrapper<ManuDatasetEntity> DatasetWrapper = new LambdaQueryWrapper<>();
+        DatasetWrapper.eq(ManuDatasetEntity::getName, DatasetName.trim())
+                .eq(ManuDatasetEntity::getIsMenu, 0)
                 .last("limit 1");
-        ManuDatabaseEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
+        ManuDatasetEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
         if (Dataset == null) {
             return Result.fail("模板不存在");
         }
@@ -458,7 +460,7 @@ public class DatasetServiceImp implements DatasetService {
 
             if (rowIds != null && !rowIds.isEmpty()) {
                 // 5. 查这一页 row_id 下的所有单元格数据
-                List<DatabaseDataEntity> cellList = DatasetDataDao.selectByColumnIdsAndRowIds(columnIds, rowIds);
+                List<DatasetDataEntity> cellList = DatasetDataDao.selectByColumnIdsAndRowIds(columnIds, rowIds);
 
                 // 列ID -> 列定义
                 Map<Integer, DatasetColumnEntity> columnMap = columnList.stream()
@@ -476,7 +478,7 @@ public class DatasetServiceImp implements DatasetService {
                 }
 
                 // 把 cell 填充进每一行
-                for (DatabaseDataEntity cell : cellList) {
+                for (DatasetDataEntity cell : cellList) {
                     DatasetRowVO rowVO = rowMap.get(cell.getRowId());
                     DatasetColumnEntity column = columnMap.get(cell.getColumnId());
                     if (rowVO != null && column != null) {
@@ -520,12 +522,12 @@ public class DatasetServiceImp implements DatasetService {
         }
 
         // 1. 校验模板存在，并且必须是模板，不是目录
-        LambdaQueryWrapper<ManuDatabaseEntity> DatasetWrapper = new LambdaQueryWrapper<>();
-        DatasetWrapper.eq(ManuDatabaseEntity::getName, DatasetName.trim())
-                .eq(ManuDatabaseEntity::getIsMenu, 0)
+        LambdaQueryWrapper<ManuDatasetEntity> DatasetWrapper = new LambdaQueryWrapper<>();
+        DatasetWrapper.eq(ManuDatasetEntity::getName, DatasetName.trim())
+                .eq(ManuDatasetEntity::getIsMenu, 0)
                 .last("limit 1");
 
-        ManuDatabaseEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
+        ManuDatasetEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
         if (Dataset == null) {
             throw new RuntimeException("模板不存在");
         }
@@ -594,12 +596,12 @@ public class DatasetServiceImp implements DatasetService {
         String columnType = dto.getColumnType().trim();
 
         // 1. 校验模板存在，并且必须是模板，不是目录
-        LambdaQueryWrapper<ManuDatabaseEntity> DatasetWrapper = new LambdaQueryWrapper<>();
-        DatasetWrapper.eq(ManuDatabaseEntity::getName, DatasetName)
-                .eq(ManuDatabaseEntity::getIsMenu, 0)
+        LambdaQueryWrapper<ManuDatasetEntity> DatasetWrapper = new LambdaQueryWrapper<>();
+        DatasetWrapper.eq(ManuDatasetEntity::getName, DatasetName)
+                .eq(ManuDatasetEntity::getIsMenu, 0)
                 .last("limit 1");
 
-        ManuDatabaseEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
+        ManuDatasetEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
         if (Dataset == null) {
             return Result.fail("模板不存在");
         }
@@ -653,9 +655,9 @@ public class DatasetServiceImp implements DatasetService {
         }
 
         // 3. 逻辑删除该列对应的数据
-        LambdaUpdateWrapper<DatabaseDataEntity> dataUpdateWrapper = new LambdaUpdateWrapper<>();
-        dataUpdateWrapper.eq(DatabaseDataEntity::getColumnId, dto.getColumnId())
-                .set(DatabaseDataEntity::getDeleted, 1);
+        LambdaUpdateWrapper<DatasetDataEntity> dataUpdateWrapper = new LambdaUpdateWrapper<>();
+        dataUpdateWrapper.eq(DatasetDataEntity::getColumnId, dto.getColumnId())
+                .set(DatasetDataEntity::getDeleted, 1);
 
         DatasetDataDao.update(null, dataUpdateWrapper);
 
@@ -679,12 +681,12 @@ public class DatasetServiceImp implements DatasetService {
         Integer rowId = dto.getRowId();
 
         // 1. 校验模板存在，并且必须是模板，不是目录
-        LambdaQueryWrapper<ManuDatabaseEntity> DatasetWrapper = new LambdaQueryWrapper<>();
-        DatasetWrapper.eq(ManuDatabaseEntity::getName, DatasetName)
-                .eq(ManuDatabaseEntity::getIsMenu, 0)
+        LambdaQueryWrapper<ManuDatasetEntity> DatasetWrapper = new LambdaQueryWrapper<>();
+        DatasetWrapper.eq(ManuDatasetEntity::getName, DatasetName)
+                .eq(ManuDatasetEntity::getIsMenu, 0)
                 .last("limit 1");
 
-        ManuDatabaseEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
+        ManuDatasetEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
         if (Dataset == null) {
             return Result.fail("模板不存在");
         }
@@ -703,9 +705,9 @@ public class DatasetServiceImp implements DatasetService {
                 .toList();
 
         // 3. 先检查这一行数据是否存在
-        LambdaQueryWrapper<DatabaseDataEntity> dataCheckWrapper = new LambdaQueryWrapper<>();
-        dataCheckWrapper.eq(DatabaseDataEntity::getRowId, rowId)
-                .in(DatabaseDataEntity::getColumnId, columnIds);
+        LambdaQueryWrapper<DatasetDataEntity> dataCheckWrapper = new LambdaQueryWrapper<>();
+        dataCheckWrapper.eq(DatasetDataEntity::getRowId, rowId)
+                .in(DatasetDataEntity::getColumnId, columnIds);
 
         Long count = DatasetDataDao.selectCount(dataCheckWrapper);
         if (count == null || count == 0) {
@@ -713,10 +715,10 @@ public class DatasetServiceImp implements DatasetService {
         }
 
         // 4. 逻辑删除这一整行
-        LambdaUpdateWrapper<DatabaseDataEntity> updateWrapper = new LambdaUpdateWrapper<>();
-        updateWrapper.eq(DatabaseDataEntity::getRowId, rowId)
-                .in(DatabaseDataEntity::getColumnId, columnIds)
-                .set(DatabaseDataEntity::getDeleted, 1);
+        LambdaUpdateWrapper<DatasetDataEntity> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.eq(DatasetDataEntity::getRowId, rowId)
+                .in(DatasetDataEntity::getColumnId, columnIds)
+                .set(DatasetDataEntity::getDeleted, 1);
 
         int rows = DatasetDataDao.update(null, updateWrapper);
         if (rows <= 0) {
@@ -749,12 +751,12 @@ public class DatasetServiceImp implements DatasetService {
         String auditor = dto.getAuditor().trim();
 
         // 1. 校验模板存在，并且必须是模板，不是目录
-        LambdaQueryWrapper<ManuDatabaseEntity> DatasetWrapper = new LambdaQueryWrapper<>();
-        DatasetWrapper.eq(ManuDatabaseEntity::getName, DatasetName)
-                .eq(ManuDatabaseEntity::getIsMenu, 0)
+        LambdaQueryWrapper<ManuDatasetEntity> DatasetWrapper = new LambdaQueryWrapper<>();
+        DatasetWrapper.eq(ManuDatasetEntity::getName, DatasetName)
+                .eq(ManuDatasetEntity::getIsMenu, 0)
                 .last("limit 1");
 
-        ManuDatabaseEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
+        ManuDatasetEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
         if (Dataset == null) {
             return Result.fail("模板不存在");
         }
@@ -767,9 +769,9 @@ public class DatasetServiceImp implements DatasetService {
         // 3. 更新审核信息
         LocalDateTime auditTime = LocalDateTime.now();
 
-        LambdaUpdateWrapper<ManuDatabaseEntity> updateWrapper = new LambdaUpdateWrapper<>();
-        updateWrapper.eq(ManuDatabaseEntity::getName, DatasetName)
-                .set(ManuDatabaseEntity::getAuditStatus, status == 0 ? 2 : status); // 0 转为 2（驳回），1 保持（通过）
+        LambdaUpdateWrapper<ManuDatasetEntity> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.eq(ManuDatasetEntity::getName, DatasetName)
+                .set(ManuDatasetEntity::getAuditStatus, status == 0 ? 2 : status); // 0 转为 2（驳回），1 保持（通过）
         int rows = DatasetDao.update(null, updateWrapper);
         if (rows <= 0) {
             return Result.fail("更新审核信息失败");
@@ -785,6 +787,63 @@ public class DatasetServiceImp implements DatasetService {
         resultVO.setAuditTime(auditTime);
 
         return Result.success(resultVO);
+    }
+
+    @Override
+    public Result<Long> countDatasetsUnderMenu(Integer menuId) {
+        if (menuId == null) {
+            return Result.fail("目录id不能为空");
+        }
+
+        // menuId = 0 时，表示从根目录开始统计
+        if (menuId != 0) {
+            LambdaQueryWrapper<ManuDatasetEntity> menuWrapper = new LambdaQueryWrapper<>();
+            menuWrapper.eq(ManuDatasetEntity::getId, menuId)
+                    .eq(ManuDatasetEntity::getDeleted, 0)
+                    .last("limit 1");
+
+            ManuDatasetEntity currentMenu = DatasetDao.selectOne(menuWrapper);
+            if (currentMenu == null) {
+                return Result.fail("当前目录不存在");
+            }
+            if (currentMenu.getIsMenu() == null || currentMenu.getIsMenu() != 1) {
+                return Result.fail("当前节点不是目录");
+            }
+        }
+
+        // 一次性查出所有未删除的数据，内存递归统计
+        LambdaQueryWrapper<ManuDatasetEntity> allWrapper = new LambdaQueryWrapper<>();
+        allWrapper.eq(ManuDatasetEntity::getDeleted, 0);
+
+        List<ManuDatasetEntity> allList = DatasetDao.selectList(allWrapper);
+
+        Map<Integer, List<ManuDatasetEntity>> parentChildrenMap = new HashMap<>();
+        for (ManuDatasetEntity item : allList) {
+            Integer parentId = item.getParent() == null ? 0 : item.getParent();
+            parentChildrenMap
+                    .computeIfAbsent(parentId, k -> new ArrayList<>())
+                    .add(item);
+        }
+
+        long count = countDatasetRecursively(menuId, parentChildrenMap);
+        return Result.success(count);
+    }
+
+    private long countDatasetRecursively(Integer parentId, Map<Integer, List<ManuDatasetEntity>> parentChildrenMap) {
+        List<ManuDatasetEntity> children = parentChildrenMap.get(parentId);
+        if (children == null || children.isEmpty()) {
+            return 0L;
+        }
+
+        long count = 0L;
+        for (ManuDatasetEntity child : children) {
+            if (child.getIsMenu() != null && child.getIsMenu() == 0) {
+                count++;
+            } else if (child.getIsMenu() != null && child.getIsMenu() == 1) {
+                count += countDatasetRecursively(child.getId(), parentChildrenMap);
+            }
+        }
+        return count;
     }
 
 }

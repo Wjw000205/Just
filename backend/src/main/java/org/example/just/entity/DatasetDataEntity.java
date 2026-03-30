@@ -11,7 +11,7 @@ import lombok.Data;
 @Data
 @TableName("dataset_data")
 @Schema(name = "ModuleDataEntity", description = "模板数据实体")
-public class DatabaseDataEntity {
+public class DatasetDataEntity {
 
     @TableId(value = "id", type = IdType.AUTO)
     private Integer id;

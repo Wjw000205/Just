@@ -7,7 +7,7 @@ import lombok.Data;
 @Schema(name = "UserRegisterDTO", description = "用户注册请求参数")
 public class UserRegisterDTO {
 
-    @Schema(description = "用户名", example = "张三")
+    @Schema(description = "用户名", example = "zhangsan")
     private String username;
 
     @Schema(description = "密码", example = "123456")
@@ -19,35 +19,6 @@ public class UserRegisterDTO {
     @Schema(description = "邮箱", example = "zhangsan@qq.com")
     private String email;
 
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getTelephone() {
-        return telephone;
-    }
-
-    public void setTelephone(String telephone) {
-        this.telephone = telephone;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
+    @Schema(description = "真实姓名", example = "张三")
+    private String realName;
 }

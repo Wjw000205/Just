@@ -13,6 +13,6 @@ public class CreateMenuDatasetDTO {
     @Schema(description = "创建人", example = "admin")
     private String creator;
 
-    @Schema(description = "父级目录名称；一级目录可不传，二级目录必须传", example = "基础模板")
-    private String parent;
+    @Schema(description = "父级目录id；一级目录可不传，二级目录必须传", example = "基础模板，若为1级目录则为0")
+    private Integer parent;
 }

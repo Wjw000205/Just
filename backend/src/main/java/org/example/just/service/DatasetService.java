@@ -29,4 +29,6 @@ public interface DatasetService {
     Result<String> deleteDatasetRow(DeleteDatasetRowDTO dto);
 
     Result<AuditDatasetResultVO> auditDataset(AuditDatasetDTO dto);
+
+    Result<Long> countDatasetsUnderMenu(Integer menuId);
 }

@@ -1,29 +1,35 @@
 package org.example.just.service.imp;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import org.example.just.dto.moduleDto.AuditModuleDTO;
-import org.example.just.dto.moduleDto.ModuleListVO;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import org.example.just.dao.ModuleColumnDao;
+import org.example.just.dto.moduleDto.*;
+import org.example.just.entity.ModuleColumnEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.example.just.dao.ModuleDao;
-import org.example.just.dto.moduleDto.CreateModuleDTO;
 import org.example.just.entity.ModuleEntity;
 import org.example.just.service.ModuleService;
 import org.example.just.utils.Result;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class ModuleServiceImp implements ModuleService {
 
     private final ModuleDao moduleDao;
+    private final ModuleColumnDao moduleColumnDao;
 
-    public ModuleServiceImp(ModuleDao moduleDao) {
+    public ModuleServiceImp(ModuleDao moduleDao, ModuleColumnDao moduleColumnDao) {
         this.moduleDao = moduleDao;
+        this.moduleColumnDao = moduleColumnDao;
     }
 
     @Override
@@ -184,5 +190,180 @@ public class ModuleServiceImp implements ModuleService {
         }
 
         return Result.success(resultList);
+    }
+
+    @Override
+    @Transactional
+    public Result<String> designModule(ModuleDesignDTO dto) {
+        if (dto == null) {
+            return Result.fail("请求参数不能为空");
+        }
+        if (dto.getModuleId() == null) {
+            return Result.fail("模板id不能为空");
+        }
+
+        boolean objectEmpty = CollectionUtils.isEmpty(dto.getObject());
+        boolean operationEmpty = CollectionUtils.isEmpty(dto.getOperation());
+        boolean resultEmpty = CollectionUtils.isEmpty(dto.getResult());
+
+        if (objectEmpty && operationEmpty && resultEmpty) {
+            return Result.fail("模板设计内容不能为空");
+        }
+
+        // 1. 校验模板是否存在
+        LambdaQueryWrapper<ModuleEntity> moduleWrapper = new LambdaQueryWrapper<>();
+        moduleWrapper.eq(ModuleEntity::getId, dto.getModuleId())
+                .eq(ModuleEntity::getDeleted, 0)
+                .last("limit 1");
+
+        ModuleEntity moduleEntity = moduleDao.selectOne(moduleWrapper);
+        if (moduleEntity == null) {
+            return Result.fail("模板不存在");
+        }
+
+        // 2. 校验三组字段
+        String validateMsg = validateColumnList(dto.getObject(), "Object");
+        if (validateMsg != null) {
+            return Result.fail(validateMsg);
+        }
+
+        validateMsg = validateColumnList(dto.getOperation(), "Operation");
+        if (validateMsg != null) {
+            return Result.fail(validateMsg);
+        }
+
+        validateMsg = validateColumnList(dto.getResult(), "Result");
+        if (validateMsg != null) {
+            return Result.fail(validateMsg);
+        }
+
+        // 3. 先逻辑删除旧设计
+        LambdaUpdateWrapper<ModuleColumnEntity> deleteWrapper = new LambdaUpdateWrapper<>();
+        deleteWrapper.eq(ModuleColumnEntity::getModuleId, dto.getModuleId())
+                .eq(ModuleColumnEntity::getDeleted, 0)
+                .set(ModuleColumnEntity::getDeleted, 1);
+
+        moduleColumnDao.update(null, deleteWrapper);
+
+        // 4. 插入新设计
+        saveModuleColumns(dto.getModuleId(), dto.getObject(), "Object");
+        saveModuleColumns(dto.getModuleId(), dto.getOperation(), "Operation");
+        saveModuleColumns(dto.getModuleId(), dto.getResult(), "Result");
+
+        return Result.success("模板设计保存成功");
+    }
+
+    @Override
+    public Result<ModuleBaseInfoVO> getModuleBaseInfo(Integer id) {
+        if (id == null) {
+            return Result.fail("模板id不能为空");
+        }
+
+        LambdaQueryWrapper<ModuleEntity> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(ModuleEntity::getId, id)
+                .eq(ModuleEntity::getDeleted, 0)
+                .last("limit 1");
+
+        ModuleEntity moduleEntity = moduleDao.selectOne(queryWrapper);
+        if (moduleEntity == null) {
+            return Result.fail("模板不存在");
+        }
+
+        ModuleBaseInfoVO vo = new ModuleBaseInfoVO();
+        BeanUtils.copyProperties(moduleEntity, vo);
+
+        return Result.success(vo);
+    }
+
+    @Override
+    public Result<ModuleDetailInfoVO> getModuleDetailInfo(Integer id) {
+        if (id == null) {
+            return Result.fail("模板id不能为空");
+        }
+
+        // 1. 校验模板是否存在
+        LambdaQueryWrapper<ModuleEntity> moduleWrapper = new LambdaQueryWrapper<>();
+        moduleWrapper.eq(ModuleEntity::getId, id)
+                .eq(ModuleEntity::getDeleted, 0)
+                .last("limit 1");
+
+        ModuleEntity moduleEntity = moduleDao.selectOne(moduleWrapper);
+        if (moduleEntity == null) {
+            return Result.fail("模板不存在");
+        }
+
+        // 2. 查询模板字段
+        LambdaQueryWrapper<ModuleColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
+        columnWrapper.eq(ModuleColumnEntity::getModuleId, id)
+                .eq(ModuleColumnEntity::getDeleted, 0)
+                .orderByAsc(ModuleColumnEntity::getCreateTime)
+                .orderByAsc(ModuleColumnEntity::getId);
+
+        List<ModuleColumnEntity> columnEntities = moduleColumnDao.selectList(columnWrapper);
+
+        ModuleDetailInfoVO vo = new ModuleDetailInfoVO();
+        vo.setModuleId(id);
+
+        for (ModuleColumnEntity entity : columnEntities) {
+            ModuleColumnItemVO itemVO = new ModuleColumnItemVO();
+            itemVO.setColumnName(entity.getColumnName());
+            itemVO.setType(entity.getType());
+
+            String belong = entity.getBelong();
+            if ("Object".equalsIgnoreCase(belong)) {
+                vo.getObject().add(itemVO);
+            } else if ("Operation".equalsIgnoreCase(belong)) {
+                vo.getOperation().add(itemVO);
+            } else if ("Result".equalsIgnoreCase(belong)) {
+                vo.getResult().add(itemVO);
+            }
+        }
+
+        return Result.success(vo);
+    }
+    private String validateColumnList(List<ModuleColumnItemDTO> list, String belong) {
+        if (CollectionUtils.isEmpty(list)) {
+            return null;
+        }
+
+        Set<String> columnNameSet = new HashSet<>();
+        for (ModuleColumnItemDTO item : list) {
+            if (item == null) {
+                return belong + "字段项不能为空";
+            }
+            if (!StringUtils.hasText(item.getColumnName())) {
+                return belong + "中存在空列名";
+            }
+            if (!StringUtils.hasText(item.getType())) {
+                return belong + "中存在空列类型";
+            }
+
+            String columnName = item.getColumnName().trim();
+            if (!columnNameSet.add(columnName)) {
+                return belong + "中存在重复列名: " + columnName;
+            }
+        }
+        return null;
+    }
+
+    private void saveModuleColumns(Integer moduleId, List<ModuleColumnItemDTO> list, String belong) {
+        if (CollectionUtils.isEmpty(list)) {
+            return;
+        }
+
+        for (ModuleColumnItemDTO item : list) {
+            ModuleColumnEntity entity = new ModuleColumnEntity();
+            entity.setModuleId(moduleId);
+            entity.setColumnName(item.getColumnName().trim());
+            entity.setType(item.getType().trim());
+            entity.setBelong(belong);
+            entity.setCreateTime(LocalDateTime.now());
+            entity.setDeleted(0);
+
+            int rows = moduleColumnDao.insert(entity);
+            if (rows <= 0) {
+                throw new RuntimeException("保存模板设计失败");
+            }
+        }
     }
 }

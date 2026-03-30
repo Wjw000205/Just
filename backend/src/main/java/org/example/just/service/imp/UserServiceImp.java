@@ -56,29 +56,43 @@ public class UserServiceImp implements UserService {
             return Result.fail("邮箱不能为空");
         }
 
+        if (!StringUtils.hasText(dto.getRealName())) {
+            return Result.fail("真实姓名不能为空");
+        }
+
+        String username = dto.getUsername().trim();
+        String password = dto.getPassword().trim();
+        String telephone = dto.getTelephone().trim();
+        String email = dto.getEmail().trim();
+        String realName = dto.getRealName().trim();
+
         LambdaQueryWrapper<UserEntity> usernameWrapper = new LambdaQueryWrapper<>();
-        usernameWrapper.eq(UserEntity::getUsername, dto.getUsername());
+        usernameWrapper.eq(UserEntity::getUsername, username)
+                .eq(UserEntity::getDeleted, 0);
         if (userDao.selectCount(usernameWrapper) > 0) {
             return Result.fail("用户名已存在");
         }
 
         LambdaQueryWrapper<UserEntity> phoneWrapper = new LambdaQueryWrapper<>();
-        phoneWrapper.eq(UserEntity::getTelephone, dto.getTelephone());
+        phoneWrapper.eq(UserEntity::getTelephone, telephone)
+                .eq(UserEntity::getDeleted, 0);
         if (userDao.selectCount(phoneWrapper) > 0) {
             return Result.fail("手机号已被注册");
         }
 
         LambdaQueryWrapper<UserEntity> emailWrapper = new LambdaQueryWrapper<>();
-        emailWrapper.eq(UserEntity::getEmail, dto.getEmail());
+        emailWrapper.eq(UserEntity::getEmail, email)
+                .eq(UserEntity::getDeleted, 0);
         if (userDao.selectCount(emailWrapper) > 0) {
             return Result.fail("邮箱已被注册");
         }
 
         UserEntity user = new UserEntity();
-        BeanUtils.copyProperties(dto, user);
-
-        // 密码加密
-        user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        user.setUsername(username);
+        user.setPassword(passwordEncoder.encode(password));
+        user.setTelephone(telephone);
+        user.setEmail(email);
+        user.setRealName(realName);
         user.setRole(0);
         user.setCreateTime(LocalDateTime.now());
         user.setDeleted(0);

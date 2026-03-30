@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @Data
 @TableName("manu_dataset")
 @Schema(name = "ManuDatabaseEntity", description = "模板目录实体")
-public class ManuDatabaseEntity {
+public class ManuDatasetEntity {
 
     @TableId(value = "id", type = IdType.AUTO)
     @Schema(description = "主键ID")
@@ -33,7 +33,7 @@ public class ManuDatabaseEntity {
 
     @TableField("parent")
     @Schema(description = "父级目录，null 代表一级目录")
-    private String parent;
+    private Integer parent;
 
     @TableField("is_menu")
     @Schema(description = "是否目录：1是目录，0不是目录")
