@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface ModuleService {
 
-    Result<String> createModule(CreateModuleDTO dto);
+    Result<Integer> createModule(CreateModuleDTO dto);
 
     Result<List<ModuleListVO>> getModuleListByTag(String tag);
 

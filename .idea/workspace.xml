@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="06173a3e-318f-4283-a1da-75a549cb56ce" name="更改" comment="3.30接口修改">
+    <list default="true" id="06173a3e-318f-4283-a1da-75a549cb56ce" name="更改" comment="3.31bug修复">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -180,6 +180,9 @@
       <workItem from="1774876827788" duration="3733000" />
       <workItem from="1774880597667" duration="22000" />
       <workItem from="1774883405409" duration="71000" />
+      <workItem from="1774946634243" duration="361000" />
+      <workItem from="1774947013156" duration="81000" />
+      <workItem from="1774947107273" duration="967000" />
     </task>
     <task id="LOCAL-00001" summary="实现jwt功能">
       <option name="closed" value="true" />
@@ -221,7 +224,15 @@
       <option name="project" value="LOCAL" />
       <updated>1774880503996</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="3.31bug修复">
+      <option name="closed" value="true" />
+      <created>1774946906240</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1774946906240</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -254,6 +265,7 @@
     <MESSAGE value="实现jwt功能" />
     <MESSAGE value="模板操作补充" />
     <MESSAGE value="3.30接口修改" />
-    <option name="LAST_COMMIT_MESSAGE" value="3.30接口修改" />
+    <MESSAGE value="3.31bug修复" />
+    <option name="LAST_COMMIT_MESSAGE" value="3.31bug修复" />
   </component>
 </project>

@@ -34,7 +34,7 @@ public class ModuleServiceImp implements ModuleService {
 
     @Override
     @Transactional
-    public Result<String> createModule(CreateModuleDTO dto) {
+    public Result<Integer> createModule(CreateModuleDTO dto) {
 
         if (dto == null) {
             return Result.fail("请求参数不能为空");
@@ -60,10 +60,13 @@ public class ModuleServiceImp implements ModuleService {
             return Result.fail("agree不能为空");
         }
 
+        String moduleName = dto.getModuleName().trim();
+        String tag = dto.getTag().trim();
+
         // 同一标签下不能存在相同模板
         LambdaQueryWrapper<ModuleEntity> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(ModuleEntity::getTag, dto.getTag())
-                .eq(ModuleEntity::getModuleName, dto.getModuleName())
+        queryWrapper.eq(ModuleEntity::getTag, tag)
+                .eq(ModuleEntity::getModuleName, moduleName)
                 .eq(ModuleEntity::getDeleted, 0);
 
         Long count = moduleDao.selectCount(queryWrapper);
@@ -73,14 +76,15 @@ public class ModuleServiceImp implements ModuleService {
 
         ModuleEntity entity = new ModuleEntity();
         BeanUtils.copyProperties(dto, entity);
-
+        entity.setModuleName(moduleName);
+        entity.setTag(tag);
         entity.setDeleted(0);
         entity.setCreateTime(LocalDateTime.now());
 
         int rows = moduleDao.insert(entity);
 
-        if (rows > 0) {
-            return Result.success("新建module成功");
+        if (rows > 0 && entity.getId() != null) {
+            return Result.success(entity.getId());
         }
 
         return Result.fail("新建module失败");

@@ -22,7 +22,7 @@ public class ModuleController {
 
     @PostMapping("/create")
     @Operation(summary = "新建module", description = "向module表插入一条记录")
-    public Result<String> createModule(@RequestBody CreateModuleDTO dto) {
+    public Result<Integer> createModule(@RequestBody CreateModuleDTO dto) {
         return moduleService.createModule(dto);
     }
 
