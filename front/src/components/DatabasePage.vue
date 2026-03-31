@@ -29,44 +29,18 @@
         </div>
 
         <ul class="sidebar-tree">
-          <li class="tree-node root" :class="{ active: activeNodeId === 'all' }" @click="selectNode('all')">
-            <span class="tree-chevron placeholder" aria-hidden="true" />
-            <span class="tree-label">全部</span>
-          </li>
-
-          <li class="tree-node group" :class="{ expanded: treeExpanded.sci }" @click="toggleGroup('sci')">
-            <span class="tree-chevron" :class="{ open: treeExpanded.sci }" aria-hidden="true">
-              <svg width="8" height="8" viewBox="0 0 10 10" fill="currentColor">
-                <path d="M3 1L7 5L3 9V1Z" />
-              </svg>
-            </span>
-            <span class="tree-label">生物医用材料（科学）</span>
-          </li>
-          <li v-if="treeExpanded.sci" class="tree-child-wrap">
-            <ul class="tree-children">
-              <li class="tree-node child" :class="{ active: activeNodeId === 'sci-common' }" @click.stop="selectNode('sci-common')">
-                <span class="tree-chevron placeholder" aria-hidden="true" />
-                <span class="tree-label">通用</span>
-              </li>
-            </ul>
-          </li>
-
-          <li class="tree-node group" :class="{ expanded: treeExpanded.industry }" @click="toggleGroup('industry')">
-            <span class="tree-chevron" :class="{ open: treeExpanded.industry }" aria-hidden="true">
-              <svg width="8" height="8" viewBox="0 0 10 10" fill="currentColor">
-                <path d="M3 1L7 5L3 9V1Z" />
-              </svg>
-            </span>
-            <span class="tree-label">生物医用材料（产业）</span>
-          </li>
-          <li v-if="treeExpanded.industry" class="tree-child-wrap">
-            <ul class="tree-children">
-              <li class="tree-node child" :class="{ active: activeNodeId === 'ind-common' }" @click.stop="selectNode('ind-common')">
-                <span class="tree-chevron placeholder" aria-hidden="true" />
-                <span class="tree-label">通用</span>
-              </li>
-            </ul>
-          </li>
+          <template v-if="sidebarTree.length">
+            <DatabaseSidebarTreeRow
+              v-for="node in sidebarTree"
+              :key="node.id"
+              :node="node"
+              :active-id="activeNodeId"
+              :expanded-ids="sidebarExpanded"
+              @select="selectNode"
+              @toggle-expand="onSidebarToggleExpand"
+            />
+          </template>
+          <li v-else class="sidebar-empty">暂无目录数据</li>
         </ul>
       </aside>
 
@@ -159,18 +133,24 @@
                 <th class="col-tags">产品代码 <span class="sort-caret" aria-hidden="true">⇅</span></th>
                 <th class="col-level">数据级别</th>
                 <th class="col-count">数据量</th>
+                <th class="col-tpl">模板名称</th>
+                <th class="col-cat">数据类别</th>
+                <th class="col-dept">所属部门</th>
+                <th class="col-creator">创建人</th>
+                <th class="col-time">创建时间</th>
+                <th class="col-time">最近更新时间</th>
                 <th class="col-action">操作</th>
               </tr>
             </thead>
 
             <tbody v-if="loading">
               <tr>
-                <td colspan="8" class="table-hint">加载中…</td>
+                <td colspan="14" class="table-hint">加载中…</td>
               </tr>
             </tbody>
             <tbody v-else-if="rows.length === 0">
               <tr>
-                <td colspan="8" class="table-hint muted">暂无数据</td>
+                <td colspan="14" class="table-hint muted">暂无数据</td>
               </tr>
             </tbody>
             <tbody v-else>
@@ -198,22 +178,47 @@
                   <span class="level-badge" :class="r.dataLevel.kind === 'high' ? 'high' : 'public'">{{ r.dataLevel.text }}</span>
                 </td>
                 <td class="col-count">{{ r.dataCount }}</td>
+                <td class="col-tpl">
+                  <span class="ellipsis" :title="r.templateName">{{ r.templateName }}</span>
+                </td>
+                <td class="col-cat">
+                  <span class="ellipsis" :title="r.dataCategory">{{ r.dataCategory }}</span>
+                </td>
+                <td class="col-dept">
+                  <span class="ellipsis" :title="r.department">{{ r.department }}</span>
+                </td>
+                <td class="col-creator">
+                  <span class="ellipsis" :title="r.creator">{{ r.creator }}</span>
+                </td>
+                <td class="col-time">
+                  <span class="ellipsis" :title="r.createTime">{{ r.createTime }}</span>
+                </td>
+                <td class="col-time">
+                  <span class="ellipsis" :title="r.updateTime">{{ r.updateTime }}</span>
+                </td>
                 <td class="col-action">
                   <div class="action-btns">
-                    <button type="button" class="action-btn" title="查看" @click="handleView(r)">
+                    <button type="button" class="action-btn" title="查看" data-tip="查看" @click="handleView(r)">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a5ce6" stroke-width="2">
                         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                         <circle cx="12" cy="12" r="3" />
                       </svg>
                     </button>
-                    <button type="button" class="action-btn" title="下载" @click="handleDownload(r)">
+                    <button type="button" class="action-btn" title="下载" data-tip="下载" @click="handleDownload(r)">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a5ce6" stroke-width="2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                         <polyline points="7 10 12 15 17 10" />
                         <line x1="12" y1="15" x2="12" y2="3" />
                       </svg>
                     </button>
-                    <button type="button" class="action-btn favorite" :class="{ active: r.favorited }" :title="r.favorited ? '取消收藏' : '收藏'" @click="toggleFavorite(r)">
+                    <button
+                      type="button"
+                      class="action-btn favorite"
+                      :class="{ active: r.favorited }"
+                      :title="r.favorited ? '取消收藏' : '收藏'"
+                      :data-tip="r.favorited ? '取消收藏' : '收藏'"
+                      @click="toggleFavorite(r)"
+                    >
                       <svg width="16" height="16" viewBox="0 0 24 24" :fill="r.favorited ? 'currentColor' : 'none'" stroke="#1a5ce6" stroke-width="2">
                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                       </svg>
@@ -239,18 +244,120 @@
         </div>
       </section>
     </div>
+
+    <div v-if="downloadDialogVisible" class="download-mask" @click.self="closeDownloadDialog">
+      <div class="download-dialog" role="dialog" aria-modal="true" aria-label="下载选项">
+        <div class="download-header">
+          <div class="download-title">下载选项</div>
+          <button type="button" class="download-close" @click="closeDownloadDialog">×</button>
+        </div>
+
+        <div class="download-info">
+          <div class="info-line"><span class="k">数据集名称：</span><span class="v">{{ downloadTarget?.datasetName || '-' }}</span></div>
+          <div class="info-line"><span class="k">数据资源目录：</span><span class="v">-</span></div>
+          <div class="info-line"><span class="k">数据量：</span><span class="v">{{ downloadTarget?.dataCount ?? '-' }}</span></div>
+          <div class="info-line"><span class="k">模板名称：</span><span class="v">{{ downloadTarget?.templateName || '-' }}</span></div>
+        </div>
+
+        <div class="download-options">
+          <div class="option-row">
+            <div class="option-label">下载内容</div>
+            <div class="option-btns">
+              <button
+                type="button"
+                class="opt-btn"
+                :class="{ active: downloadFieldMode === 'all' }"
+                @click="downloadFieldMode = 'all'"
+              >全部字段下载</button>
+              <button
+                type="button"
+                class="opt-btn"
+                :class="{ active: downloadFieldMode === 'partial' }"
+                @click="selectPartialMode"
+              >部分字段下载</button>
+            </div>
+          </div>
+
+          <div v-if="downloadFieldMode === 'partial'" class="partial-fields-box">
+            <div v-if="partialFieldsLoading" class="partial-fields-hint">加载字段中…</div>
+            <div v-else-if="partialFieldOptions.length === 0" class="partial-fields-hint muted">暂无可选字段</div>
+            <label v-for="field in partialFieldOptions" :key="field.value" class="partial-field-item">
+              <input
+                type="checkbox"
+                :value="field.value"
+                v-model="selectedPartialFields"
+              />
+              <span>{{ field.label }}</span>
+            </label>
+          </div>
+
+          <div class="option-row">
+            <div class="option-label">文件格式</div>
+            <div class="option-btns">
+              <button type="button" class="opt-btn" :class="{ active: downloadFileType === 'json' }" @click="downloadFileType = 'json'">JSON</button>
+              <button type="button" class="opt-btn" :class="{ active: downloadFileType === 'xlsx' }" @click="downloadFileType = 'xlsx'">XLSX</button>
+            </div>
+          </div>
+
+          <div class="option-row">
+            <div class="option-label">数据形式</div>
+            <div class="option-btns">
+              <button type="button" class="opt-btn" :class="{ active: downloadDataShape === 'nested' }" @click="downloadDataShape = 'nested'">默认二维表</button>
+              <button type="button" class="opt-btn" :class="{ active: downloadDataShape === 'flat' }" @click="downloadDataShape = 'flat'">平铺二维表</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="downloadTaskHint" class="download-task-hint">{{ downloadTaskHint }}</div>
+        <button type="button" class="download-confirm" :disabled="downloadSubmitting" @click="confirmDownload">
+          {{ downloadSubmitting ? '处理中…' : '确定下载' }}
+        </button>
+      </div>
+    </div>
   </section>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { fetchDatabaseFilterOptions } from '../api/database.js'
+import {
+  fetchDatabasePageInit,
+  queryDatabaseDatasets,
+  fetchDatabaseDownloadFields,
+  downloadDatabaseDatasetFile,
+} from '../api/database.js'
+import DatabaseSidebarTreeRow from './DatabaseSidebarTreeRow.vue'
 
-const emit = defineEmits(['go-home'])
+const emit = defineEmits(['go-home', 'view-detail'])
 
 const categoryKeyword = ref('')
-const treeExpanded = ref({ sci: true, industry: true })
+const sidebarTree = ref([])
+/** @type {import('vue').Ref<Record<string, boolean>>} */
+const sidebarExpanded = ref({})
 const activeNodeId = ref('all')
+
+function collectExpandedDefaults(nodes) {
+  const o = {}
+  function walk(arr) {
+    for (const n of arr) {
+      if (n.children?.length) {
+        o[String(n.id)] = true
+        walk(n.children)
+      }
+    }
+  }
+  walk(nodes)
+  return o
+}
+
+function findDefaultActiveId(tree) {
+  const q = [...tree]
+  while (q.length) {
+    const n = q.shift()
+    if (String(n.id) === 'all') return 'all'
+    if (n.children?.length) q.push(...n.children)
+  }
+  return tree[0] ? String(tree[0].id) : 'all'
+}
 
 function selectNode(id) {
   activeNodeId.value = id
@@ -258,8 +365,12 @@ function selectNode(id) {
   loadRows()
 }
 
-function toggleGroup(key) {
-  treeExpanded.value[key] = !treeExpanded.value[key]
+function onSidebarToggleExpand(id) {
+  const k = String(id)
+  sidebarExpanded.value = {
+    ...sidebarExpanded.value,
+    [k]: sidebarExpanded.value[k] !== true,
+  }
 }
 
 function handleCategorySearch() {
@@ -319,6 +430,42 @@ const pageSize = ref(10)
 const total = ref(0)
 const loading = ref(false)
 const rows = ref([])
+const downloadDialogVisible = ref(false)
+const downloadTarget = ref(null)
+const downloadFieldMode = ref('all')
+const downloadFileType = ref('json')
+const downloadDataShape = ref('nested')
+const selectedPartialFields = ref([])
+const partialFieldOptions = ref([])
+const partialFieldsLoading = ref(false)
+const downloadSubmitting = ref(false)
+const downloadTaskHint = ref('')
+
+async function loadPartialFieldOptions() {
+  const id = downloadTarget.value?.id
+  if (id == null || id === '') {
+    partialFieldOptions.value = []
+    return
+  }
+  partialFieldsLoading.value = true
+  try {
+    partialFieldOptions.value = await fetchDatabaseDownloadFields(id)
+  } catch (e) {
+    console.error('loadPartialFieldOptions', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    partialFieldOptions.value = []
+    alert(msg || '加载下载字段失败')
+  } finally {
+    partialFieldsLoading.value = false
+  }
+}
+
+function selectPartialMode() {
+  downloadFieldMode.value = 'partial'
+  if (partialFieldOptions.value.length === 0) {
+    loadPartialFieldOptions()
+  }
+}
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 const displayedPages = computed(() => {
@@ -349,13 +496,70 @@ function goToPage(p) {
 }
 
 function handleView(row) {
-  console.log('查看：', row)
+  emit('view-detail', row)
 }
 function handleDownload(row) {
-  console.log('下载：', row)
+  downloadTarget.value = row
+  downloadFieldMode.value = 'all'
+  downloadFileType.value = 'json'
+  downloadDataShape.value = 'nested'
+  selectedPartialFields.value = []
+  partialFieldOptions.value = []
+  downloadTaskHint.value = ''
+  downloadDialogVisible.value = true
 }
 function toggleFavorite(row) {
   row.favorited = !row.favorited
+}
+
+function closeDownloadDialog() {
+  downloadDialogVisible.value = false
+}
+
+async function confirmDownload() {
+  if (downloadFieldMode.value === 'partial' && selectedPartialFields.value.length === 0) {
+    alert('请选择至少一个下载字段')
+    return
+  }
+  if (downloadSubmitting.value) return
+  const id = downloadTarget.value?.id
+  if (id == null || id === '') {
+    alert('缺少数据集 id')
+    return
+  }
+
+  downloadSubmitting.value = true
+  downloadTaskHint.value = '正在生成并下载文件…'
+  try {
+    const body = {
+      fieldMode: downloadFieldMode.value,
+      fields: downloadFieldMode.value === 'partial' ? selectedPartialFields.value : [],
+      fileType: downloadFileType.value,
+      dataShape: downloadDataShape.value,
+    }
+    const { blob, filename } = await downloadDatabaseDatasetFile(id, body)
+    const ext = downloadFileType.value === 'xlsx' ? 'xlsx' : 'json'
+    const safeName =
+      filename ||
+      `${String(downloadTarget.value?.datasetName || 'dataset')}-${downloadFieldMode.value === 'partial' ? '部分字段' : '全部字段'}.${ext}`
+
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = safeName
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+
+    closeDownloadDialog()
+  } catch (e) {
+    console.error('confirmDownload', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    alert(msg || '下载失败')
+  } finally {
+    downloadSubmitting.value = false
+  }
 }
 
 function goHome() {
@@ -369,99 +573,56 @@ function handleClickOutside(e) {
 async function loadRows() {
   loading.value = true
   try {
-    const all = [
-      {
-        id: 1,
-        datasetName: 'DLP3D磷酸钙瓷打印高值数据',
-        scienceCategories: ['双相磷酸钙'],
-        industryCategories: ['生物医用材料制造'],
-        productCodes: [],
-        dataLevel: { text: '高值', kind: 'high' },
-        dataCount: 746,
-        favorited: false,
-      },
-      {
-        id: 2,
-        datasetName: '0318生物医用对接数据集',
-        scienceCategories: ['α-磷酸三钙'],
-        industryCategories: ['铝及铝合金制造'],
-        productCodes: [],
-        dataLevel: { text: '高值', kind: 'high' },
-        dataCount: 144,
-        favorited: false,
-      },
-      {
-        id: 3,
-        datasetName: '22',
-        scienceCategories: ['羟基磷灰石'],
-        industryCategories: ['先进制造基础零部件…'],
-        productCodes: [],
-        dataLevel: { text: '高值', kind: 'high' },
-        dataCount: 38,
-        favorited: false,
-      },
-      {
-        id: 4,
-        datasetName: '表格1',
-        scienceCategories: ['羟基磷灰石'],
-        industryCategories: ['先进制造基础零部件…'],
-        productCodes: [],
-        dataLevel: { text: '高值', kind: 'high' },
-        dataCount: 18,
-        favorited: false,
-      },
-      {
-        id: 5,
-        datasetName: '公益数据照演示测试0316',
-        scienceCategories: ['钛及钛合金', '钛及钛合金', '钛及钛合金'],
-        industryCategories: ['生物医用材料制造', '生物医用材料制造', '生物医用材料制造'],
-        productCodes: ['2770035', '2770036', '2770037', '3073052'],
-        dataLevel: { text: '公益', kind: 'public' },
-        dataCount: 72,
-        favorited: false,
-      },
-    ]
-
-    const catKw = categoryKeyword.value.trim()
-    const dsName = searchForm.value.datasetName.trim()
-    const industry = searchForm.value.industryCategory
-
-    let filtered = all
-    if (activeNodeId.value === 'sci-common') filtered = filtered.filter((r) => (r.scienceCategories || []).length > 0)
-    if (activeNodeId.value === 'ind-common') filtered = filtered.filter((r) => (r.industryCategories || []).length > 0)
-    if (catKw) {
-      filtered = filtered.filter((r) => (r.scienceCategories || []).join(',').includes(catKw) || String(r.datasetName || '').includes(catKw))
-    }
-    if (dsName) filtered = filtered.filter((r) => String(r.datasetName || '').includes(dsName))
-    if (industry) {
-      const label = industryOptions.value.find((o) => o.value === industry)?.label || ''
-      if (label) filtered = filtered.filter((r) => (r.industryCategories || []).some((x) => String(x).includes(label)))
-    }
-
-    total.value = filtered.length
-    const start = (page.value - 1) * pageSize.value
-    rows.value = filtered.slice(start, start + pageSize.value)
+    const { total: t, list } = await queryDatabaseDatasets({
+      datasetName: searchForm.value.datasetName,
+      industryCategory: searchForm.value.industryCategory,
+      dataCategory: searchForm.value.dataCategory,
+      templateName: searchForm.value.templateName,
+      creator: searchForm.value.creator,
+      department: searchForm.value.department,
+      sidebarNodeId: activeNodeId.value,
+      sidebarKeyword: categoryKeyword.value,
+      page: page.value,
+      pageSize: pageSize.value,
+    })
+    total.value = t
+    rows.value = list
+  } catch (e) {
+    console.error('loadRows', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    total.value = 0
+    rows.value = []
+    if (msg.includes('未登录') || msg.includes('无权限')) alert(msg)
   } finally {
     loading.value = false
   }
 }
 
-async function loadDropdownOptions() {
+async function loadPageInit() {
   try {
-    const res = await fetchDatabaseFilterOptions()
+    const res = await fetchDatabasePageInit({
+      page: page.value,
+      pageSize: pageSize.value,
+    })
+    sidebarTree.value = Array.isArray(res.tree) ? res.tree : []
+    sidebarExpanded.value = collectExpandedDefaults(sidebarTree.value)
+    activeNodeId.value = findDefaultActiveId(sidebarTree.value)
+
     industryOptions.value = res.industryCategories
     dataCategoryOptions.value = res.dataCategories
     deptOptions.value = res.departments
+
+    total.value = res.total
+    rows.value = res.list
   } catch (e) {
-    console.error('loadDropdownOptions', e)
+    console.error('loadPageInit', e)
     const msg = e instanceof Error ? e.message : String(e)
     if (msg.includes('未登录') || msg.includes('无权限')) alert(msg)
   }
 }
 
 onMounted(async () => {
-  await loadDropdownOptions()
-  loadRows()
+  await loadPageInit()
   document.addEventListener('click', handleClickOutside)
 })
 onBeforeUnmount(() => {
@@ -565,6 +726,13 @@ onBeforeUnmount(() => {
   list-style: none;
   padding: 0;
   margin: 0;
+}
+
+.sidebar-empty {
+  list-style: none;
+  font-size: 13px;
+  color: #999;
+  padding: 12px 4px;
 }
 
 .tree-node {
@@ -871,6 +1039,31 @@ onBeforeUnmount(() => {
   min-width: 80px;
 }
 
+.col-tpl {
+  min-width: 140px;
+  max-width: 200px;
+}
+
+.col-cat {
+  min-width: 110px;
+  max-width: 160px;
+}
+
+.col-dept {
+  min-width: 110px;
+  max-width: 160px;
+}
+
+.col-creator {
+  min-width: 90px;
+  max-width: 140px;
+}
+
+.col-time {
+  min-width: 150px;
+  max-width: 190px;
+}
+
 .col-action {
   width: 96px;
   text-align: center;
@@ -936,6 +1129,7 @@ onBeforeUnmount(() => {
 }
 
 .action-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -949,6 +1143,35 @@ onBeforeUnmount(() => {
 
 .action-btn:hover {
   background: #f0f5ff;
+}
+
+.action-btn[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  top: -8px;
+  transform: translate(-50%, -100%);
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(33, 33, 33, 0.92);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.action-btn[data-tip]:hover::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -8px;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: rgba(33, 33, 33, 0.92);
+  pointer-events: none;
+  z-index: 20;
 }
 
 .action-btn.favorite {
@@ -1027,5 +1250,184 @@ onBeforeUnmount(() => {
   border-color: #1a5ce6;
   color: #fff;
 }
+
+.download-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+
+.download-dialog {
+  width: 680px;
+  max-width: calc(100vw - 24px);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.24);
+  padding: 14px 14px 16px;
+}
+
+.download-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #eceff4;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+
+.download-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #222;
+}
+
+.download-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #999;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.download-close:hover {
+  background: #f5f7fb;
+  color: #666;
+}
+
+.download-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.info-line .k {
+  color: #666;
+}
+
+.download-options {
+  border: 1px dashed #9ec0ef;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.option-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.option-row:last-child {
+  margin-bottom: 0;
+}
+
+.option-label {
+  width: 64px;
+  color: #444;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.option-btns {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.partial-fields-box {
+  margin: -2px 0 12px 74px;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid #d7deea;
+  border-radius: 6px;
+  background: #fff;
+  padding: 8px 10px;
+}
+
+.partial-fields-hint {
+  padding: 10px 8px;
+  font-size: 13px;
+  color: #666;
+}
+
+.partial-fields-hint.muted {
+  color: #999;
+}
+
+.partial-field-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  font-size: 14px;
+  color: #333;
+  padding: 0 8px;
+  border-radius: 4px;
+}
+
+.partial-field-item:hover {
+  background: #eef4ff;
+}
+
+.partial-field-item input {
+  width: 14px;
+  height: 14px;
+}
+
+.opt-btn {
+  min-width: 90px;
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 4px;
+  background: #e9eef6;
+  color: #4a5f7a;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.opt-btn.active {
+  background: #1a73e8;
+  color: #fff;
+}
+
+.download-confirm {
+  width: 100%;
+  height: 36px;
+  border: none;
+  border-radius: 4px;
+  background: #1a73e8;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.download-confirm:hover {
+  background: #155fc0;
+}
+
+.download-confirm:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.download-task-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #666;
+}
+
 </style>
 

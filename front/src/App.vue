@@ -159,10 +159,43 @@
             <li class="nav-dropdown-item" @click="onAuditSelect('catalog-publish')">目录发布</li>
           </ul>
         </div>
-        <a class="nav-item has-drop">
-          系统管理
-          <svg width="10" height="6" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
+        <div class="nav-sys-wrap" ref="sysDropRef">
+          <a
+            class="nav-item has-drop"
+            :class="{ active: sysDropOpen || isSystemMgmtPage }"
+            @click.stop="toggleSysDrop"
+          >
+            系统管理
+            <svg
+              class="nav-drop-chevron"
+              :class="{ 'nav-drop-chevron--open': sysDropOpen }"
+              width="10"
+              height="6"
+              viewBox="0 0 10 6"
+            >
+              <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" />
+            </svg>
+          </a>
+          <div v-if="sysDropOpen" class="nav-sys-panel" @click.stop>
+            <div class="nav-sys-panel-head" @click="toggleSysDrop">
+              <span>系统管理</span>
+              <svg class="nav-sys-panel-chevron" width="10" height="6" viewBox="0 0 10 6">
+                <path d="M1 4l4-4 4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" />
+              </svg>
+            </div>
+            <ul class="nav-sys-list">
+              <li
+                v-for="row in sysMenuItems"
+                :key="row.page"
+                class="nav-sys-item"
+                :class="{ 'nav-sys-item--active': currentPage === row.page }"
+                @click="onSysSelect(row.page)"
+              >
+                {{ row.label }}
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
     </nav>
 
@@ -417,7 +450,31 @@
       <DataPublishPage v-else-if="currentPage === 'data-publish'" @go-home="goPage('home')" />
 
       <!-- 数据库页面 -->
-      <DatabasePage v-else-if="currentPage === 'database'" @go-home="goPage('home')" />
+      <DatabasePage
+        v-else-if="currentPage === 'database'"
+        @go-home="goPage('home')"
+        @view-detail="openDatabaseDetail"
+      />
+
+      <!-- 数据库查看详情 -->
+      <DatabaseDetailPage
+        v-else-if="currentPage === 'database-detail'"
+        :dataset="databaseDetailDataset"
+        @go-home="goPage('home')"
+        @back="goPage('database')"
+      />
+
+      <!-- 科学分类管理 -->
+      <SciClassificationPage v-else-if="currentPage === 'sys-sci-class'" @go-home="goPage('home')" />
+
+      <!-- 用户管理 -->
+      <UserManagementPage v-else-if="currentPage === 'sys-users'" @go-home="goPage('home')" />
+
+      <!-- 系统管理：其余子模块占位 -->
+      <section v-else-if="isSystemMgmtPage" class="sys-mgmt-placeholder">
+        <h1 class="sys-mgmt-placeholder-title">{{ systemMgmtPageTitle }}</h1>
+        <p class="sys-mgmt-placeholder-desc">功能页面建设中。</p>
+      </section>
     </main>
 
     <!-- 登录弹层：覆盖在内容之上 -->
@@ -447,6 +504,9 @@ import FragmentDisablePage from './components/FragmentDisablePage.vue'
 import TemplatePublishPage from './components/TemplatePublishPage.vue'
 import DataPublishPage from './components/DataPublishPage.vue'
 import DatabasePage from './components/DatabasePage.vue'
+import DatabaseDetailPage from './components/DatabaseDetailPage.vue'
+import SciClassificationPage from './components/SciClassificationPage.vue'
+import UserManagementPage from './components/UserManagementPage.vue'
 
 const currentPage = ref('home')
 const templateType = ref('dataset') // 'dataset' 或 'fragment'
@@ -454,7 +514,23 @@ const uploadDropOpen = ref(false)
 const uploadDropRef = ref(null)
 const auditDropOpen = ref(false)
 const auditDropRef = ref(null)
+const sysDropOpen = ref(false)
+const sysDropRef = ref(null)
+
+const sysMenuItems = [
+  { page: 'sys-sci-class', label: '科学分类管理' },
+  { page: 'sys-industry-class', label: '产业分类管理' },
+  { page: 'sys-data-tags', label: '数据标签管理' },
+  { page: 'sys-users', label: '用户管理' },
+  { page: 'sys-depts', label: '部门管理' },
+  { page: 'sys-perms', label: '权限管理' },
+  { page: 'sys-dict', label: '数据字典' },
+  { page: 'sys-ui', label: '界面管理' },
+  { page: 'sys-menu', label: '菜单管理' },
+]
+const systemMgmtPageIds = new Set(sysMenuItems.map((r) => r.page))
 const currentUserName = ref('')
+const databaseDetailDataset = ref(null)
 
 const isLoggedIn = computed(() => {
   const token =
@@ -468,8 +544,20 @@ const isAuditPage = computed(() => {
           'data-audit', 'data-disable', 'template-publish', 'catalog-publish'].includes(currentPage.value)
 })
 
+const isSystemMgmtPage = computed(() => systemMgmtPageIds.has(currentPage.value))
+
+const systemMgmtPageTitle = computed(() => {
+  const row = sysMenuItems.find((r) => r.page === currentPage.value)
+  return row ? row.label : '系统管理'
+})
+
 const goPage = (page) => {
   currentPage.value = page
+}
+
+function openDatabaseDetail(row) {
+  databaseDetailDataset.value = row || null
+  goPage('database-detail')
 }
 
 function onLoginSuccess(_payload) {
@@ -548,12 +636,24 @@ function onAuditSelect(page) {
   currentPage.value = page
 }
 
+function toggleSysDrop() {
+  sysDropOpen.value = !sysDropOpen.value
+}
+
+function onSysSelect(page) {
+  sysDropOpen.value = false
+  currentPage.value = page
+}
+
 function onDocClick(e) {
   if (uploadDropRef.value && !uploadDropRef.value.contains(e.target)) {
     uploadDropOpen.value = false
   }
   if (auditDropRef.value && !auditDropRef.value.contains(e.target)) {
     auditDropOpen.value = false
+  }
+  if (sysDropRef.value && !sysDropRef.value.contains(e.target)) {
+    sysDropOpen.value = false
   }
 }
 
@@ -574,10 +674,98 @@ onBeforeUnmount(() => {
 }
 
 .nav-upload-wrap,
-.nav-audit-wrap {
+.nav-audit-wrap,
+.nav-sys-wrap {
   position: relative;
   display: flex;
   align-items: stretch;
+}
+
+.nav-drop-chevron {
+  transition: transform 0.2s ease;
+}
+
+.nav-drop-chevron--open {
+  transform: rotate(180deg);
+}
+
+.nav-sys-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 200px;
+  margin-top: 0;
+  padding: 0;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  z-index: 120;
+  overflow: hidden;
+}
+
+.nav-sys-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #1a5ce6;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+}
+
+.nav-sys-panel-chevron {
+  flex-shrink: 0;
+  opacity: 0.95;
+}
+
+.nav-sys-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 0;
+}
+
+.nav-sys-item {
+  padding: 9px 14px 9px 15px;
+  margin: 0;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.nav-sys-item:hover {
+  background: #f5f7fa;
+}
+
+.nav-sys-item--active {
+  border-left-color: #1a5ce6;
+  background: #f0f6ff;
+}
+
+.sys-mgmt-placeholder {
+  max-width: 960px;
+  margin: 48px auto;
+  padding: 32px 40px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.sys-mgmt-placeholder-title {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.sys-mgmt-placeholder-desc {
+  margin: 0;
+  font-size: 14px;
+  color: #666;
 }
 
 .nav-dropdown {
