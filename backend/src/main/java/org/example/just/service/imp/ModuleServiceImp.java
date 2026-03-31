@@ -48,7 +48,7 @@ public class ModuleServiceImp implements ModuleService {
             return Result.fail("tag不能为空");
         }
 
-        if (dto.getCreator() == null || dto.getCreator().trim().isEmpty()) {
+        if (dto.getCreator() == null) {
             return Result.fail("creator不能为空");
         }
 

@@ -16,8 +16,8 @@ public class CreateModuleDTO {
     @Schema(description = "模块说明", example = "用于管理用户基础信息")
     private String description;
 
-    @Schema(description = "创建者", example = "admin")
-    private String creator;
+    @Schema(description = "创建者", example = "1")
+    private Integer creator;
 
     @Schema(description = "可见范围 1:public 0:private", example = "1")
     private Integer visibleArea;

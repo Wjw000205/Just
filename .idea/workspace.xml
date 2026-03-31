@@ -4,31 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="06173a3e-318f-4283-a1da-75a549cb56ce" name="更改" comment="模板操作补充">
-      <change afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dao/ModuleColumnDao.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/moduleDto/ModuleBaseInfoVO.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/moduleDto/ModuleColumnItemDTO.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/moduleDto/ModuleColumnItemVO.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/moduleDto/ModuleDesignDTO.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/moduleDto/ModuleDetailInfoVO.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/entity/ModuleColumnEntity.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/sqldialects.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/sqldialects.xml" afterDir="false" />
+    <list default="true" id="06173a3e-318f-4283-a1da-75a549cb56ce" name="更改" comment="3.30接口修改">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/controller/ManuDatasetController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/controller/ManuDatasetController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/controller/ModuleController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/controller/ModuleController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dao/DatasetDataDao.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dao/DatasetDataDao.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dao/ManuDatasetDao.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dao/ManuDatasetDao.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/datasetDto/CreateDatasetDTO.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/datasetDto/CreateDatasetDTO.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/datasetDto/CreateMenuDatasetDTO.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/datasetDto/CreateMenuDatasetDTO.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/datasetDto/ManuDatasetTreeVO.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/datasetDto/ManuDatasetTreeVO.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/userDto/UserRegisterDTO.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/userDto/UserRegisterDTO.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/entity/DatabaseDataEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/entity/DatasetDataEntity.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/entity/ManuDatabaseEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/entity/ManuDatasetEntity.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/DatasetService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/DatasetService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/ModuleService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/ModuleService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/imp/DatasetServiceImp.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/imp/DatasetServiceImp.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/imp/ModuleServiceImp.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/imp/ModuleServiceImp.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/imp/UserServiceImp.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/imp/UserServiceImp.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -200,7 +177,9 @@
       <workItem from="1774341136903" duration="3706000" />
       <workItem from="1774354305243" duration="217000" />
       <workItem from="1774673270020" duration="967000" />
-      <workItem from="1774876827788" duration="3340000" />
+      <workItem from="1774876827788" duration="3733000" />
+      <workItem from="1774880597667" duration="22000" />
+      <workItem from="1774883405409" duration="71000" />
     </task>
     <task id="LOCAL-00001" summary="实现jwt功能">
       <option name="closed" value="true" />
@@ -234,7 +213,15 @@
       <option name="project" value="LOCAL" />
       <updated>1774674110902</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="3.30接口修改">
+      <option name="closed" value="true" />
+      <created>1774880503996</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1774880503996</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -266,6 +253,7 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="实现jwt功能" />
     <MESSAGE value="模板操作补充" />
-    <option name="LAST_COMMIT_MESSAGE" value="模板操作补充" />
+    <MESSAGE value="3.30接口修改" />
+    <option name="LAST_COMMIT_MESSAGE" value="3.30接口修改" />
   </component>
 </project>
