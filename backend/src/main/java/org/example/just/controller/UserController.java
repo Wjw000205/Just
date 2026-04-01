@@ -77,4 +77,10 @@ public class UserController {
         }
         return Result.success("登出成功");
     }
+
+    @GetMapping("/auth/profile")
+    @Operation(summary = "获取当前登录用户信息", description = "前端在应用初始化时调用，用于获取当前登录用户的基本信息和角色")
+    public Result<AuthProfileVO> getAuthProfile() {
+        return userService.getAuthProfile();
+    }
 }

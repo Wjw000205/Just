@@ -17,4 +17,6 @@ public interface UserService {
     Result<String> updateSecondPassword(String username, UpdateSecondPasswordDTO dto);
 
     Result<String> completeUserInfo(String username, CompleteUserInfoDTO dto);
+
+    Result<AuthProfileVO> getAuthProfile();
 }
