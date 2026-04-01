@@ -557,6 +557,9 @@
       <!-- 权限管理 -->
       <PermissionManagementPage v-else-if="currentPage === 'sys-perms'" @go-home="goPage('home')" />
 
+      <!-- 数据字典 -->
+      <DataDictionaryPage v-else-if="currentPage === 'data-dictionary'" @go-home="goPage('home')" @go-system-manage="goPage('data-dictionary')" />
+
       <!-- 系统管理：其余子模块占位 -->
       <section v-else-if="isSystemMgmtPage" class="sys-mgmt-placeholder">
         <h1 class="sys-mgmt-placeholder-title">{{ systemMgmtPageTitle }}</h1>
@@ -629,6 +632,7 @@ import PermissionManagementPage from './components/PermissionManagementPage.vue'
 import DataAuditPage from './components/DataAuditPage.vue'
 import DataDisablePage from './components/DataDisablePage.vue'
 import CatalogPublishPage from './components/CatalogPublishPage.vue'
+import DataDictionaryPage from './components/DataDictionaryPage.vue'
 
 const currentPage = ref('home')
 const templateType = ref('dataset') // 'dataset' 或 'fragment'
@@ -651,7 +655,7 @@ const sysMenuItems = [
   { page: 'sys-users', label: '用户管理' },
   { page: 'sys-depts', label: '部门管理' },
   { page: 'sys-perms', label: '权限管理' },
-  { page: 'sys-dict', label: '数据字典' },
+  { page: 'data-dictionary', label: '数据字典' },
   { page: 'sys-ui', label: '界面管理' },
   { page: 'sys-menu', label: '菜单管理' },
 ]
