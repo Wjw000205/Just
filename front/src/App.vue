@@ -515,6 +515,9 @@
       <!-- 用户管理 -->
       <UserManagementPage v-else-if="currentPage === 'sys-users'" @go-home="goPage('home')" />
 
+      <!-- 权限管理 -->
+      <PermissionManagementPage v-else-if="currentPage === 'sys-perms'" @go-home="goPage('home')" />
+
       <!-- 系统管理：其余子模块占位 -->
       <section v-else-if="isSystemMgmtPage" class="sys-mgmt-placeholder">
         <h1 class="sys-mgmt-placeholder-title">{{ systemMgmtPageTitle }}</h1>
@@ -580,6 +583,7 @@ import ScientificCategoryManagePage from './components/ScientificCategoryManageP
 import IndustryClassificationManagePage from './components/IndustryClassificationManagePage.vue'
 import DepartmentManagePage from './components/DepartmentManagePage.vue'
 import PersonalCenterPage from './components/PersonalCenterPage.vue'
+import PermissionManagementPage from './components/PermissionManagementPage.vue'
 
 const currentPage = ref('home')
 const templateType = ref('dataset') // 'dataset' 或 'fragment'
