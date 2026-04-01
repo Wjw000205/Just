@@ -79,9 +79,18 @@
                   <button type="button" class="user-dropdown-item" @click="goPersonalCenter">
                     个人中心
                   </button>
+                  <button type="button" class="user-dropdown-item" @click="goEditProfile">
+                    编辑资料
+                  </button>
+                  <button type="button" class="user-dropdown-item" @click="goChangePassword">
+                    修改密码
+                  </button>
+                  <button type="button" class="user-dropdown-item" @click="goChangeSecondaryPassword">
+                    修改二级密码
+                  </button>
                   <div class="user-dropdown-sep"></div>
                   <button type="button" class="user-dropdown-item" @click="handleLogout">
-                    退出
+                    退出登录
                   </button>
                 </div>
               </div>
@@ -467,6 +476,15 @@
       <!-- 模板片段停用页面 -->
       <FragmentDisablePage v-else-if="currentPage === 'fragment-disable'" @go-home="goPage('home')" />
 
+      <!-- 数据审核页面 -->
+      <DataAuditPage v-else-if="currentPage === 'data-audit'" @go-home="goPage('home')" @go-audit-manage="goPage('data-audit')" />
+
+      <!-- 数据停用页面 -->
+      <DataDisablePage v-else-if="currentPage === 'data-disable'" @go-home="goPage('home')" @go-audit-manage="goPage('data-disable')" />
+
+      <!-- 目录发布页面 -->
+      <CatalogPublishPage v-else-if="currentPage === 'catalog-publish'" @go-home="goPage('home')" @go-audit-manage="goPage('catalog-publish')" />
+
       <!-- 模板发布页面 -->
       <TemplatePublishPage v-else-if="currentPage === 'template-publish'" @go-home="goPage('home')" />
 
@@ -507,6 +525,27 @@
         v-else-if="currentPage === 'sys-depts'"
         @go-home="goPage('home')"
         @go-system-manage="goPage('sys-depts')"
+      />
+
+      <!-- 数据标签管理 -->
+      <DataTagManagePage
+        v-else-if="currentPage === 'sys-data-tags'"
+        @go-home="goPage('home')"
+        @go-system-manage="goPage('sys-data-tags')"
+      />
+
+      <!-- 界面管理 -->
+      <InterfaceManagePage
+        v-else-if="currentPage === 'sys-ui'"
+        @go-home="goPage('home')"
+        @go-system-manage="goPage('sys-ui')"
+      />
+
+      <!-- 菜单管理 -->
+      <MenuManagePage
+        v-else-if="currentPage === 'sys-menu'"
+        @go-home="goPage('home')"
+        @go-system-manage="goPage('sys-menu')"
       />
 
       <!-- 个人中心 -->
@@ -582,8 +621,14 @@ import UserManagementPage from './components/UserManagementPage.vue'
 import ScientificCategoryManagePage from './components/ScientificCategoryManagePage.vue'
 import IndustryClassificationManagePage from './components/IndustryClassificationManagePage.vue'
 import DepartmentManagePage from './components/DepartmentManagePage.vue'
+import DataTagManagePage from './components/DataTagManagePage.vue'
+import InterfaceManagePage from './components/InterfaceManagePage.vue'
+import MenuManagePage from './components/MenuManagePage.vue'
 import PersonalCenterPage from './components/PersonalCenterPage.vue'
 import PermissionManagementPage from './components/PermissionManagementPage.vue'
+import DataAuditPage from './components/DataAuditPage.vue'
+import DataDisablePage from './components/DataDisablePage.vue'
+import CatalogPublishPage from './components/CatalogPublishPage.vue'
 
 const currentPage = ref('home')
 const templateType = ref('dataset') // 'dataset' 或 'fragment'
@@ -722,6 +767,25 @@ const toggleUserDropdown = () => {
 const goPersonalCenter = () => {
   userDropdownOpen.value = false
   goPage('personal-center')
+}
+
+const goEditProfile = () => {
+  userDropdownOpen.value = false
+  goPage('personal-center')
+  // 通过 sessionStorage 传递要显示的子页面
+  sessionStorage.setItem('pc-menu', 'edit-profile')
+}
+
+const goChangePassword = () => {
+  userDropdownOpen.value = false
+  goPage('personal-center')
+  sessionStorage.setItem('pc-menu', 'change-password')
+}
+
+const goChangeSecondaryPassword = () => {
+  userDropdownOpen.value = false
+  goPage('personal-center')
+  sessionStorage.setItem('pc-menu', 'change-secondary-password')
 }
 
 function toggleUploadDrop() {
