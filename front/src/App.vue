@@ -495,6 +495,20 @@
         @go-system-manage="goPage('scientific-category-manage')"
       />
 
+      <!-- 产业分类管理 -->
+      <IndustryClassificationManagePage
+        v-else-if="currentPage === 'sys-industry-class'"
+        @go-home="goPage('home')"
+        @go-system-manage="goPage('sys-industry-class')"
+      />
+
+      <!-- 部门管理 -->
+      <DepartmentManagePage
+        v-else-if="currentPage === 'sys-depts'"
+        @go-home="goPage('home')"
+        @go-system-manage="goPage('sys-depts')"
+      />
+
       <!-- 个人中心 -->
       <PersonalCenterPage v-else-if="currentPage === 'personal-center'" />
 
@@ -563,6 +577,8 @@ import DatabasePage from './components/DatabasePage.vue'
 import DatabaseDetailPage from './components/DatabaseDetailPage.vue'
 import UserManagementPage from './components/UserManagementPage.vue'
 import ScientificCategoryManagePage from './components/ScientificCategoryManagePage.vue'
+import IndustryClassificationManagePage from './components/IndustryClassificationManagePage.vue'
+import DepartmentManagePage from './components/DepartmentManagePage.vue'
 import PersonalCenterPage from './components/PersonalCenterPage.vue'
 
 const currentPage = ref('home')
