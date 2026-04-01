@@ -96,6 +96,7 @@
           </label>
           <div class="tpl-field">
             <input
+              v-model="form.moduleName"
               class="tpl-input"
               :placeholder="currentType === 'dataset' ? '请输入模板名称' : '请输入片段名称'"
             />
@@ -110,11 +111,10 @@
           </label>
           <div class="tpl-field">
             <div class="tpl-select-wrapper">
-              <select class="tpl-select">
-                <option value="" disabled selected>请选择模板标签</option>
-                <option value="metal">金属材料</option>
-                <option value="mechanics">力学性能</option>
-                <option value="chemical">化学性质</option>
+              <select v-model="form.tag" class="tpl-select">
+                <option value="" disabled>请选择模板标签</option>
+                <option value="生物医用材料（科学）">生物医用材料（科学）</option>
+                <option value="生物医用材料（产业）">生物医用材料（产业）</option>
               </select>
               <span class="select-arrow">
                 <svg viewBox="0 0 12 12" width="10" height="10">
@@ -132,6 +132,7 @@
           </label>
           <div class="tpl-field">
             <textarea
+              v-model="form.description"
               class="tpl-textarea"
               :placeholder="currentType === 'dataset' ? '请输入模板说明' : '请输入片段说明'"
             />
@@ -146,10 +147,10 @@
           </label>
           <div class="tpl-field">
             <div class="tpl-select-wrapper">
-              <select class="tpl-select">
-                <option value="" disabled selected>请选择可见范围</option>
-                <option value="private">私有模板</option>
-                <option value="public">公共模板</option>
+              <select v-model="form.visibleArea" class="tpl-select">
+                <option value="" disabled>请选择可见范围</option>
+                <option value="0">私有模板</option>
+                <option value="1">公共模板</option>
               </select>
               <span class="select-arrow">
                 <svg viewBox="0 0 12 12" width="10" height="10">
@@ -171,18 +172,20 @@
           </label>
           <div class="tpl-radio-group">
             <label class="radio-label">
-              <input type="radio" name="public" value="yes" checked />
+              <input v-model="form.agree" type="radio" name="agree" value="1" />
               <span class="radio-text">同意</span>
             </label>
             <label class="radio-label">
-              <input type="radio" name="public" value="no" />
+              <input v-model="form.agree" type="radio" name="agree" value="0" />
               <span class="radio-text">不同意</span>
             </label>
           </div>
         </div>
 
         <footer class="tpl-footer">
-          <button class="tpl-next-btn" @click="nextStep">下一步</button>
+          <button class="tpl-next-btn" :disabled="creating" @click="nextStep">
+            {{ creating ? '提交中…' : '下一步' }}
+          </button>
         </footer>
       </section>
     </div>
@@ -191,15 +194,80 @@
 
 <script setup>
 import { ref } from 'vue'
+import { createModule } from '../api/module.js'
 
 const currentType = ref('dataset')
+const creating = ref(false)
+
+const form = ref({
+  moduleName: '',
+  tag: '生物医用材料（科学）',
+  description: '',
+  visibleArea: '1', // 1: public, 0: private
+  agree: '1', // 1: yes, 0: no
+})
 
 const emit = defineEmits(['next'])
 
-const nextStep = () => {
-  // 这里可以添加验证逻辑
-  // 将模板类型传递给父组件
-  emit('next', currentType.value)
+function base64UrlDecode(input) {
+  const s = String(input || '').replace(/-/g, '+').replace(/_/g, '/')
+  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4))
+  const b64 = s + pad
+  const binary = atob(b64)
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+  return new TextDecoder('utf-8').decode(bytes)
+}
+
+function getCreatorForRequest() {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  if (!token || token.split('.').length !== 3) return '2'
+  try {
+    const payloadText = base64UrlDecode(token.split('.')[1])
+    const payload = JSON.parse(payloadText)
+    const userId = payload?.sub != null ? String(payload.sub).trim() : ''
+    return userId || '2'
+  } catch {
+    return '2'
+  }
+}
+
+const nextStep = async () => {
+  const moduleName = String(form.value.moduleName || '').trim()
+  const tag = String(form.value.tag || '').trim()
+  if (!moduleName) {
+    alert('请输入模板名称')
+    return
+  }
+  if (!tag) {
+    alert('请选择模板标签')
+    return
+  }
+
+  creating.value = true
+  try {
+    const creator = getCreatorForRequest()
+    const resp = await createModule({
+      moduleName,
+      tag,
+      description: String(form.value.description || '').trim(),
+      creator,
+      visibleArea: Number(form.value.visibleArea || 1),
+      agree: currentType.value === 'dataset' ? Number(form.value.agree || 1) : 1,
+    })
+    const moduleId = Number(resp?.data)
+    if (!Number.isFinite(moduleId) || moduleId <= 0) {
+      throw new Error('创建模板成功，但未返回有效 moduleId')
+    }
+
+    emit('next', {
+      templateType: currentType.value,
+      moduleId,
+    })
+  } catch (e) {
+    alert(e?.message || '创建模板失败')
+  } finally {
+    creating.value = false
+  }
 }
 </script>
 

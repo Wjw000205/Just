@@ -1,28 +1,46 @@
 <template>
-  <section class="industry-page">
-    <div class="industry-header">
-      <div class="industry-breadcrumb">
+  <section class="sci-page">
+    <div class="sci-header">
+      <div class="sci-breadcrumb">
         当前位置：<span class="crumb-main" @click="goHome">首页</span> &gt;
         <span class="crumb-parent">系统管理</span> &gt;
         <span class="crumb-now">产业分类管理</span>
       </div>
     </div>
 
-    <section class="industry-main">
-      <h1 class="page-title">产业分类管理</h1>
+    <section class="sci-main">
+      <div class="main-title">产业分类管理</div>
+
+      <div class="toolbar">
+        <button type="button" class="tool-btn primary" @click="onAdd">新增目录</button>
+        <button type="button" class="tool-btn ghost" @click="onRefresh">刷新</button>
+      </div>
 
       <div class="filter-row">
         <div class="filter-item">
-          <label class="filter-label">产业分类</label>
-          <input v-model="searchForm.industryClass" class="filter-input wide" placeholder="请输入产业分类" />
+          <label class="filter-label">目录名称</label>
+          <input v-model="searchForm.name" class="filter-input" placeholder="请输入目录名称" />
         </div>
         <div class="filter-item">
-          <label class="filter-label">行业分类</label>
-          <input v-model="searchForm.sectorClass" class="filter-input wide" placeholder="请输入行业分类" />
+          <label class="filter-label">目录编码</label>
+          <input v-model="searchForm.code" class="filter-input" placeholder="请输入目录编码" />
         </div>
         <div class="filter-item">
-          <label class="filter-label">产品分类</label>
-          <input v-model="searchForm.productClass" class="filter-input wide" placeholder="请输入产品分类" />
+          <label class="filter-label">目录来源</label>
+          <div class="filter-select" @click.stop="sourceOpen = !sourceOpen">
+            <span :class="['filter-select-text', { placeholder: !searchForm.source }]">
+              {{ sourceLabel }}
+            </span>
+            <svg class="filter-select-caret" width="10" height="6" viewBox="0 0 10 6">
+              <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" />
+            </svg>
+            <ul v-if="sourceOpen" class="filter-select-dropdown">
+              <li class="filter-select-item" @click.stop="pickSource('')">全部</li>
+              <li class="filter-select-item" @click.stop="pickSource('系统内置')">系统内置</li>
+              <li class="filter-select-item" @click.stop="pickSource('同步')">同步</li>
+              <li class="filter-select-item" @click.stop="pickSource('自建')">自建</li>
+            </ul>
+          </div>
         </div>
         <div class="filter-actions">
           <button type="button" class="search-btn primary" @click="handleSearch">查询</button>
@@ -30,28 +48,26 @@
         </div>
       </div>
 
-      <div class="toolbar-row">
-        <button type="button" class="tool-btn primary" @click="onFetch">获取</button>
-      </div>
-
       <div class="table-wrap">
-        <table class="data-table">
+        <table class="data-table tree-table">
           <thead>
             <tr>
-              <th class="col-code-tree">产业代码</th>
-              <th class="col-text">产业分类</th>
-              <th class="col-code">行业代码</th>
-              <th class="col-text">行业分类</th>
-              <th class="col-code">产品代码</th>
-              <th class="col-text col-product">产品分类</th>
-              <th class="col-num">数据集数</th>
+              <th class="col-idx">序号</th>
+              <th class="col-name">目录名称</th>
+              <th class="col-lv">目录等级</th>
+              <th class="col-parent">所属目录</th>
+              <th class="col-num">子目录数</th>
+              <th class="col-num">目录数据集数</th>
+              <th class="col-num">目录模板数</th>
+              <th class="col-src">目录来源</th>
               <th class="col-action">操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="row in visibleRows" :key="row.node.id">
-              <td class="col-code-tree cell-tree">
-                <div class="tree-cell" :style="{ paddingLeft: row.depth * 18 + 'px' }">
+              <td class="col-idx">{{ row.displayIndex != null ? row.displayIndex : '' }}</td>
+              <td class="col-name">
+                <div class="tree-name-cell" :style="{ paddingLeft: row.depth * 18 + 'px' }">
                   <button
                     v-if="row.hasChildren"
                     type="button"
@@ -64,60 +80,79 @@
                     </svg>
                   </button>
                   <span v-else class="tree-toggle-ph" />
-                  <span class="mono">{{ row.node.industryCode }}</span>
+                  <span class="tree-name-text">{{ row.node.name }}</span>
                 </div>
               </td>
-              <td class="col-text cell-left">{{ row.node.industryName }}</td>
-              <td class="col-code">{{ row.node.sectorCode || '—' }}</td>
-              <td class="col-text">{{ row.node.sectorName || '—' }}</td>
-              <td class="col-code">{{ row.node.productCode || '—' }}</td>
-              <td class="col-text col-product">
-                <span class="ellipsis" :title="row.node.productName || ''">{{ row.node.productName || '—' }}</span>
-              </td>
+              <td class="col-lv">{{ row.depth + 1 }}</td>
+              <td class="col-parent">{{ row.parentName }}</td>
+              <td class="col-num">{{ row.childCount }}</td>
               <td class="col-num">{{ row.node.datasetCount }}</td>
+              <td class="col-num">{{ row.node.templateCount }}</td>
+              <td class="col-src">{{ row.node.source }}</td>
               <td class="col-action">
                 <div class="action-icons">
                   <button type="button" class="icon-action-btn" title="查看" @click="onView(row.node)">
-                            <svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                              <path
-                                d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
-                                stroke="currentColor"
-                                stroke-width="1.8"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                              />
-                              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8" />
-                            </svg>
+                    <svg class="icon-svg icon-svg--primary" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                      <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8" />
+                    </svg>
                   </button>
-                  <button
-                    type="button"
-                    class="icon-action-btn icon-action-btn--danger"
-                    title="删除"
-                    @click="onDelete(row.node)"
-                  >
-                            <svg class="icon-svg" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                              <path d="M3 6h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                              <path
-                                d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
-                                stroke="currentColor"
-                                stroke-width="1.8"
-                                stroke-linecap="round"
-                              />
-                              <path
-                                d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"
-                                stroke="currentColor"
-                                stroke-width="1.8"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                              />
-                              <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                            </svg>
+                  <button type="button" class="icon-action-btn" title="新增子目录" @click="onAddChild(row.node)">
+                    <svg class="icon-svg icon-svg--primary" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M5 4v12M5 13h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                      <rect x="14" y="9" width="8" height="8" rx="1.2" stroke="currentColor" stroke-width="1.8" />
+                      <path d="M11.5 5.5h3M13 4v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                  </button>
+                  <button type="button" class="icon-action-btn" title="编辑" @click="onEdit(row.node)">
+                    <svg class="icon-svg icon-svg--primary" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                      <path
+                        d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+                  <button type="button" class="icon-action-btn icon-action-btn--danger" title="删除" @click="onDelete(row.node)">
+                    <svg class="icon-svg icon-svg--danger" width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M3 6h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                      <path
+                        d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                      />
+                      <path
+                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                      <path d="M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                    </svg>
                   </button>
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
+
         <div v-if="!visibleRows.length" class="table-empty">暂无数据</div>
       </div>
     </section>
@@ -125,115 +160,145 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 
 const emit = defineEmits(['go-home'])
 
-/**
- * 产业分类树（示例，结构与接口返回类似）
- * industryCode：层级编号；叶子行可填行业/产品字段
- */
+/** 产业分类：嵌套 children 的树形列表（示例数据，后续可对接接口） */
 const INITIAL_TREE = [
   {
-    id: 'i-3',
-    industryCode: '3',
-    industryName: '新材料产业',
-    sectorCode: '',
-    sectorName: '',
-    productCode: '',
-    productName: '',
-    datasetCount: 0,
+    id: 'ind-bio',
+    code: 'IND-BIO',
+    name: '生物医用材料（产业）',
+    sort: 1,
+    datasetCount: 38,
+    templateCount: 7,
+    source: '系统内置',
     children: [
       {
-        id: 'i-3-1',
-        industryCode: '3.1',
-        industryName: '先进钢铁材料',
-        sectorCode: '',
-        sectorName: '',
-        productCode: '',
-        productName: '',
-        datasetCount: 0,
+        id: 'ind-bio-1',
+        code: 'IND-BIO-COMMON',
+        name: '通用',
+        sort: 10,
+        datasetCount: 11,
+        templateCount: 3,
+        source: '系统内置',
+        children: [],
+      },
+      {
+        id: 'ind-bio-2',
+        code: 'IND-BIO-CHAIN',
+        name: '产业链环节',
+        sort: 20,
+        datasetCount: 16,
+        templateCount: 3,
+        source: '同步',
         children: [
           {
-            id: 'i-3-1-1',
-            industryCode: '3.1.1',
-            industryName: '先进制造基础零部件用钢制造',
-            sectorCode: '',
-            sectorName: '',
-            productCode: '',
-            productName: '',
-            datasetCount: 0,
-            children: [
-              {
-                id: 'i-3-1-1-1',
-                industryCode: '3.1.1.1',
-                industryName: '高品质特种钢材',
-                sectorCode: '3130*',
-                sectorName: '钢压延加工',
-                productCode: '3130003',
-                productName:
-                  '用于高端装备制造的合金结构钢、轴承钢、弹簧钢等高品质特种钢材材…（示例长文案省略号展示用）',
-                datasetCount: 7,
-                children: [],
-              },
-              {
-                id: 'i-3-1-1-2',
-                industryCode: '3.1.1.2',
-                industryName: '特种薄板带钢',
-                sectorCode: '3130*',
-                sectorName: '钢压延加工',
-                productCode: '3130004',
-                productName: '汽车用超高强度冷轧钢板',
-                datasetCount: 0,
-                children: [],
-              },
-            ],
+            id: 'ind-bio-2-1',
+            code: 'IND-BIO-UP',
+            name: '上游原料与装备',
+            sort: 21,
+            datasetCount: 6,
+            templateCount: 1,
+            source: '同步',
+            children: [],
+          },
+          {
+            id: 'ind-bio-2-2',
+            code: 'IND-BIO-MID',
+            name: '中游制造',
+            sort: 22,
+            datasetCount: 5,
+            templateCount: 1,
+            source: '自建',
+            children: [],
           },
         ],
+      },
+      {
+        id: 'ind-bio-3',
+        code: 'IND-BIO-SVC',
+        name: '应用与服务',
+        sort: 40,
+        datasetCount: 4,
+        templateCount: 1,
+        source: '自建',
+        children: [],
+      },
+    ],
+  },
+  {
+    id: 'ind-it',
+    code: 'IND-IT',
+    name: '新一代信息技术产业',
+    sort: 2,
+    datasetCount: 22,
+    templateCount: 4,
+    source: '系统内置',
+    children: [
+      {
+        id: 'ind-it-1',
+        code: 'IND-IT-SW',
+        name: '软件与信息服务',
+        sort: 5,
+        datasetCount: 10,
+        templateCount: 2,
+        source: '同步',
+        children: [],
+      },
+      {
+        id: 'ind-it-2',
+        code: 'IND-IT-HW',
+        name: '电子核心产业',
+        sort: 6,
+        datasetCount: 8,
+        templateCount: 1,
+        source: '自建',
+        children: [],
       },
     ],
   },
 ]
 
-function deepTree(t) {
-  return JSON.parse(JSON.stringify(t))
+function deepTree(src) {
+  return JSON.parse(JSON.stringify(src))
 }
 
 function branchExpandedDefaults(nodes, acc = {}) {
   for (const n of nodes) {
-    if (n.children?.length) {
+    const kids = n.children
+    if (Array.isArray(kids) && kids.length) {
       acc[n.id] = true
-      branchExpandedDefaults(n.children, acc)
+      branchExpandedDefaults(kids, acc)
     }
   }
   return acc
 }
 
-const treeData = ref(deepTree(INITIAL_TREE))
+const categoryTree = ref(deepTree(INITIAL_TREE))
 const tableExpanded = ref(branchExpandedDefaults(INITIAL_TREE))
+const searchForm = ref({ name: '', code: '', source: '' })
+const sourceOpen = ref(false)
 
-const searchForm = ref({
-  industryClass: '',
-  sectorClass: '',
-  productClass: '',
-})
-
-function nodeMatchesSearch(n) {
-  const ic = searchForm.value.industryClass.trim().toLowerCase()
-  const sc = searchForm.value.sectorClass.trim().toLowerCase()
-  const pc = searchForm.value.productClass.trim().toLowerCase()
-  if (ic && !String(n.industryName).toLowerCase().includes(ic)) return false
-  if (sc && !String(n.sectorName || '').toLowerCase().includes(sc)) return false
-  if (pc && !String(n.productName || '').toLowerCase().includes(pc)) return false
+function nodeMatchesFilter(n) {
+  const { name, code, source } = searchForm.value
+  const nameKw = name.trim().toLowerCase()
+  const codeKw = code.trim().toLowerCase()
+  if (nameKw && !String(n.name).toLowerCase().includes(nameKw)) return false
+  if (codeKw && !String(n.code).toLowerCase().includes(codeKw)) return false
+  if (source && String(n.source) !== source) return false
   return true
 }
 
-function branchMatches(n) {
-  if (nodeMatchesSearch(n)) return true
-  return (n.children || []).some(branchMatches)
+function branchVisibleInFilter(n) {
+  if (nodeMatchesFilter(n)) return true
+  const kids = n.children
+  if (!Array.isArray(kids) || !kids.length) return false
+  return kids.some(branchVisibleInFilter)
 }
 
-function isExpanded(id) {
+function isRowExpanded(id) {
   return tableExpanded.value[id] !== false
 }
 
@@ -244,72 +309,121 @@ function toggleExpand(id) {
   }
 }
 
+function sortNodes(list) {
+  return list.slice().sort((a, b) => a.sort - b.sort)
+}
+
 const visibleRows = computed(() => {
   const rows = []
+  let rootOrdinal = 0
 
-  function walk(list, depth) {
-    for (const n of list) {
-      if (!branchMatches(n)) continue
-      const kids = n.children || []
+  function walk(list, depth, parentName) {
+    for (const n of sortNodes(list)) {
+      if (!branchVisibleInFilter(n)) continue
+
+      const kids = Array.isArray(n.children) ? n.children : []
       const hasChildren = kids.length > 0
-      const expanded = !hasChildren || isExpanded(n.id)
+      const expanded = !hasChildren || isRowExpanded(n.id)
+
       rows.push({
         node: n,
         depth,
+        parentName: parentName || '—',
         hasChildren,
         expanded,
+        childCount: kids.length,
+        /** 仅一级目录显示序号（1、2、3…），子级为空 */
+        displayIndex: depth === 0 ? ++rootOrdinal : null,
       })
-      if (hasChildren && expanded) walk(kids, depth + 1)
+
+      if (hasChildren && expanded) walk(kids, depth + 1, n.name)
     }
   }
 
-  walk(treeData.value, 0)
+  walk(categoryTree.value, 0, '')
   return rows
 })
+
+const sourceLabel = computed(() => {
+  if (!searchForm.value.source) return '全部'
+  return searchForm.value.source
+})
+
+function pickSource(v) {
+  searchForm.value.source = v
+  sourceOpen.value = false
+}
 
 function handleSearch() {}
 
 function handleReset() {
-  searchForm.value = { industryClass: '', sectorClass: '', productClass: '' }
+  searchForm.value = { name: '', code: '', source: '' }
 }
 
 function goHome() {
   emit('go-home')
 }
 
-function onFetch() {
-  treeData.value = deepTree(INITIAL_TREE)
-  tableExpanded.value = branchExpandedDefaults(INITIAL_TREE)
-  alert('已重新获取产业分类数据（示例）')
-}
-
-function onView(node) {
-  alert(`查看：${node.industryCode} ${node.industryName}`)
-}
-
-function removeById(list, id) {
-  const i = list.findIndex((n) => n.id === id)
-  if (i !== -1) {
-    list.splice(i, 1)
+function removeNodeById(list, id) {
+  const idx = list.findIndex((n) => n.id === id)
+  if (idx !== -1) {
+    list.splice(idx, 1)
     return true
   }
   for (const n of list) {
-    if (n.children?.length && removeById(n.children, id)) {
-      if (!n.children.length) n.children = []
+    const kids = n.children
+    if (Array.isArray(kids) && kids.length && removeNodeById(kids, id)) {
+      if (kids.length === 0) n.children = []
       return true
     }
   }
   return false
 }
 
-function onDelete(node) {
-  if (!confirm(`确定删除「${node.industryCode} ${node.industryName}」及其子节点？`)) return
-  removeById(treeData.value, node.id)
+function onAdd() {
+  alert('新增目录：可对接表单或弹窗')
 }
+
+function onView(node) {
+  alert(`查看目录：${node.name}（${node.code}）`)
+}
+
+function onAddChild(node) {
+  alert(`在「${node.name}」下新增子目录：可对接表单`)
+}
+
+function onEdit(node) {
+  alert(`编辑：${node.name}（${node.code}）`)
+}
+
+function onDelete(node) {
+  if (!confirm(`确定删除「${node.name}」？`)) return
+  removeNodeById(categoryTree.value, node.id)
+}
+
+function onRefresh() {
+  categoryTree.value = deepTree(INITIAL_TREE)
+  tableExpanded.value = branchExpandedDefaults(INITIAL_TREE)
+  searchForm.value = { name: '', code: '', source: '' }
+}
+
+function onDocClick(e) {
+  if (!e.target.closest?.('.filter-select')) {
+    sourceOpen.value = false
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocClick)
+})
 </script>
 
 <style scoped>
-.industry-page {
+.sci-page {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -318,7 +432,7 @@ function onDelete(node) {
   min-height: calc(100vh - 110px);
 }
 
-.industry-breadcrumb {
+.sci-header {
   font-size: 13px;
   color: #666;
 }
@@ -341,18 +455,50 @@ function onDelete(node) {
   font-weight: 500;
 }
 
-.industry-main {
+.sci-main {
   background: #fff;
   border-radius: 4px;
   padding: 20px 24px 24px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-.page-title {
-  margin: 0 0 18px;
-  font-size: 18px;
+.main-title {
+  font-size: 16px;
   font-weight: 600;
   color: #333;
+  margin-bottom: 16px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.tool-btn {
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid #d4dae6;
+  background: #fff;
+  color: #333;
+}
+
+.tool-btn.primary {
+  background: #1a5ce6;
+  border-color: #1a5ce6;
+  color: #fff;
+}
+
+.tool-btn.primary:hover {
+  background: #1246bb;
+}
+
+.tool-btn.ghost:hover {
+  border-color: #1a5ce6;
+  color: #1a5ce6;
 }
 
 .filter-row {
@@ -377,14 +523,59 @@ function onDelete(node) {
 
 .filter-input {
   width: 160px;
-  border: 1px solid #d4dae6;
   border-radius: 4px;
+  border: 1px solid #d4dae6;
   padding: 6px 10px;
   font-size: 13px;
 }
 
-.filter-input.wide {
-  width: 180px;
+.filter-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 120px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid #d4dae6;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.filter-select-text.placeholder {
+  color: #999;
+}
+
+.filter-select-caret {
+  margin-left: 6px;
+  color: #999;
+}
+
+.filter-select-dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 100%;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e0e4f0;
+  z-index: 20;
+}
+
+.filter-select-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+}
+
+.filter-select-item:hover {
+  background: #f0f5ff;
+  color: #1a5ce6;
 }
 
 .filter-actions {
@@ -416,25 +607,8 @@ function onDelete(node) {
   color: #666;
 }
 
-.toolbar-row {
-  margin-bottom: 12px;
-}
-
-.tool-btn {
-  padding: 6px 18px;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-  border: 1px solid #1a5ce6;
-  background: #1a5ce6;
-  color: #fff;
-}
-
-.tool-btn:hover {
-  background: #1246bb;
-}
-
 .table-wrap {
+  position: relative;
   overflow-x: auto;
 }
 
@@ -442,7 +616,7 @@ function onDelete(node) {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  min-width: 1100px;
+  min-width: 1020px;
 }
 
 .data-table thead th {
@@ -450,49 +624,83 @@ function onDelete(node) {
   text-align: center;
   font-weight: 500;
   color: #333;
-  background: #f5f7fa;
-  border: 1px solid #e8e8e8;
+  background: #fafafa;
+  border-bottom: 1px solid #e8e8e8;
   white-space: nowrap;
 }
 
 .data-table tbody td {
   padding: 8px;
-  border: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f0f0f0;
   color: #333;
   vertical-align: middle;
   text-align: center;
 }
 
-.cell-tree,
-.cell-left {
+.data-table tbody td.col-name {
   text-align: left;
 }
 
-.col-code-tree {
-  min-width: 120px;
+.col-idx {
+  width: 56px;
 }
 
-.col-text {
-  max-width: 200px;
-}
-
-.col-product {
-  max-width: 280px;
-}
-
-.col-code {
-  min-width: 88px;
+.col-lv {
+  width: 72px;
 }
 
 .col-num {
+  width: 96px;
+}
+
+.col-src {
   width: 88px;
 }
 
 .col-action {
-  width: 100px;
+  width: 140px;
 }
 
-.tree-cell {
+.action-icons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.icon-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  color: #1a5ce6;
+}
+
+.icon-action-btn:hover {
+  background: #f0f5ff;
+}
+
+.icon-action-btn--danger {
+  color: #cf1322;
+}
+
+.icon-action-btn--danger:hover {
+  background: #fff2f0;
+}
+
+.icon-svg--primary {
+  color: #1a5ce6;
+}
+
+.icon-svg--danger {
+  color: #cf1322;
+}
+
+.tree-name-cell {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -527,52 +735,14 @@ function onDelete(node) {
   flex-shrink: 0;
 }
 
-.mono {
-  font-variant-numeric: tabular-nums;
-}
-
-.ellipsis {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-align: left;
+.tree-name-text {
   line-height: 1.4;
-}
-
-.action-icons {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.icon-action-btn {
-  display: inline-flex;
-  padding: 4px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  border-radius: 4px;
-  color: #1a5ce6;
-}
-
-.icon-action-btn:hover {
-  background: #f0f5ff;
-}
-
-.icon-action-btn--danger {
-  color: #cf1322;
-}
-
-.icon-action-btn--danger:hover {
-  background: #fff2f0;
 }
 
 .table-empty {
   padding: 40px;
   text-align: center;
-  color: #999;
   font-size: 13px;
+  color: #999;
 }
 </style>
