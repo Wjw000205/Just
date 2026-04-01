@@ -470,6 +470,12 @@
       <!-- 用户管理 -->
       <UserManagementPage v-else-if="currentPage === 'sys-users'" @go-home="goPage('home')" />
 
+      <!-- 产业分类管理 -->
+      <IndustryClassificationPage v-else-if="currentPage === 'sys-industry-class'" @go-home="goPage('home')" />
+
+      <!-- 部门管理 -->
+      <DepartmentManagementPage v-else-if="currentPage === 'sys-depts'" @go-home="goPage('home')" />
+
       <!-- 系统管理：其余子模块占位 -->
       <section v-else-if="isSystemMgmtPage" class="sys-mgmt-placeholder">
         <h1 class="sys-mgmt-placeholder-title">{{ systemMgmtPageTitle }}</h1>
@@ -507,6 +513,8 @@ import DatabasePage from './components/DatabasePage.vue'
 import DatabaseDetailPage from './components/DatabaseDetailPage.vue'
 import SciClassificationPage from './components/SciClassificationPage.vue'
 import UserManagementPage from './components/UserManagementPage.vue'
+import IndustryClassificationPage from './components/IndustryClassificationPage.vue'
+import DepartmentManagementPage from './components/DepartmentManagementPage.vue'
 
 const currentPage = ref('home')
 const templateType = ref('dataset') // 'dataset' 或 'fragment'
