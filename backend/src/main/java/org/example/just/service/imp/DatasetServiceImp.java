@@ -40,16 +40,18 @@ public class DatasetServiceImp implements DatasetService {
     private final DatasetDataDao DatasetDataDao;
     private final ModuleDao moduleDao;
     private final ObjectMapper objectMapper;
+    private final ManuDatasetDao manuDatasetDao;
 
     public DatasetServiceImp(ManuDatasetDao DatasetDao,
-                            DatasetColumnDao DatasetColumnDao,
-                            DatasetDataDao DatasetDataDao,
-                             ModuleDao moduleDao) {
+                             DatasetColumnDao DatasetColumnDao,
+                             DatasetDataDao DatasetDataDao,
+                             ModuleDao moduleDao, ManuDatasetDao manuDatasetDao) {
         this.DatasetDao = DatasetDao;
         this.DatasetColumnDao = DatasetColumnDao;
         this.DatasetDataDao = DatasetDataDao;
         this.moduleDao = moduleDao;
         this.objectMapper = new ObjectMapper();
+        this.manuDatasetDao = manuDatasetDao;
     }
 
     @Transactional
@@ -830,6 +832,11 @@ public class DatasetServiceImp implements DatasetService {
 
         long count = countDatasetRecursively(menuId, parentChildrenMap);
         return Result.success(count);
+    }
+
+    @Override
+    public Long getTotal() {
+        return manuDatasetDao.selectCount(null);
     }
 
     private long countDatasetRecursively(Integer parentId, Map<Integer, List<ManuDatasetEntity>> parentChildrenMap) {

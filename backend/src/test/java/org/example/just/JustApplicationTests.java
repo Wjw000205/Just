@@ -1,7 +1,10 @@
 package org.example.just;
 
 import org.example.just.dto.databaseDto.DataBasePageInitInfoVO;
+import org.example.just.dto.moduleDto.ModuleBaseInfoVO;
 import org.example.just.service.DataBaseService;
+import org.example.just.service.DatasetService;
+import org.example.just.service.ModuleService;
 import org.example.just.service.imp.DataBaseServiceImpl;
 import org.example.just.utils.JwtUtil;
 import org.example.just.utils.Result;
@@ -45,22 +48,14 @@ class JustApplicationTests {
     @Autowired
     private DataBaseService dataBaseService;
 
+    @Autowired
+//    private DataBaseServiceImpl dataBaseServiceImpl;
+    private ModuleService moduleService;
+
     @Test
     void test2(){
-        Result<DataBasePageInitInfoVO> re = dataBaseService.getPageInitInfo();
-        List<DataBaseServiceImpl.ClassificationTreeNode> tree = re.getData().getTree();
-        for (DataBaseServiceImpl.ClassificationTreeNode classificationTreeNode : tree){
-            System.out.println(classificationTreeNode.getId());
-            System.out.println(classificationTreeNode.getLabel());
-            for (DataBaseServiceImpl.ClassificationTreeNode child : classificationTreeNode.getChildren()){
-                System.out.println(child.getId());
-                System.out.println(child.getLabel());
-                for (DataBaseServiceImpl.ClassificationTreeNode child1 : child.getChildren()){
-                    System.out.println(child1.getId());
-                    System.out.println(child1.getLabel());
-                }
-            }
-        }
+        Result<ModuleBaseInfoVO> moduleBaseInfo = moduleService.getModuleBaseInfo(1);
+        System.out.println(moduleBaseInfo.getData().getModuleName());
     }
 
 }

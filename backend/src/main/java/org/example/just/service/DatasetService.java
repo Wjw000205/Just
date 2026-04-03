@@ -31,4 +31,6 @@ public interface DatasetService {
     Result<AuditDatasetResultVO> auditDataset(AuditDatasetDTO dto);
 
     Result<Long> countDatasetsUnderMenu(Integer menuId);
+
+    Long getTotal();
 }
