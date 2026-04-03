@@ -4,14 +4,13 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="06173a3e-318f-4283-a1da-75a549cb56ce" name="更改" comment="上传数据库文件">
+    <list default="true" id="06173a3e-318f-4283-a1da-75a549cb56ce" name="更改" comment="实现 获取分类树 和 获取当前登录用户信息">
+      <change afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/controller/DataBaseController.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/dto/databaseDto/DataBasePageInitInfoVO.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/DataBaseService.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/imp/DataBaseServiceImpl.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/ReadMe.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/controller/UserController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/controller/UserController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/UserService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/UserService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/imp/UserServiceImp.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/imp/UserServiceImp.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/utils/Result.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/utils/Result.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/test/java/org/example/just/JustApplicationTests.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/test/java/org/example/just/JustApplicationTests.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/imp/DatasetServiceImp.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/org/example/just/service/imp/DatasetServiceImp.java" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -21,6 +20,7 @@
   <component name="FileTemplateManagerImpl">
     <option name="RECENT_TEMPLATES">
       <list>
+        <option value="Interface" />
         <option value="Class" />
       </list>
     </option>
@@ -89,7 +89,7 @@
     &quot;应用程序.JustApplication.executor&quot;: &quot;Run&quot;
   }
 }</component>
-  <component name="RunManager" selected="Spring Boot.JustApplication">
+  <component name="RunManager" selected="JUnit.JustApplicationTests.test2">
     <configuration name="JustApplication" type="Application" factoryName="Application" temporary="true" nameIsGenerated="true">
       <option name="MAIN_CLASS_NAME" value="org.example.just.JustApplication" />
       <module name="Just" />
@@ -99,6 +99,22 @@
           <option name="ENABLED" value="true" />
         </pattern>
       </extension>
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="JustApplicationTests.test2" type="JUnit" factoryName="JUnit" temporary="true" nameIsGenerated="true">
+      <module name="Just" />
+      <extension name="coverage">
+        <pattern>
+          <option name="PATTERN" value="org.example.just.*" />
+          <option name="ENABLED" value="true" />
+        </pattern>
+      </extension>
+      <option name="PACKAGE_NAME" value="org.example.just" />
+      <option name="MAIN_CLASS_NAME" value="org.example.just.JustApplicationTests" />
+      <option name="METHOD_NAME" value="test2" />
+      <option name="TEST_OBJECT" value="method" />
       <method v="2">
         <option name="Make" enabled="true" />
       </method>
@@ -128,6 +144,7 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="JUnit.JustApplicationTests.test2" />
         <item itemvalue="应用程序.JustApplication" />
         <item itemvalue="JUnit.JustApplicationTests.testJwt" />
       </list>
@@ -160,7 +177,9 @@
       <workItem from="1774671507293" duration="1749000" />
       <workItem from="1774836171789" duration="2302000" />
       <workItem from="1775032134896" duration="9000" />
-      <workItem from="1775056146160" duration="3280000" />
+      <workItem from="1775056146160" duration="3704000" />
+      <workItem from="1775130109404" duration="15000" />
+      <workItem from="1775202176641" duration="4194000" />
     </task>
     <task id="LOCAL-00001" summary="实现jwt功能">
       <option name="closed" value="true" />
@@ -210,7 +229,15 @@
       <option name="project" value="LOCAL" />
       <updated>1774671917237</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="实现 获取分类树 和 获取当前登录用户信息">
+      <option name="closed" value="true" />
+      <created>1775062926024</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1775062926024</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -243,6 +270,7 @@
     <MESSAGE value="实现jwt功能" />
     <MESSAGE value="实现模板审核功能" />
     <MESSAGE value="上传数据库文件" />
-    <option name="LAST_COMMIT_MESSAGE" value="上传数据库文件" />
+    <MESSAGE value="实现 获取分类树 和 获取当前登录用户信息" />
+    <option name="LAST_COMMIT_MESSAGE" value="实现 获取分类树 和 获取当前登录用户信息" />
   </component>
 </project>

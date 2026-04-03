@@ -2,6 +2,7 @@ package org.example.just.service.imp;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -38,6 +39,7 @@ public class DatasetServiceImp implements DatasetService {
     private final DatasetColumnDao DatasetColumnDao;
     private final DatasetDataDao DatasetDataDao;
     private final ModuleDao moduleDao;
+    private final ObjectMapper objectMapper;
 
     public DatasetServiceImp(ManuDatasetDao DatasetDao,
                             DatasetColumnDao DatasetColumnDao,
@@ -47,6 +49,7 @@ public class DatasetServiceImp implements DatasetService {
         this.DatasetColumnDao = DatasetColumnDao;
         this.DatasetDataDao = DatasetDataDao;
         this.moduleDao = moduleDao;
+        this.objectMapper = new ObjectMapper();
     }
 
     @Transactional
@@ -845,5 +848,4 @@ public class DatasetServiceImp implements DatasetService {
         }
         return count;
     }
-
 }
