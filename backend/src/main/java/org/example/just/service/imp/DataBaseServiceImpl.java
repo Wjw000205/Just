@@ -1,5 +1,6 @@
 package org.example.just.service.imp;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Resource;
 import org.example.just.dao.IndustryClassificationDao;
 import org.example.just.dto.databaseDto.DataBasePageInitInfoVO;
