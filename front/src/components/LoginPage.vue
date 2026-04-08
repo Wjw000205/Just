@@ -128,7 +128,7 @@ async function handleLogin() {
   if (submitting.value) return
   submitting.value = true
   try {
-    const res = await fetch('http://localhost:8083/user/login', {
+    const res = await fetch('/user/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -163,8 +163,12 @@ async function handleLogin() {
         localStorage.setItem('token', token)
         sessionStorage.removeItem('token')
       }
-      // 先通知父组件跳转，再提示（alert 会阻塞）
-      emit('login-success', { token, raw: json })
+      // 先通知父组件刷新右上角用户信息（含用户名），再提示（alert 会阻塞）
+      emit('login-success', {
+        token,
+        username: username.value.trim(),
+        raw: json,
+      })
       alert('登录成功')
     } else {
       alert((json && json.message) || '登录失败')

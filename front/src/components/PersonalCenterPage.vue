@@ -887,6 +887,7 @@
 <script setup>
 import { onMounted, ref, computed } from 'vue'
 import { getMyModules } from '../api/module.js'
+import { fetchMyProfile, updateMyProfile, updatePassword, updateSecondPassword } from '../api/user.js'
 
 const emit = defineEmits(['go-home'])
 
@@ -907,25 +908,25 @@ const menuList = [
 const currentUserName = ref('')
 const currentUserId = ref(null)
 
-// 用户资料
+// 用户资料（由 GET /user/profile 填充）
 const userProfile = ref({
-  username: 'zhuxiangdong',
-  realName: '朱向东',
-  email: 'ry@163.com',
-  phone: '15888888888',
-  role: '超级管理员',
-  department: '节点管理部',
-  applyDept: '社会大众',
-  applyStatus: '待审核',
-  avatar: ''
+  username: '',
+  realName: '',
+  email: '',
+  phone: '',
+  role: '',
+  department: '',
+  applyDept: '',
+  applyStatus: '',
+  avatar: '',
 })
 
 // 编辑资料表单
 const editProfileForm = ref({
-  username: 'zhuxiangdong',
-  realName: '朱向东',
-  email: 'ry@163.com',
-  phone: '15888888888'
+  username: '',
+  realName: '',
+  email: '',
+  phone: '',
 })
 
 // 密码表单
@@ -1056,21 +1057,39 @@ const handleDeleteRecord = (item) => { if (confirm(`删除记录 ${item.name}?`)
 const handleDownloadRecord = (item) => alert(`下载: ${item.name}`)
 
 // 编辑资料
-const handleSaveProfile = () => {
-  if (!editProfileForm.value.realName) {
+const handleSaveProfile = async () => {
+  if (!editProfileForm.value.realName?.trim()) {
     alert('请输入真实姓名')
     return
   }
-  // 更新用户资料
-  userProfile.value.realName = editProfileForm.value.realName
-  userProfile.value.email = editProfileForm.value.email
-  userProfile.value.phone = editProfileForm.value.phone
-  alert('资料保存成功')
-  currentMenu.value = 'profile'
+  if (!editProfileForm.value.email?.trim()) {
+    alert('请输入电子邮箱')
+    return
+  }
+  if (!editProfileForm.value.phone?.trim()) {
+    alert('请输入手机号码')
+    return
+  }
+  try {
+    await updateMyProfile({
+      realName: editProfileForm.value.realName.trim(),
+      email: editProfileForm.value.email.trim(),
+      telephone: editProfileForm.value.phone.trim(),
+    })
+    userProfile.value.realName = editProfileForm.value.realName.trim()
+    userProfile.value.email = editProfileForm.value.email.trim()
+    userProfile.value.phone = editProfileForm.value.phone.trim()
+    alert('资料保存成功')
+    currentMenu.value = 'profile'
+  } catch (e) {
+    console.error('handleSaveProfile', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    alert(msg || '保存失败')
+  }
 }
 
 // 修改密码
-const handleSavePassword = () => {
+const handleSavePassword = async () => {
   if (!passwordForm.value.oldPassword) {
     alert('请输入当前密码')
     return
@@ -1083,13 +1102,24 @@ const handleSavePassword = () => {
     alert('两次输入的密码不一致')
     return
   }
-  alert('密码修改成功')
-  passwordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
-  currentMenu.value = 'profile'
+  try {
+    await updatePassword({
+      currentPassword: passwordForm.value.oldPassword,
+      newPassword: passwordForm.value.newPassword,
+      confirmPassword: passwordForm.value.confirmPassword,
+    })
+    alert('密码修改成功')
+    passwordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
+    currentMenu.value = 'profile'
+  } catch (e) {
+    console.error('handleSavePassword', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    alert(msg || '修改失败')
+  }
 }
 
 // 修改二级密码
-const handleSaveSecondaryPassword = () => {
+const handleSaveSecondaryPassword = async () => {
   if (!secondaryPasswordForm.value.oldPassword) {
     alert('请输入当前二级密码')
     return
@@ -1102,9 +1132,20 @@ const handleSaveSecondaryPassword = () => {
     alert('两次输入的二级密码不一致')
     return
   }
-  alert('二级密码修改成功')
-  secondaryPasswordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
-  currentMenu.value = 'profile'
+  try {
+    await updateSecondPassword({
+      currentSecondPassword: secondaryPasswordForm.value.oldPassword,
+      newSecondPassword: secondaryPasswordForm.value.newPassword,
+      confirmSecondPassword: secondaryPasswordForm.value.confirmPassword,
+    })
+    alert('二级密码修改成功')
+    secondaryPasswordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' }
+    currentMenu.value = 'profile'
+  } catch (e) {
+    console.error('handleSaveSecondaryPassword', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    alert(msg || '修改失败')
+  }
 }
 
 // 导航
@@ -1155,9 +1196,41 @@ const handleClickOutside = (e) => {
   }
 }
 
+async function loadMyProfileFromServer() {
+  try {
+    const p = await fetchMyProfile()
+    userProfile.value = {
+      ...userProfile.value,
+      username: p.username,
+      realName: p.realName,
+      email: p.email,
+      phone: p.phone,
+      role: p.roleLabel,
+      department: p.department,
+      applyDept: p.applyDept,
+      applyStatus: p.applyStatus,
+    }
+    editProfileForm.value = {
+      username: p.username,
+      realName: p.realName,
+      email: p.email,
+      phone: p.phone,
+    }
+    if (p.username) currentUserName.value = p.username
+    if (p.realName) currentUserName.value = p.realName
+  } catch (e) {
+    console.error('loadMyProfileFromServer', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes('未登录') || msg.includes('无权限')) {
+      alert(msg)
+    }
+  }
+}
+
 onMounted(async () => {
   syncUserFromToken()
   checkSessionMenu()
+  await loadMyProfileFromServer()
   document.addEventListener('click', handleClickOutside)
 })
 </script>

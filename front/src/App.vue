@@ -455,7 +455,7 @@
       <DataRuleConfigPage v-else-if="currentPage === 'data-rule'" @back="goPage('template-design')" @create="handleCreate" />
 
       <!-- 注册页面 -->
-      <RegisterPage v-else-if="currentPage === 'register'" />
+      <RegisterPage v-else-if="currentPage === 'register'" @register-success="onRegisterSuccess" />
       <!-- 创建数据集页面 -->
       <CreateDataset v-else-if="currentPage === 'create-dataset'" />
       <!-- 上传数据页面 -->
@@ -602,7 +602,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import SearchPage from './components/SearchPage.vue'
 import TemplateCreatePage from './components/TemplateCreatePage.vue'
 import TemplateDesignPage from './components/TemplateDesignPage.vue'
@@ -628,6 +628,7 @@ import DataTagManagePage from './components/DataTagManagePage.vue'
 import InterfaceManagePage from './components/InterfaceManagePage.vue'
 import MenuManagePage from './components/MenuManagePage.vue'
 import PersonalCenterPage from './components/PersonalCenterPage.vue'
+import { fetchAuthProfile } from './api/user.js'
 import PermissionManagementPage from './components/PermissionManagementPage.vue'
 import DataAuditPage from './components/DataAuditPage.vue'
 import DataDisablePage from './components/DataDisablePage.vue'
@@ -697,10 +698,22 @@ function openDatabaseDetail(row) {
   goPage('database-detail')
 }
 
-function onLoginSuccess(_payload) {
-  // 以收到事件为准：登录组件已做成功判定与 token 写入
-  syncUserFromToken()
+async function onLoginSuccess(payload) {
+  // 登录表单里的用户名先贴上，避免 JWT 解析/auth 接口稍慢时右上角仍显示「已登录」
+  const loginName = payload?.username != null ? String(payload.username).trim() : ''
+  if (loginName) {
+    currentUserName.value = loginName
+  }
+  await refreshAuthUser()
+  if (!currentUserName.value?.trim() && loginName) {
+    currentUserName.value = loginName
+  }
+  await nextTick()
   goPage('home')
+}
+
+function onRegisterSuccess() {
+  goPage('login')
 }
 
 function base64UrlDecode(input) {
@@ -722,9 +735,32 @@ function syncUserFromToken() {
   try {
     const payloadText = base64UrlDecode(token.split('.')[1])
     const payload = JSON.parse(payloadText)
-    currentUserName.value = payload?.userName ? String(payload.userName) : ''
+    let name = payload?.userName != null ? String(payload.userName) : ''
+    if (name) {
+      try {
+        name = decodeURIComponent(name)
+      } catch (_) {
+        /* 保持原样 */
+      }
+    }
+    currentUserName.value = name
   } catch (_) {
     currentUserName.value = ''
+  }
+}
+
+async function refreshAuthUser() {
+  syncUserFromToken()
+  const token =
+    localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  if (!token) return
+  try {
+    const profile = await fetchAuthProfile()
+    if (profile?.name) {
+      currentUserName.value = profile.name
+    }
+  } catch (_) {
+    /* 保留 JWT 解析出的展示名 */
   }
 }
 
@@ -733,7 +769,7 @@ function handleLogout() {
   const token =
     localStorage.getItem('token') || sessionStorage.getItem('token') || ''
   if (token) {
-    fetch('http://localhost:8083/user/logout', {
+    fetch('/user/logout', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     }).catch(() => {})
@@ -842,7 +878,7 @@ function onDocClick(e) {
 
 onMounted(() => {
   document.addEventListener('click', onDocClick)
-  syncUserFromToken()
+  refreshAuthUser()
 })
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClick)
