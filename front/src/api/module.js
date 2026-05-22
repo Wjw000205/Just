@@ -56,6 +56,153 @@ export async function createModule(payload) {
   return json
 }
 
+export async function getPendingAuditModules() {
+  const resp = await fetch(`${API_BASE_URL}/module/pending-audit-list`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+  })
+
+  const json = await resp.json().catch(() => null)
+
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!resp.ok) {
+    throw new Error(json?.message || '获取待审核模板列表失败')
+  }
+  if (!json || (json.code !== 200 && json.code !== 0)) {
+    throw new Error(json?.message || '获取待审核模板列表失败')
+  }
+  return Array.isArray(json.data) ? json.data : []
+}
+
+export async function getModuleListByTag(tag) {
+  const value = String(tag ?? '').trim()
+  if (!value) {
+    throw new Error('请选择模板标签')
+  }
+
+  const resp = await fetch(
+    `${API_BASE_URL}/module/list-by-tag?tag=${encodeURIComponent(value)}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+    },
+  )
+
+  const json = await resp.json().catch(() => null)
+
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!resp.ok) {
+    throw new Error(json?.message || '获取模板列表失败')
+  }
+  if (!json || (json.code !== 200 && json.code !== 0)) {
+    throw new Error(json?.message || '获取模板列表失败')
+  }
+  return Array.isArray(json.data) ? json.data : []
+}
+
+export async function getModuleBaseInfo(id) {
+  const moduleId = toInt(id)
+  if (!moduleId) {
+    throw new Error('模板ID无效')
+  }
+
+  const resp = await fetch(`${API_BASE_URL}/module/base-info?id=${encodeURIComponent(String(moduleId))}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+  })
+
+  const json = await resp.json().catch(() => null)
+
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!resp.ok) {
+    throw new Error(json?.message || '获取模板基本信息失败')
+  }
+  if (!json || (json.code !== 200 && json.code !== 0)) {
+    throw new Error(json?.message || '获取模板基本信息失败')
+  }
+  return json.data || null
+}
+
+export async function getModuleDetailInfo(id) {
+  const moduleId = toInt(id)
+  if (!moduleId) {
+    throw new Error('模板ID无效')
+  }
+
+  const resp = await fetch(`${API_BASE_URL}/module/detail-info?id=${encodeURIComponent(String(moduleId))}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+  })
+
+  const json = await resp.json().catch(() => null)
+
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!resp.ok) {
+    throw new Error(json?.message || '获取模板字段信息失败')
+  }
+  if (!json || (json.code !== 200 && json.code !== 0)) {
+    throw new Error(json?.message || '获取模板字段信息失败')
+  }
+  return json.data || null
+}
+
+export async function auditModule(id, auditState) {
+  const moduleId = toInt(id)
+  const state = toInt(auditState)
+
+  if (!moduleId) {
+    throw new Error('模板ID无效')
+  }
+  if (state !== 1 && state !== 2) {
+    throw new Error('审核状态无效')
+  }
+
+  const resp = await fetch(`${API_BASE_URL}/module/audit`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+    body: JSON.stringify({
+      id: moduleId,
+      auditState: state,
+    }),
+  })
+
+  const json = await resp.json().catch(() => null)
+
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!resp.ok) {
+    throw new Error(json?.message || '审核模板失败')
+  }
+  if (!json || (json.code !== 200 && json.code !== 0)) {
+    throw new Error(json?.message || '审核模板失败')
+  }
+  return json
+}
+
 /**
  * 保存模板设计：POST /module/design
  * @param {{

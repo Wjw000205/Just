@@ -83,7 +83,7 @@
           </label>
           <button class="batch-btn" @click="cancelSelectAll">取消全选</button>
           <span class="batch-info">已选：<span class="batch-count">{{ selectedCount }}</span></span>
-          <button class="batch-btn primary" @click="handleBatchAudit">批量审核</button>
+          <button class="batch-btn primary" :disabled="batchAuditing" @click="handleBatchAudit">批量审核</button>
         </div>
 
         <!-- 表格区域 -->
@@ -112,7 +112,7 @@
                   <span class="tag-badge">{{ item.tag }}</span>
                 </td>
                 <td class="col-status">
-                  <span class="status-badge" :class="item.status === '待审核' ? 'pending' : 'approved'">
+                  <span class="status-badge" :class="item.statusKind || 'pending'">
                     {{ item.status }}
                   </span>
                 </td>
@@ -178,11 +178,138 @@
         </div>
       </section>
     </div>
+
+    <div v-if="detailDialogVisible" class="detail-mask" @click.self="closeDetailDialog">
+      <div class="detail-dialog">
+        <div class="detail-dialog-header">
+          <h2 class="detail-dialog-title">查看模板</h2>
+          <button type="button" class="detail-close-btn" @click="closeDetailDialog">×</button>
+        </div>
+
+        <div class="detail-switch">
+          <button
+            type="button"
+            class="detail-switch-btn"
+            :class="{ active: detailActiveTab === 'base' }"
+            @click="detailActiveTab = 'base'"
+          >
+            基本信息
+          </button>
+          <button
+            type="button"
+            class="detail-switch-btn"
+            :class="{ active: detailActiveTab === 'fields' }"
+            @click="detailActiveTab = 'fields'"
+          >
+            字段信息
+          </button>
+        </div>
+
+        <div v-if="detailLoading" class="detail-loading">加载中...</div>
+        <template v-else>
+          <section v-if="detailActiveTab === 'base'" class="detail-section">
+            <h3 class="detail-section-title">模板基本信息</h3>
+            <div class="base-info-grid">
+              <div class="base-info-item">
+                <span class="base-info-label">模板名称</span>
+                <span class="base-info-value">{{ moduleBaseInfo.moduleName || '-' }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">模板标签</span>
+                <span class="base-info-value">{{ moduleBaseInfo.tag || '-' }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">创建人</span>
+                <span class="base-info-value">{{ moduleBaseInfo.creator ?? '-' }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">可见范围</span>
+                <span class="base-info-value">{{ formatVisibleArea(moduleBaseInfo.visibleArea) }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">是否发布</span>
+                <span class="base-info-value">{{ formatAgree(moduleBaseInfo.agree) }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">审核状态</span>
+                <span class="base-info-value">{{ formatAuditState(moduleBaseInfo.auditState) }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">创建时间</span>
+                <span class="base-info-value">{{ formatDateTime(moduleBaseInfo.createTime) || '-' }}</span>
+              </div>
+              <div class="base-info-item base-info-item-wide">
+                <span class="base-info-label">模板说明</span>
+                <span class="base-info-value">{{ moduleBaseInfo.description || '-' }}</span>
+              </div>
+            </div>
+          </section>
+
+          <section v-else class="detail-section">
+            <h3 class="detail-section-title">模板字段信息</h3>
+            <div class="field-groups">
+              <div v-for="group in fieldGroups" :key="group.key" class="field-group">
+                <div class="field-group-title">{{ group.title }}</div>
+                <table class="field-table">
+                  <thead>
+                    <tr>
+                      <th>序号</th>
+                      <th>字段名称</th>
+                      <th>字段类型</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-if="group.items.length === 0">
+                      <td colspan="3" class="field-empty">暂无字段</td>
+                    </tr>
+                    <tr v-for="(field, index) in group.items" :key="`${group.key}-${index}`">
+                      <td>{{ index + 1 }}</td>
+                      <td>{{ field.columnName || '-' }}</td>
+                      <td>{{ field.type || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </template>
+      </div>
+    </div>
+
+    <div v-if="batchAuditDialogVisible" class="audit-confirm-mask" @click.self="closeBatchAuditDialog">
+      <div class="audit-confirm-dialog">
+        <div class="audit-confirm-title">批量审核</div>
+        <div class="audit-confirm-message">
+          确定审核通过已选择的 {{ batchAuditItems.length }} 个模板吗？
+        </div>
+        <div class="audit-confirm-actions">
+          <button type="button" class="audit-confirm-btn ghost" :disabled="batchAuditing" @click="closeBatchAuditDialog">
+            取消
+          </button>
+          <button type="button" class="audit-confirm-btn primary" :disabled="batchAuditing" @click="confirmBatchAudit">
+            {{ batchAuditing ? '审核中...' : '确定' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="noticeDialogVisible" class="audit-confirm-mask" @click.self="closeNoticeDialog">
+      <div class="audit-confirm-dialog audit-notice-dialog">
+        <div class="audit-confirm-title">{{ noticeTitle }}</div>
+        <div class="audit-confirm-message">{{ noticeMessage }}</div>
+        <div class="audit-confirm-actions">
+          <button type="button" class="audit-confirm-btn primary" @click="closeNoticeDialog">
+            确定
+          </button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { auditModule, getModuleBaseInfo, getModuleDetailInfo, getPendingAuditModules } from '../api/module.js'
 
 const emit = defineEmits(['go-home'])
 
@@ -198,7 +325,7 @@ const statusDropdownVisible = ref(false)
 // 分页相关
 const page = ref(1)
 const pageSize = ref(10)
-const total = ref(46)
+const total = ref(0)
 
 const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
 
@@ -219,19 +346,96 @@ const displayedPages = computed(() => {
   return pages
 })
 
-// 模拟表格数据
-const tableData = ref([
-  { id: 1, name: '生物材料理化性质表征通用模板', tag: '生物医用材料（科学…', status: '待审核', auditTime: '', creator: '朱向东', selected: false },
-  { id: 2, name: '生物材料制备通用模板', tag: '生物医用材料（科学…', status: '待审核', auditTime: '', creator: '朱向东', selected: false },
-  { id: 3, name: '1231', tag: '生物医用材料（科学…', status: '待审核', auditTime: '', creator: '朱向东', selected: false },
-  { id: 4, name: '生物材料力学性能表征通用模板', tag: '生物医用材料（科学…', status: '已通过', auditTime: '2026-03-14 16:47:30', creator: '朱向东', selected: false },
-  { id: 5, name: '生物材料体外实验表征通用模板', tag: '生物医用材料（科学…', status: '已通过', auditTime: '2026-03-14 16:47:30', creator: '朱向东', selected: false },
-  { id: 6, name: '生物材料体内实验表征通用模板', tag: '生物医用材料（科学…', status: '已通过', auditTime: '2026-03-14 16:47:30', creator: '朱向东', selected: false },
-  { id: 7, name: '生物材料临床试验表征通用模板', tag: '生物医用材料（科学…', status: '已通过', auditTime: '2026-03-14 16:47:30', creator: '朱向东', selected: false },
-  { id: 8, name: '生物材料制备通用模板', tag: '生物医用材料（科学…', status: '已通过', auditTime: '2026-03-14 11:51:40', creator: '朱向东', selected: false },
-  { id: 9, name: '生物材料理化性质表征通用模板', tag: '生物医用材料（科学…', status: '已通过', auditTime: '2026-03-14 11:51:40', creator: '朱向东', selected: false },
-  { id: 10, name: '生物材料通用模板', tag: '生物医用材料（科学…', status: '已通过', auditTime: '2026-03-13 16:31:08', creator: '朱向东', selected: false }
+const tableData = ref([])
+const loading = ref(false)
+const batchAuditing = ref(false)
+const batchAuditDialogVisible = ref(false)
+const batchAuditItems = ref([])
+const noticeDialogVisible = ref(false)
+const noticeTitle = ref('提示')
+const noticeMessage = ref('')
+const detailDialogVisible = ref(false)
+const detailLoading = ref(false)
+const detailActiveTab = ref('base')
+const moduleBaseInfo = ref({})
+const moduleDetailInfo = ref({
+  object: [],
+  operation: [],
+  result: [],
+})
+
+const fieldGroups = computed(() => [
+  {
+    key: 'object',
+    title: 'Object 字段',
+    items: Array.isArray(moduleDetailInfo.value.object) ? moduleDetailInfo.value.object : [],
+  },
+  {
+    key: 'operation',
+    title: 'Operation 字段',
+    items: Array.isArray(moduleDetailInfo.value.operation) ? moduleDetailInfo.value.operation : [],
+  },
+  {
+    key: 'result',
+    title: 'Result 字段',
+    items: Array.isArray(moduleDetailInfo.value.result) ? moduleDetailInfo.value.result : [],
+  },
 ])
+
+function formatDateTime(value) {
+  if (!value) return ''
+  return String(value).replace('T', ' ').slice(0, 19)
+}
+
+function formatVisibleArea(value) {
+  if (Number(value) === 1) return 'public'
+  if (Number(value) === 0) return 'private'
+  return '-'
+}
+
+function formatAgree(value) {
+  if (Number(value) === 1) return '是'
+  if (Number(value) === 0) return '否'
+  return '-'
+}
+
+function formatAuditState(value) {
+  if (Number(value) === 0) return '待审核'
+  if (Number(value) === 1) return '驳回'
+  if (Number(value) === 2) return '通过'
+  return '-'
+}
+
+function normalizePendingAuditModule(raw) {
+  return {
+    id: raw?.id,
+    name: raw?.moduleName != null ? String(raw.moduleName) : '',
+    tag: raw?.tag != null ? String(raw.tag) : '',
+    status: '待审核',
+    statusKind: 'pending',
+    auditTime: '',
+    creator: raw?.creator != null ? String(raw.creator) : '',
+    description: raw?.description != null ? String(raw.description) : '',
+    createTime: raw?.createTime != null ? String(raw.createTime) : '',
+    selected: false,
+  }
+}
+
+async function loadPendingAuditModules() {
+  loading.value = true
+  try {
+    const list = await getPendingAuditModules()
+    tableData.value = list.map(normalizePendingAuditModule)
+    total.value = tableData.value.length
+    selectAll.value = false
+  } catch (e) {
+    tableData.value = []
+    total.value = 0
+    alert(e?.message || '获取待审核模板列表失败')
+  } finally {
+    loading.value = false
+  }
+}
 
 // 全选相关
 const selectAll = ref(false)
@@ -273,18 +477,81 @@ const goToPage = (p) => {
 }
 
 // 批量操作
+function showNotice(message, title = '提示') {
+  noticeTitle.value = title
+  noticeMessage.value = message
+  noticeDialogVisible.value = true
+}
+
+function closeNoticeDialog() {
+  noticeDialogVisible.value = false
+}
+
 const handleBatchAudit = () => {
   const selected = tableData.value.filter(item => item.selected)
   if (selected.length === 0) {
-    alert('请先选择要审核的模板')
+    showNotice('请先选择要审核的模板')
     return
   }
-  console.log('批量审核：', selected)
+
+  batchAuditItems.value = selected
+  batchAuditDialogVisible.value = true
+}
+
+function closeBatchAuditDialog() {
+  if (batchAuditing.value) return
+  batchAuditDialogVisible.value = false
+}
+
+const confirmBatchAudit = async () => {
+  batchAuditing.value = true
+  try {
+    await Promise.all(batchAuditItems.value.map(item => auditModule(item.id, 2)))
+    batchAuditDialogVisible.value = false
+    showNotice('批量审核通过成功')
+    await loadPendingAuditModules()
+  } catch (e) {
+    showNotice(e?.message || '批量审核失败')
+  } finally {
+    batchAuditing.value = false
+    batchAuditItems.value = []
+  }
 }
 
 // 操作按钮
-const handleView = (item) => {
-  console.log('查看：', item)
+const handleView = async (item) => {
+  if (!item?.id) {
+    alert('模板ID缺失，无法查看')
+    return
+  }
+
+  detailDialogVisible.value = true
+  detailLoading.value = true
+  detailActiveTab.value = 'base'
+  moduleBaseInfo.value = {}
+  moduleDetailInfo.value = { object: [], operation: [], result: [] }
+
+  try {
+    const [baseInfo, detailInfo] = await Promise.all([
+      getModuleBaseInfo(item.id),
+      getModuleDetailInfo(item.id),
+    ])
+    moduleBaseInfo.value = baseInfo || {}
+    moduleDetailInfo.value = {
+      object: Array.isArray(detailInfo?.object) ? detailInfo.object : [],
+      operation: Array.isArray(detailInfo?.operation) ? detailInfo.operation : [],
+      result: Array.isArray(detailInfo?.result) ? detailInfo.result : [],
+    }
+  } catch (e) {
+    detailDialogVisible.value = false
+    alert(e?.message || '获取模板详情失败')
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+const closeDetailDialog = () => {
+  detailDialogVisible.value = false
 }
 
 const handleEdit = (item) => {
@@ -308,6 +575,7 @@ const handleClickOutside = (e) => {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  loadPendingAuditModules()
 })
 
 onBeforeUnmount(() => {
@@ -594,6 +862,81 @@ onBeforeUnmount(() => {
   background: #1246bb;
 }
 
+.batch-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.audit-confirm-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.32);
+}
+
+.audit-confirm-dialog {
+  width: min(420px, calc(100vw - 48px));
+  padding: 22px 24px 20px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.22);
+}
+
+.audit-notice-dialog {
+  width: min(360px, calc(100vw - 48px));
+}
+
+.audit-confirm-title {
+  margin-bottom: 14px;
+  color: #1f2937;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.audit-confirm-message {
+  min-height: 48px;
+  color: #333;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.audit-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.audit-confirm-btn {
+  min-width: 72px;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.audit-confirm-btn.ghost {
+  border: 1px solid #d4dae6;
+  background: #fff;
+  color: #555;
+}
+
+.audit-confirm-btn.primary {
+  border: 1px solid #1a5ce6;
+  background: #1a5ce6;
+  color: #fff;
+}
+
+.audit-confirm-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .batch-info {
   font-size: 13px;
   color: #666;
@@ -792,5 +1135,182 @@ onBeforeUnmount(() => {
   background: #1a5ce6;
   border-color: #1a5ce6;
   color: #fff;
+}
+
+.detail-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.detail-dialog {
+  width: min(980px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+}
+
+.detail-dialog-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e8ecf4;
+  background: #fff;
+}
+
+.detail-dialog-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #222;
+}
+
+.detail-close-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #666;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.detail-close-btn:hover {
+  background: #f0f5ff;
+  color: #1a5ce6;
+}
+
+.detail-loading {
+  padding: 40px 20px;
+  text-align: center;
+  color: #666;
+}
+
+.detail-switch {
+  display: inline-flex;
+  gap: 0;
+  margin: 16px 20px 0;
+  padding: 3px;
+  border: 1px solid #d4dae6;
+  border-radius: 6px;
+  background: #f8f9fc;
+}
+
+.detail-switch-btn {
+  min-width: 92px;
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #555;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.detail-switch-btn.active {
+  background: #1a5ce6;
+  color: #fff;
+}
+
+.detail-switch-btn:not(.active):hover {
+  color: #1a5ce6;
+  background: #eef4ff;
+}
+
+.detail-section {
+  padding: 18px 20px 20px;
+  border-bottom: 1px solid #eef1f6;
+}
+
+.detail-section:last-child {
+  border-bottom: none;
+}
+
+.detail-section-title {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+.base-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+
+.base-info-item {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 34px;
+  align-items: center;
+  padding: 8px 10px;
+  background: #f8f9fc;
+  border-radius: 4px;
+}
+
+.base-info-item-wide {
+  grid-column: 1 / -1;
+}
+
+.base-info-label {
+  color: #666;
+  font-size: 13px;
+}
+
+.base-info-value {
+  min-width: 0;
+  color: #222;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.field-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.field-group-title {
+  margin-bottom: 8px;
+  color: #1a5ce6;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.field-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.field-table th,
+.field-table td {
+  padding: 10px 12px;
+  border: 1px solid #e8ecf4;
+  text-align: left;
+}
+
+.field-table th {
+  background: #f5f7fb;
+  color: #333;
+  font-weight: 500;
+}
+
+.field-empty {
+  text-align: center;
+  color: #999;
 }
 </style>

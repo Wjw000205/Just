@@ -311,6 +311,7 @@
                   <th class="col-tpl-name">模板名称</th>
                   <th class="col-tpl-tag">模板标签</th>
                   <th class="col-tpl-scope">可见范围</th>
+                  <th class="col-tpl-audit">审核状态</th>
                   <th class="col-tpl-desc">模板说明</th>
                   <th class="col-tpl-time">创建时间</th>
                   <th class="col-action">操作</th>
@@ -322,6 +323,7 @@
                   <td class="col-tpl-name" :title="item.name">{{ item.name }}</td>
                   <td class="col-tpl-tag"><span class="tag-badge">{{ item.tag }}</span></td>
                   <td class="col-tpl-scope">{{ item.scope }}</td>
+                  <td class="col-tpl-audit">{{ item.audit }}</td>
                   <td class="col-tpl-desc" :title="item.description">{{ item.description || '-' }}</td>
                   <td class="col-tpl-time">{{ item.createTime }}</td>
                   <td class="col-action">
@@ -881,12 +883,109 @@
         </template>
       </main>
     </div>
+
+    <div v-if="templateDetailDialogVisible" class="detail-mask" @click.self="closeTemplateDetailDialog">
+      <div class="detail-dialog">
+        <div class="detail-dialog-header">
+          <h2 class="detail-dialog-title">查看模板</h2>
+          <button type="button" class="detail-close-btn" @click="closeTemplateDetailDialog">×</button>
+        </div>
+
+        <div class="detail-switch">
+          <button
+            type="button"
+            class="detail-switch-btn"
+            :class="{ active: templateDetailActiveTab === 'base' }"
+            @click="templateDetailActiveTab = 'base'"
+          >
+            基本信息
+          </button>
+          <button
+            type="button"
+            class="detail-switch-btn"
+            :class="{ active: templateDetailActiveTab === 'fields' }"
+            @click="templateDetailActiveTab = 'fields'"
+          >
+            字段信息
+          </button>
+        </div>
+
+        <div v-if="templateDetailLoading" class="detail-loading">加载中...</div>
+        <template v-else>
+          <section v-if="templateDetailActiveTab === 'base'" class="detail-section">
+            <h3 class="detail-section-title">模板基本信息</h3>
+            <div class="base-info-grid">
+              <div class="base-info-item">
+                <span class="base-info-label">模板名称</span>
+                <span class="base-info-value">{{ templateBaseInfo.moduleName || '-' }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">模板标签</span>
+                <span class="base-info-value">{{ templateBaseInfo.tag || '-' }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">创建人</span>
+                <span class="base-info-value">{{ templateBaseInfo.creator ?? '-' }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">可见范围</span>
+                <span class="base-info-value">{{ formatTemplateScope(templateBaseInfo.visibleArea) }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">是否发布</span>
+                <span class="base-info-value">{{ formatTemplateAgree(templateBaseInfo.agree) }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">审核状态</span>
+                <span class="base-info-value">{{ formatTemplateAudit(templateBaseInfo.auditState) }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">创建时间</span>
+                <span class="base-info-value">{{ formatTemplateDateTime(templateBaseInfo.createTime) || '-' }}</span>
+              </div>
+              <div class="base-info-item base-info-item-wide">
+                <span class="base-info-label">模板说明</span>
+                <span class="base-info-value">{{ templateBaseInfo.description || '-' }}</span>
+              </div>
+            </div>
+          </section>
+
+          <section v-else class="detail-section">
+            <h3 class="detail-section-title">模板字段信息</h3>
+            <div class="field-groups">
+              <div v-for="group in templateFieldGroups" :key="group.key" class="field-group">
+                <div class="field-group-title">{{ group.title }}</div>
+                <table class="field-table">
+                  <thead>
+                    <tr>
+                      <th>序号</th>
+                      <th>字段名称</th>
+                      <th>字段类型</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-if="group.items.length === 0">
+                      <td colspan="3" class="field-empty">暂无字段</td>
+                    </tr>
+                    <tr v-for="(field, index) in group.items" :key="`${group.key}-${index}`">
+                      <td>{{ index + 1 }}</td>
+                      <td>{{ field.columnName || '-' }}</td>
+                      <td>{{ field.type || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </template>
+      </div>
+    </div>
   </section>
 </template>
 
 <script setup>
-import { onMounted, ref, computed } from 'vue'
-import { getMyModules } from '../api/module.js'
+import { onMounted, ref, computed, watch } from 'vue'
+import { getModuleBaseInfo, getModuleDetailInfo, getMyModules } from '../api/module.js'
 import { fetchMyProfile, updateMyProfile, updatePassword, updateSecondPassword } from '../api/user.js'
 
 const emit = defineEmits(['go-home'])
@@ -958,16 +1057,115 @@ const selectAll = computed({ get: () => datasetList.value.length > 0 && datasetL
 
 // 模板
 const templateSearchForm = ref({ name: '', tag: '', scope: '', audit: '', status: '' })
-const templateData = ref([
-  { id: 1, name: '1113', tag: '生物医用材料（科学...', scope: '公开', description: '23', createTime: '2026-03-22' },
-  { id: 2, name: '111', tag: '生物医用材料（科学...', scope: '公开', description: '', createTime: '2026-03-22' },
-  { id: 3, name: '高通量羟基...', tag: '生物医用材料（科学...', scope: '公开', description: '', createTime: '2026-03-20' },
-  { id: 4, name: '高通量羟基...', tag: '生物医用材料（科学...', scope: '公开', description: '', createTime: '2026-03-20' },
-  { id: 5, name: 'DLP3D颅颌...', tag: '生物医用材料（科学...', scope: '公开', description: '', createTime: '2026-03-20' },
-])
-const templateTotal = ref(5)
+const templateData = ref([])
+const templateTotal = ref(0)
 const templateCurrentPage = ref(1)
 const templateTotalPages = computed(() => Math.ceil(templateTotal.value / 10))
+const templateDetailDialogVisible = ref(false)
+const templateDetailLoading = ref(false)
+const templateDetailActiveTab = ref('base')
+const templateBaseInfo = ref({})
+const templateDetailInfo = ref({
+  object: [],
+  operation: [],
+  result: [],
+})
+
+const templateFieldGroups = computed(() => [
+  {
+    key: 'object',
+    title: 'Object 字段',
+    items: Array.isArray(templateDetailInfo.value.object) ? templateDetailInfo.value.object : [],
+  },
+  {
+    key: 'operation',
+    title: 'Operation 字段',
+    items: Array.isArray(templateDetailInfo.value.operation) ? templateDetailInfo.value.operation : [],
+  },
+  {
+    key: 'result',
+    title: 'Result 字段',
+    items: Array.isArray(templateDetailInfo.value.result) ? templateDetailInfo.value.result : [],
+  },
+])
+
+function formatTemplateDate(value) {
+  if (!value) return ''
+  return String(value).replace('T', ' ').slice(0, 10)
+}
+
+function formatTemplateDateTime(value) {
+  if (!value) return ''
+  return String(value).replace('T', ' ').slice(0, 19)
+}
+
+function formatTemplateScope(value) {
+  if (Number(value) === 1) return '公开'
+  if (Number(value) === 0) return '内部'
+  return '-'
+}
+
+function formatTemplateAgree(value) {
+  if (Number(value) === 1) return '是'
+  if (Number(value) === 0) return '否'
+  return '-'
+}
+
+function formatTemplateAudit(value) {
+  if (Number(value) === 0) return '待审核'
+  if (Number(value) === 1) return '驳回'
+  if (Number(value) === 2) return '已通过'
+  return '-'
+}
+
+function normalizeMyTemplate(raw) {
+  return {
+    id: raw?.id,
+    name: raw?.moduleName != null ? String(raw.moduleName) : '',
+    tag: raw?.tag != null ? String(raw.tag) : '',
+    scope: formatTemplateScope(raw?.visibleArea),
+    audit: formatTemplateAudit(raw?.auditState),
+    status: Number(raw?.deleted) === 1 ? '停用' : '正常',
+    description: raw?.description != null ? String(raw.description) : '',
+    createTime: formatTemplateDate(raw?.createTime),
+  }
+}
+
+function applyTemplateFilters(rows) {
+  const name = templateSearchForm.value.name.trim()
+  const tag = templateSearchForm.value.tag.trim()
+  const scope = templateSearchForm.value.scope
+  const audit = templateSearchForm.value.audit
+  const status = templateSearchForm.value.status
+
+  return rows.filter((row) => {
+    if (name && !row.name.includes(name)) return false
+    if (tag && !row.tag.includes(tag)) return false
+    if (scope && row.scope !== scope) return false
+    if (audit && row.audit !== audit) return false
+    if (status && row.status !== status) return false
+    return true
+  })
+}
+
+async function loadMyTemplates() {
+  if (!currentUserId.value) {
+    templateData.value = []
+    templateTotal.value = 0
+    return
+  }
+
+  try {
+    const result = await getMyModules(currentUserId.value)
+    const list = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : []
+    templateData.value = applyTemplateFilters(list.map(normalizeMyTemplate))
+    templateTotal.value = templateData.value.length
+  } catch (e) {
+    templateData.value = []
+    templateTotal.value = 0
+    alert(e?.message || '获取我的模板失败')
+  }
+}
 
 // 模板片段
 const fragmentSearchForm = ref({ name: '', scope: '', audit: '', status: '' })
@@ -1028,10 +1226,49 @@ const handleDownloadDataset = (item) => alert(`下载: ${item.name}`)
 const handleDeleteDataset = (item) => { if (confirm(`删除 ${item.name}?`)) datasetList.value = datasetList.value.filter(d => d.id !== item.id) }
 
 // 模板操作
-const handleTemplateSearch = () => console.log('搜索模板:', templateSearchForm.value)
-const handleTemplateReset = () => { templateSearchForm.value = { name: '', tag: '', scope: '', audit: '', status: '' } }
+const handleTemplateSearch = () => {
+  templateCurrentPage.value = 1
+  loadMyTemplates()
+}
+const handleTemplateReset = () => {
+  templateSearchForm.value = { name: '', tag: '', scope: '', audit: '', status: '' }
+  templateCurrentPage.value = 1
+  loadMyTemplates()
+}
 const handleAddTemplate = () => alert('新增模板')
-const handleViewTemplate = (item) => alert(`查看: ${item.name}`)
+const handleViewTemplate = async (item) => {
+  if (!item?.id) {
+    alert('模板ID缺失，无法查看')
+    return
+  }
+
+  templateDetailDialogVisible.value = true
+  templateDetailLoading.value = true
+  templateDetailActiveTab.value = 'base'
+  templateBaseInfo.value = {}
+  templateDetailInfo.value = { object: [], operation: [], result: [] }
+
+  try {
+    const [baseInfo, detailInfo] = await Promise.all([
+      getModuleBaseInfo(item.id),
+      getModuleDetailInfo(item.id),
+    ])
+    templateBaseInfo.value = baseInfo || {}
+    templateDetailInfo.value = {
+      object: Array.isArray(detailInfo?.object) ? detailInfo.object : [],
+      operation: Array.isArray(detailInfo?.operation) ? detailInfo.operation : [],
+      result: Array.isArray(detailInfo?.result) ? detailInfo.result : [],
+    }
+  } catch (e) {
+    templateDetailDialogVisible.value = false
+    alert(e?.message || '获取模板详情失败')
+  } finally {
+    templateDetailLoading.value = false
+  }
+}
+const closeTemplateDetailDialog = () => {
+  templateDetailDialogVisible.value = false
+}
 const handleEditTemplate = (item) => alert(`编辑: ${item.name}`)
 const handleDeleteTemplate = (item) => { if (confirm(`删除 ${item.name}?`)) templateData.value = templateData.value.filter(d => d.id !== item.id) }
 
@@ -1227,10 +1464,19 @@ async function loadMyProfileFromServer() {
   }
 }
 
+watch(currentMenu, (menu) => {
+  if (menu === 'templates') {
+    loadMyTemplates()
+  }
+})
+
 onMounted(async () => {
   syncUserFromToken()
   checkSessionMenu()
   await loadMyProfileFromServer()
+  if (currentMenu.value === 'templates') {
+    await loadMyTemplates()
+  }
   document.addEventListener('click', handleClickOutside)
 })
 </script>
@@ -1742,6 +1988,7 @@ onMounted(async () => {
 .col-level, .col-tpl-scope, .col-frag-scope { width: 80px; text-align: center; }
 .col-data-count, .col-row-count { width: 80px; text-align: center; }
 .col-audit-status { width: 100px; text-align: center; }
+.col-tpl-audit { width: 100px; text-align: center; }
 .col-action { width: 140px; text-align: center; }
 .col-tpl-tag { min-width: 140px; }
 .col-tpl-desc, .col-frag-desc { min-width: 120px; max-width: 200px; }
@@ -1749,6 +1996,183 @@ onMounted(async () => {
 .col-fav-category { width: 120px; }
 .col-fav-count { width: 80px; text-align: center; }
 .col-fav-favcount { width: 100px; text-align: center; }
+
+.detail-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.detail-dialog {
+  width: min(980px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+}
+
+.detail-dialog-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e8ecf4;
+  background: #fff;
+}
+
+.detail-dialog-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #222;
+}
+
+.detail-close-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #666;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.detail-close-btn:hover {
+  background: #f0f5ff;
+  color: #1a5ce6;
+}
+
+.detail-loading {
+  padding: 40px 20px;
+  text-align: center;
+  color: #666;
+}
+
+.detail-switch {
+  display: inline-flex;
+  gap: 0;
+  margin: 16px 20px 0;
+  padding: 3px;
+  border: 1px solid #d4dae6;
+  border-radius: 6px;
+  background: #f8f9fc;
+}
+
+.detail-switch-btn {
+  min-width: 92px;
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #555;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.detail-switch-btn.active {
+  background: #1a5ce6;
+  color: #fff;
+}
+
+.detail-switch-btn:not(.active):hover {
+  color: #1a5ce6;
+  background: #eef4ff;
+}
+
+.detail-section {
+  padding: 18px 20px 20px;
+  border-bottom: 1px solid #eef1f6;
+}
+
+.detail-section:last-child {
+  border-bottom: none;
+}
+
+.detail-section-title {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+.base-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+
+.base-info-item {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 34px;
+  align-items: center;
+  padding: 8px 10px;
+  background: #f8f9fc;
+  border-radius: 4px;
+}
+
+.base-info-item-wide {
+  grid-column: 1 / -1;
+}
+
+.base-info-label {
+  color: #666;
+  font-size: 13px;
+}
+
+.base-info-value {
+  min-width: 0;
+  color: #222;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.field-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.field-group-title {
+  margin-bottom: 8px;
+  color: #1a5ce6;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.field-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.field-table th,
+.field-table td {
+  padding: 10px 12px;
+  border: 1px solid #e8ecf4;
+  text-align: left;
+}
+
+.field-table th {
+  background: #f5f7fb;
+  color: #333;
+  font-weight: 500;
+}
+
+.field-empty {
+  text-align: center;
+  color: #999;
+}
 .col-fav-abstract { min-width: 150px; max-width: 250px; }
 .col-rec-size { width: 100px; }
 .col-rec-type { width: 100px; }

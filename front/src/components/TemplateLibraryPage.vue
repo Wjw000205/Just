@@ -265,11 +265,109 @@
         </div>
       </div>
     </div>
+
+    <div v-if="detailDialogVisible" class="detail-mask" @click.self="closeDetailDialog">
+      <div class="detail-dialog">
+        <div class="detail-dialog-header">
+          <h2 class="detail-dialog-title">查看模板</h2>
+          <button type="button" class="detail-close-btn" @click="closeDetailDialog">×</button>
+        </div>
+
+        <div class="detail-switch">
+          <button
+            type="button"
+            class="detail-switch-btn"
+            :class="{ active: detailActiveTab === 'base' }"
+            @click="detailActiveTab = 'base'"
+          >
+            基本信息
+          </button>
+          <button
+            type="button"
+            class="detail-switch-btn"
+            :class="{ active: detailActiveTab === 'fields' }"
+            @click="detailActiveTab = 'fields'"
+          >
+            字段信息
+          </button>
+        </div>
+
+        <div v-if="detailLoading" class="detail-loading">加载中...</div>
+        <template v-else>
+          <section v-if="detailActiveTab === 'base'" class="detail-section">
+            <h3 class="detail-section-title">模板基本信息</h3>
+            <div class="base-info-grid">
+              <div class="base-info-item">
+                <span class="base-info-label">模板名称</span>
+                <span class="base-info-value">{{ moduleBaseInfo.moduleName || '-' }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">模板标签</span>
+                <span class="base-info-value">{{ moduleBaseInfo.tag || '-' }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">创建人</span>
+                <span class="base-info-value">{{ moduleBaseInfo.creator ?? '-' }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">可见范围</span>
+                <span class="base-info-value">{{ formatVisibleArea(moduleBaseInfo.visibleArea) }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">是否发布</span>
+                <span class="base-info-value">{{ formatAgree(moduleBaseInfo.agree) }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">审核状态</span>
+                <span class="base-info-value">{{ formatAuditState(moduleBaseInfo.auditState) }}</span>
+              </div>
+              <div class="base-info-item">
+                <span class="base-info-label">创建时间</span>
+                <span class="base-info-value">{{ formatDateTime(moduleBaseInfo.createTime) || '-' }}</span>
+              </div>
+              <div class="base-info-item base-info-item-wide">
+                <span class="base-info-label">模板说明</span>
+                <span class="base-info-value">{{ moduleBaseInfo.description || '-' }}</span>
+              </div>
+            </div>
+          </section>
+
+          <section v-else class="detail-section">
+            <h3 class="detail-section-title">模板字段信息</h3>
+            <div class="field-groups">
+              <div v-for="group in fieldGroups" :key="group.key" class="field-group">
+                <div class="field-group-title">{{ group.title }}</div>
+                <table class="field-table">
+                  <thead>
+                    <tr>
+                      <th>序号</th>
+                      <th>字段名称</th>
+                      <th>字段类型</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-if="group.items.length === 0">
+                      <td colspan="3" class="field-empty">暂无字段</td>
+                    </tr>
+                    <tr v-for="(field, index) in group.items" :key="`${group.key}-${index}`">
+                      <td>{{ index + 1 }}</td>
+                      <td>{{ field.columnName || '-' }}</td>
+                      <td>{{ field.type || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </template>
+      </div>
+    </div>
   </section>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { getModuleBaseInfo, getModuleDetailInfo, getModuleListByTag } from '../api/module.js'
 
 const emit = defineEmits(['go-home'])
 
@@ -301,7 +399,7 @@ const tagOptions = [
 // 分页相关
 const page = ref(1)
 const pageSize = ref(10)
-const total = ref(19)
+const total = ref(0)
 
 const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
 
@@ -322,19 +420,103 @@ const displayedPages = computed(() => {
   return pages
 })
 
-// 模拟表格数据
-const tableData = ref([
-  { id: 1, name: '生物材料临床试验数据采集模板', tag: '生物医用材料（科学）', published: '否', description: '', source: '节点管理部', creator: '朱向东', createTime: '2024-01-15', isFavorited: false },
-  { id: 2, name: '生物材料体内实验数据模板', tag: '生物医用材料（科学）', published: '否', description: '', source: '节点管理部', creator: '朱向东', createTime: '2024-01-15', isFavorited: false },
-  { id: 3, name: '生物材料体外实验数据模板', tag: '生物医用材料（科学）', published: '否', description: '', source: '节点管理部', creator: '朱向东', createTime: '2024-01-15', isFavorited: false },
-  { id: 4, name: '生物材料力学性能测试模板', tag: '生物医用材料（科学）', published: '否', description: '', source: '节点管理部', creator: '朱向东', createTime: '2024-01-15', isFavorited: false },
-  { id: 5, name: '测试-生物医用材料基础数据模板', tag: '生物医用材料（科学）', published: '是', description: '版本升级测试', source: '节点管理部', creator: '朱向东', createTime: '2024-01-15', isFavorited: true },
-  { id: 6, name: '生物材料通用模板', tag: '生物医用材料（科学）', published: '否', description: '', source: '节点管理部', creator: '朱向东', createTime: '2024-01-15', isFavorited: false },
-  { id: 7, name: '自组装羟基磷灰石纳米材料表征模板', tag: '生物医用材料（科学）', published: '否', description: '', source: '节点管理部', creator: '朱向东', createTime: '2024-01-15', isFavorited: false },
-  { id: 8, name: '纳米羟基磷灰石生物相容性评价模板', tag: '生物医用材料（科学）', published: '否', description: '', source: '节点管理部', creator: '朱向东', createTime: '2024-01-15', isFavorited: false },
-  { id: 9, name: '自组装羟基磷灰石力学性能测试模板', tag: '生物医用材料（科学）', published: '否', description: '', source: '节点管理部', creator: '朱向东', createTime: '2024-01-14', isFavorited: false },
-  { id: 10, name: '纳米羟基磷灰石药物缓释性能模板', tag: '生物医用材料（科学）', published: '否', description: '', source: '节点管理部', creator: '朱向东', createTime: '2024-01-14', isFavorited: false }
+const tableData = ref([])
+const loading = ref(false)
+const detailDialogVisible = ref(false)
+const detailLoading = ref(false)
+const detailActiveTab = ref('base')
+const moduleBaseInfo = ref({})
+const moduleDetailInfo = ref({
+  object: [],
+  operation: [],
+  result: [],
+})
+
+const fieldGroups = computed(() => [
+  {
+    key: 'object',
+    title: 'Object 字段',
+    items: Array.isArray(moduleDetailInfo.value.object) ? moduleDetailInfo.value.object : [],
+  },
+  {
+    key: 'operation',
+    title: 'Operation 字段',
+    items: Array.isArray(moduleDetailInfo.value.operation) ? moduleDetailInfo.value.operation : [],
+  },
+  {
+    key: 'result',
+    title: 'Result 字段',
+    items: Array.isArray(moduleDetailInfo.value.result) ? moduleDetailInfo.value.result : [],
+  },
 ])
+
+function formatDateTime(value) {
+  if (!value) return ''
+  return String(value).replace('T', ' ').slice(0, 19)
+}
+
+function formatVisibleArea(value) {
+  if (Number(value) === 1) return 'public'
+  if (Number(value) === 0) return 'private'
+  return '-'
+}
+
+function formatAgree(value) {
+  if (Number(value) === 1) return '是'
+  if (Number(value) === 0) return '否'
+  return '-'
+}
+
+function formatAuditState(value) {
+  if (Number(value) === 0) return '待审核'
+  if (Number(value) === 1) return '驳回'
+  if (Number(value) === 2) return '通过'
+  return '-'
+}
+
+function normalizeModuleRow(raw) {
+  return {
+    id: raw?.id,
+    name: raw?.moduleName != null ? String(raw.moduleName) : '',
+    tag: raw?.tag != null ? String(raw.tag) : '',
+    published: Number(raw?.agree) === 1 ? '是' : '否',
+    description: raw?.description != null ? String(raw.description) : '',
+    source: raw?.source != null ? String(raw.source) : '',
+    creator: raw?.creator != null ? String(raw.creator) : '',
+    createTime: formatDateTime(raw?.createTime),
+    isFavorited: false,
+  }
+}
+
+function applyLocalFilters(rows) {
+  const name = searchForm.value.name.trim()
+  const published = searchForm.value.published
+  const source = searchForm.value.source
+  const creator = searchForm.value.creator.trim()
+
+  return rows.filter((row) => {
+    if (name && !row.name.includes(name)) return false
+    if (published && row.published !== published) return false
+    if (source && row.source !== source) return false
+    if (creator && !row.creator.includes(creator)) return false
+    return true
+  })
+}
+
+async function loadModulesByTag() {
+  loading.value = true
+  try {
+    const list = await getModuleListByTag(searchForm.value.tag)
+    tableData.value = applyLocalFilters(list.map(normalizeModuleRow))
+    total.value = tableData.value.length
+  } catch (e) {
+    tableData.value = []
+    total.value = 0
+    alert(e?.message || '获取模板列表失败')
+  } finally {
+    loading.value = false
+  }
+}
 
 // 下拉框控制
 const toggleTagDropdown = () => {
@@ -373,8 +555,9 @@ const selectSource = (value) => {
 // 搜索和重置
 const handleSearch = () => {
   page.value = 1
-  // 这里可以调用API进行搜索
-  console.log('搜索条件：', searchForm.value)
+  if (activeTab.value === 'template') {
+    loadModulesByTag()
+  }
 }
 
 const handleReset = () => {
@@ -386,6 +569,8 @@ const handleReset = () => {
     creator: ''
   }
   page.value = 1
+  tableData.value = []
+  total.value = 0
 }
 
 // 分页控制
@@ -395,8 +580,39 @@ const goToPage = (p) => {
 }
 
 // 操作按钮
-const handleView = (item) => {
-  console.log('查看模板：', item)
+const handleView = async (item) => {
+  if (!item?.id) {
+    alert('模板ID缺失，无法查看')
+    return
+  }
+
+  detailDialogVisible.value = true
+  detailLoading.value = true
+  detailActiveTab.value = 'base'
+  moduleBaseInfo.value = {}
+  moduleDetailInfo.value = { object: [], operation: [], result: [] }
+
+  try {
+    const [baseInfo, detailInfo] = await Promise.all([
+      getModuleBaseInfo(item.id),
+      getModuleDetailInfo(item.id),
+    ])
+    moduleBaseInfo.value = baseInfo || {}
+    moduleDetailInfo.value = {
+      object: Array.isArray(detailInfo?.object) ? detailInfo.object : [],
+      operation: Array.isArray(detailInfo?.operation) ? detailInfo.operation : [],
+      result: Array.isArray(detailInfo?.result) ? detailInfo.result : [],
+    }
+  } catch (e) {
+    detailDialogVisible.value = false
+    alert(e?.message || '获取模板详情失败')
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+const closeDetailDialog = () => {
+  detailDialogVisible.value = false
 }
 
 const handleEdit = (item) => {
@@ -835,5 +1051,182 @@ onBeforeUnmount(() => {
   background: #1a5ce6;
   border-color: #1a5ce6;
   color: #fff;
+}
+
+.detail-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.detail-dialog {
+  width: min(980px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
+  overflow: auto;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+}
+
+.detail-dialog-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e8ecf4;
+  background: #fff;
+}
+
+.detail-dialog-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #222;
+}
+
+.detail-close-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #666;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.detail-close-btn:hover {
+  background: #f0f5ff;
+  color: #1a5ce6;
+}
+
+.detail-loading {
+  padding: 40px 20px;
+  text-align: center;
+  color: #666;
+}
+
+.detail-switch {
+  display: inline-flex;
+  gap: 0;
+  margin: 16px 20px 0;
+  padding: 3px;
+  border: 1px solid #d4dae6;
+  border-radius: 6px;
+  background: #f8f9fc;
+}
+
+.detail-switch-btn {
+  min-width: 92px;
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #555;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.detail-switch-btn.active {
+  background: #1a5ce6;
+  color: #fff;
+}
+
+.detail-switch-btn:not(.active):hover {
+  color: #1a5ce6;
+  background: #eef4ff;
+}
+
+.detail-section {
+  padding: 18px 20px 20px;
+  border-bottom: 1px solid #eef1f6;
+}
+
+.detail-section:last-child {
+  border-bottom: none;
+}
+
+.detail-section-title {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+.base-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+
+.base-info-item {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 34px;
+  align-items: center;
+  padding: 8px 10px;
+  background: #f8f9fc;
+  border-radius: 4px;
+}
+
+.base-info-item-wide {
+  grid-column: 1 / -1;
+}
+
+.base-info-label {
+  color: #666;
+  font-size: 13px;
+}
+
+.base-info-value {
+  min-width: 0;
+  color: #222;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.field-groups {
+  display: grid;
+  gap: 16px;
+}
+
+.field-group-title {
+  margin-bottom: 8px;
+  color: #1a5ce6;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.field-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.field-table th,
+.field-table td {
+  padding: 10px 12px;
+  border: 1px solid #e8ecf4;
+  text-align: left;
+}
+
+.field-table th {
+  background: #f5f7fb;
+  color: #333;
+  font-weight: 500;
+}
+
+.field-empty {
+  text-align: center;
+  color: #999;
 }
 </style>
