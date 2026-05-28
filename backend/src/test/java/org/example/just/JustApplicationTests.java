@@ -1,9 +1,19 @@
 package org.example.just;
 
+import org.example.just.dto.databaseDto.DataBasePageInitInfoVO;
+import org.example.just.dto.moduleDto.ModuleBaseInfoVO;
+import org.example.just.service.DataBaseService;
+import org.example.just.service.DatasetService;
+import org.example.just.service.ModuleService;
+import org.example.just.service.imp.DataBaseServiceImpl;
 import org.example.just.utils.JwtUtil;
+import org.example.just.utils.Result;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+
+import java.util.HashMap;
+import java.util.List;
 
 @SpringBootTest
 class JustApplicationTests {
@@ -33,6 +43,19 @@ class JustApplicationTests {
         System.out.println(" -----");
 
 
+    }
+
+    @Autowired
+    private DataBaseService dataBaseService;
+
+    @Autowired
+//    private DataBaseServiceImpl dataBaseServiceImpl;
+    private ModuleService moduleService;
+
+    @Test
+    void test2(){
+        Result<ModuleBaseInfoVO> moduleBaseInfo = moduleService.getModuleBaseInfo(1);
+        System.out.println(moduleBaseInfo.getData().getModuleName());
     }
 
 }

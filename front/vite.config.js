@@ -11,6 +11,15 @@ export default defineConfig({
         target: 'http://localhost:8083',
         changeOrigin: true,
       },
+      // 数据库相关接口不带 /api 前缀，单独代理到后端
+      '/database': {
+        target: 'http://localhost:8083',
+        changeOrigin: true,
+      },
+      '/user': {
+        target: 'http://localhost:8083',
+        changeOrigin: true,
+      },
     },
   },
 })

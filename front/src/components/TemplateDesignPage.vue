@@ -3,12 +3,14 @@
     <!-- 顶部步骤条 -->
     <div class="design-header">
       <div class="header-left">
-        <h1 class="page-title">创建模板 <span class="template-id">(123)</span></h1>
+        <h1 class="page-title">
+          创建模板 <span class="template-id">({{ moduleId }})</span>
+        </h1>
       </div>
       <div class="header-center">
         <div class="step-item done">
           <div class="step-icon">
-            <svg viewBox="0 0 24 24" width="16" height="16">
+            <svg viewBox="0 0 24 24" width="14" height="14">
               <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
             </svg>
           </div>
@@ -17,19 +19,13 @@
         <div class="step-line done"></div>
         <div class="step-item active">
           <div class="step-icon">
-            <svg viewBox="0 0 24 24" width="16" height="16">
+            <svg viewBox="0 0 24 24" width="14" height="14">
               <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
             </svg>
           </div>
           <span class="step-text">模板设计</span>
         </div>
-        <template v-if="templateType === 'dataset'">
-          <div class="step-line"></div>
-          <div class="step-item">
-            <div class="step-circle">3</div>
-            <span class="step-text">数据量规则配置</span>
-          </div>
-        </template>
+        <!-- 第三步（数据量规则配置）已暂时取消 -->
       </div>
       <div class="header-right">
         <button class="btn-secondary" @click="goBack">返回</button>
@@ -39,7 +35,7 @@
         <button class="btn-secondary" @click="preview">预览</button>
         <button class="btn-secondary" @click="saveDraft">暂存</button>
         <button class="btn-primary" @click="nextStep">
-          {{ templateType === 'dataset' ? '下一步' : '提交' }}
+          完成
         </button>
       </div>
     </div>
@@ -49,7 +45,7 @@
       <!-- 左侧：模板大纲 -->
       <aside class="outline-panel">
         <div class="panel-header">
-          <span>模板大纲</span>
+          <span class="panel-title">模板大纲</span>
           <button class="btn-icon" @click="toggleOutline">
             <svg viewBox="0 0 24 24" width="16" height="16">
               <path fill="currentColor" d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
@@ -57,60 +53,95 @@
           </button>
         </div>
         <div class="outline-content">
-          <div class="outline-section">
-            <div class="section-title" @click="toggleSection('object')">
-              <span class="toggle-icon" :class="{ collapsed: !sections.object }">▼</span>
-              <span>对象</span>
-            </div>
-            <div v-show="sections.object" class="section-items">
-              <div 
-                v-for="(item, index) in objectComponents" 
-                :key="item.id"
-                class="outline-item"
-                :class="{ active: selectedComponent?.id === item.id }"
-                @click="selectComponent(item)"
-              >
-                <span class="item-dot"></span>
-                <span class="item-name">{{ item.name || '未命名' }}</span>
-                <span class="item-type">({{ getTypeLabel(item.type) }})</span>
+          <div class="outline-tree">
+            <!-- 对象 -->
+            <div class="tree-node">
+              <div class="node-header" @click="toggleSection('object')">
+                <span class="expand-icon" :class="{ collapsed: !sections.object }">
+                  <svg viewBox="0 0 24 24" width="12" height="12">
+                    <path fill="currentColor" d="M7 10l5 5 5-5z"/>
+                  </svg>
+                </span>
+                <span class="node-label">对象</span>
+              </div>
+              <div v-show="sections.object" class="node-children">
+                <div 
+                  v-for="(item, index) in objectComponents" 
+                  :key="item.id"
+                  class="tree-item"
+                  :class="{ active: selectedComponent?.id === item.id }"
+                  @click="selectComponent(item)"
+                >
+                  <span class="item-icon">
+                    <svg v-if="item.type === 'string'" viewBox="0 0 24 24" width="12" height="12">
+                      <rect x="4" y="6" width="16" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    <svg v-else-if="item.type === 'number'" viewBox="0 0 24 24" width="12" height="12">
+                      <text x="12" y="17" text-anchor="middle" fill="currentColor" font-size="14" font-weight="bold">123</text>
+                    </svg>
+                    <svg v-else viewBox="0 0 24 24" width="12" height="12">
+                      <rect x="4" y="6" width="16" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                  </span>
+                  <span class="item-name">{{ item.name || '未命名' }}</span>
+                  <span class="item-type">({{ getTypeLabel(item.type) }})</span>
+                </div>
               </div>
             </div>
-          </div>
-          <div class="outline-section">
-            <div class="section-title" @click="toggleSection('operation')">
-              <span class="toggle-icon" :class="{ collapsed: !sections.operation }">▼</span>
-              <span>操作</span>
-            </div>
-            <div v-show="sections.operation" class="section-items">
-              <div 
-                v-for="(item, index) in operationComponents" 
-                :key="item.id"
-                class="outline-item"
-                :class="{ active: selectedComponent?.id === item.id }"
-                @click="selectComponent(item)"
-              >
-                <span class="item-dot"></span>
-                <span class="item-name">{{ item.name || '未命名' }}</span>
-                <span class="item-type">({{ getTypeLabel(item.type) }})</span>
+            <!-- 操作 -->
+            <div class="tree-node">
+              <div class="node-header" @click="toggleSection('operation')">
+                <span class="expand-icon" :class="{ collapsed: !sections.operation }">
+                  <svg viewBox="0 0 24 24" width="12" height="12">
+                    <path fill="currentColor" d="M7 10l5 5 5-5z"/>
+                  </svg>
+                </span>
+                <span class="node-label">操作</span>
+              </div>
+              <div v-show="sections.operation" class="node-children">
+                <div 
+                  v-for="(item, index) in operationComponents" 
+                  :key="item.id"
+                  class="tree-item"
+                  :class="{ active: selectedComponent?.id === item.id }"
+                  @click="selectComponent(item)"
+                >
+                  <span class="item-icon">
+                    <svg viewBox="0 0 24 24" width="12" height="12">
+                      <text x="12" y="17" text-anchor="middle" fill="currentColor" font-size="14" font-weight="bold">123</text>
+                    </svg>
+                  </span>
+                  <span class="item-name">{{ item.name || '未命名' }}</span>
+                  <span class="item-type">({{ getTypeLabel(item.type) }})</span>
+                </div>
               </div>
             </div>
-          </div>
-          <div class="outline-section">
-            <div class="section-title" @click="toggleSection('result')">
-              <span class="toggle-icon" :class="{ collapsed: !sections.result }">▼</span>
-              <span>结果</span>
-            </div>
-            <div v-show="sections.result" class="section-items">
-              <div 
-                v-for="(item, index) in resultComponents" 
-                :key="item.id"
-                class="outline-item"
-                :class="{ active: selectedComponent?.id === item.id }"
-                @click="selectComponent(item)"
-              >
-                <span class="item-dot"></span>
-                <span class="item-name">{{ item.name || '未命名' }}</span>
-                <span class="item-type">({{ getTypeLabel(item.type) }})</span>
+            <!-- 结果 -->
+            <div class="tree-node">
+              <div class="node-header" @click="toggleSection('result')">
+                <span class="expand-icon" :class="{ collapsed: !sections.result }">
+                  <svg viewBox="0 0 24 24" width="12" height="12">
+                    <path fill="currentColor" d="M7 10l5 5 5-5z"/>
+                  </svg>
+                </span>
+                <span class="node-label">结果</span>
+              </div>
+              <div v-show="sections.result" class="node-children">
+                <div 
+                  v-for="(item, index) in resultComponents" 
+                  :key="item.id"
+                  class="tree-item"
+                  :class="{ active: selectedComponent?.id === item.id }"
+                  @click="selectComponent(item)"
+                >
+                  <span class="item-icon">
+                    <svg viewBox="0 0 24 24" width="12" height="12">
+                      <rect x="4" y="8" width="16" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                  </span>
+                  <span class="item-name">{{ item.name || '未命名' }}</span>
+                  <span class="item-type">({{ getTypeLabel(item.type) }})</span>
+                </div>
               </div>
             </div>
           </div>
@@ -129,21 +160,23 @@
             @dragstart="handleDragStart($event, type)"
             @dragend="handleDragEnd"
           >
-            <div class="type-icon" :style="{ background: type.color }">
-              <svg v-if="type.icon" viewBox="0 0 24 24" width="20" height="20">
-                <path fill="currentColor" :d="type.icon"/>
-              </svg>
+            <div class="type-icon-wrapper">
+              <div class="type-icon" :style="{ background: type.color }">
+                <svg v-if="type.icon" viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="currentColor" :d="type.icon"/>
+                </svg>
+              </div>
+              <span v-if="type.count > 0" class="type-badge">{{ type.count }}</span>
             </div>
             <span class="type-name">{{ type.label }}</span>
-            <span v-if="type.count" class="type-count">{{ type.count }}</span>
           </div>
         </div>
 
         <!-- 区域头部 -->
         <div class="area-header">
           <div class="area-title">
-            <span class="title-line"></span>
-            <span>模板设计</span>
+            <span class="title-indicator"></span>
+            <span class="title-text">模板设计</span>
           </div>
           <div class="area-actions">
             <span class="action-label">开启模板片段推荐</span>
@@ -152,7 +185,7 @@
               <span class="slider"></span>
             </label>
             <button class="btn-text" @click="showFieldSettings">字段设置</button>
-            <button class="btn-icon" @click="toggleFullscreen">
+            <button class="btn-icon-action" @click="toggleFullscreen">
               <svg viewBox="0 0 24 24" width="16" height="16">
                 <path fill="currentColor" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
               </svg>
@@ -172,164 +205,164 @@
               @dragleave="handleDragLeave"
               @drop="handleDrop($event, 'object')"
             >
-            <div class="area-label">对象</div>
-            <div class="area-content">
-              <template v-if="objectComponents.length > 0">
-                <div 
-                  v-for="(component, index) in objectComponents" 
-                  :key="component.id"
-                  class="dropped-component"
-                  :class="{ 
-                    'selected': selectedComponent?.id === component.id,
-                    'has-error': hasComponentError(component.id)
-                  }"
-                  :id="`component-${component.id}`"
-                  @click="selectComponent(component)"
-                >
-                  <div class="component-header">
-                    <span class="component-type-tag" :style="{ background: getComponentColor(component.type) }">
-                      {{ getTypeLabel(component.type) }}
-                    </span>
-                    <span class="component-name">{{ component.name || '未命名' }}</span>
-                    <div class="component-actions">
-                      <button class="btn-icon-small" @click.stop="copyComponent(component)">
-                        <svg viewBox="0 0 24 24" width="14" height="14">
-                          <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                        </svg>
-                      </button>
-                      <button class="btn-icon-small" @click.stop="deleteComponent('object', index)">
-                        <svg viewBox="0 0 24 24" width="14" height="14">
-                          <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                        </svg>
-                      </button>
+              <div class="area-label">对象</div>
+              <div class="area-content">
+                <template v-if="objectComponents.length > 0">
+                  <div 
+                    v-for="(component, index) in objectComponents" 
+                    :key="component.id"
+                    class="dropped-component"
+                    :class="{ 
+                      'selected': selectedComponent?.id === component.id,
+                      'has-error': hasComponentError(component.id)
+                    }"
+                    :id="`component-${component.id}`"
+                    @click="selectComponent(component)"
+                  >
+                    <div class="component-header">
+                      <span class="component-type-tag" :style="{ background: getComponentColor(component.type), color: getComponentTextColor(component.type) }">
+                        {{ getTypeLabel(component.type) }}
+                      </span>
+                      <span class="component-name">{{ component.name || '未命名' }}</span>
+                      <div class="component-actions">
+                        <button class="btn-icon-small" @click.stop="copyComponent(component)" title="复制">
+                          <svg viewBox="0 0 24 24" width="14" height="14">
+                            <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                          </svg>
+                        </button>
+                        <button class="btn-icon-small" @click.stop="deleteComponent('object', index)" title="删除">
+                          <svg viewBox="0 0 24 24" width="14" height="14">
+                            <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="component-preview">
+                      <input 
+                        v-if="component.type === 'string'" 
+                        type="text" 
+                        class="preview-input" 
+                        :placeholder="component.placeholder || '请输入'"
+                        disabled
+                      />
+                      <div v-else-if="component.type === 'range'" class="preview-range">
+                        <input type="text" class="preview-input-small" placeholder="最小值" disabled />
+                        <span class="range-separator">~</span>
+                        <input type="text" class="preview-input-small" placeholder="最大值" disabled />
+                        <span class="range-unit">{{ component.unit || '单位' }}</span>
+                      </div>
+                      <div v-else-if="component.type === 'number'" class="preview-number">
+                        <input type="number" class="preview-input" :placeholder="component.placeholder || '请输入数值'" disabled />
+                        <span class="number-unit">{{ component.unit || '单位' }}</span>
+                      </div>
                     </div>
                   </div>
-                  <div class="component-preview">
-                    <input 
-                      v-if="component.type === 'string'" 
-                      type="text" 
-                      class="preview-input" 
-                      :placeholder="component.placeholder || '请输入'"
-                      disabled
-                    />
-                    <div v-else-if="component.type === 'range'" class="preview-range">
-                      <input type="text" class="preview-input-small" placeholder="最小值" disabled />
-                      <span class="range-separator">~</span>
-                      <input type="text" class="preview-input-small" placeholder="最大值" disabled />
-                      <span class="range-unit">{{ component.unit || '单位' }}</span>
-                    </div>
-                    <div v-else-if="component.type === 'number'" class="preview-number">
-                      <input type="number" class="preview-input" :placeholder="component.placeholder || '请输入数值'" disabled />
-                      <span class="number-unit">{{ component.unit || '单位' }}</span>
-                    </div>
-                  </div>
+                </template>
+                <div v-else class="empty-hint">
+                  <span class="add-icon">+</span>
+                  <span>将控件拖入此区域</span>
                 </div>
-              </template>
-              <div v-else class="empty-hint">
-                <span class="add-icon">+</span>
-                <span>将控件拖入此区域</span>
               </div>
             </div>
-          </div>
 
-          <!-- 操作区域 -->
-          <div 
-            class="drop-area"
-            :class="{ 'drag-over': dragOverZone === 'operation', 'has-error': hasError('operation') }"
-            @dragover.prevent="handleDragOver($event, 'operation')"
-            @dragleave="handleDragLeave"
-            @drop="handleDrop($event, 'operation')"
-          >
-            <div class="area-label">操作</div>
-            <div class="area-content">
-              <template v-if="operationComponents.length > 0">
-                <div 
-                  v-for="(component, index) in operationComponents" 
-                  :key="component.id"
-                  class="dropped-component"
-                  :class="{ 
-                    'selected': selectedComponent?.id === component.id,
-                    'has-error': hasComponentError(component.id)
-                  }"
-                  :id="'component-' + component.id"
-                  @click="selectComponent(component)"
-                >
-                  <div class="component-header">
-                    <span class="component-type-tag" :style="{ background: getComponentColor(component.type) }">
-                      {{ getTypeLabel(component.type) }}
-                    </span>
-                    <span class="component-name">{{ component.name || '未命名' }}</span>
-                    <div class="component-actions">
-                      <button class="btn-icon-small" @click.stop="copyComponent(component)">
-                        <svg viewBox="0 0 24 24" width="14" height="14">
-                          <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                        </svg>
-                      </button>
-                      <button class="btn-icon-small" @click.stop="deleteComponent('operation', index)">
-                        <svg viewBox="0 0 24 24" width="14" height="14">
-                          <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                        </svg>
-                      </button>
+            <!-- 操作区域 -->
+            <div 
+              class="drop-area"
+              :class="{ 'drag-over': dragOverZone === 'operation', 'has-error': hasError('operation') }"
+              @dragover.prevent="handleDragOver($event, 'operation')"
+              @dragleave="handleDragLeave"
+              @drop="handleDrop($event, 'operation')"
+            >
+              <div class="area-label">操作</div>
+              <div class="area-content">
+                <template v-if="operationComponents.length > 0">
+                  <div 
+                    v-for="(component, index) in operationComponents" 
+                    :key="component.id"
+                    class="dropped-component"
+                    :class="{ 
+                      'selected': selectedComponent?.id === component.id,
+                      'has-error': hasComponentError(component.id)
+                    }"
+                    :id="'component-' + component.id"
+                    @click="selectComponent(component)"
+                  >
+                    <div class="component-header">
+                      <span class="component-type-tag" :style="{ background: getComponentColor(component.type), color: getComponentTextColor(component.type) }">
+                        {{ getTypeLabel(component.type) }}
+                      </span>
+                      <span class="component-name">{{ component.name || '未命名' }}</span>
+                      <div class="component-actions">
+                        <button class="btn-icon-small" @click.stop="copyComponent(component)" title="复制">
+                          <svg viewBox="0 0 24 24" width="14" height="14">
+                            <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                          </svg>
+                        </button>
+                        <button class="btn-icon-small" @click.stop="deleteComponent('operation', index)" title="删除">
+                          <svg viewBox="0 0 24 24" width="14" height="14">
+                            <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   </div>
+                </template>
+                <div v-else class="empty-hint">
+                  <span class="add-icon">+</span>
+                  <span>将控件拖入此区域</span>
                 </div>
-              </template>
-              <div v-else class="empty-hint">
-                <span class="add-icon">+</span>
-                <span>将控件拖入此区域</span>
               </div>
             </div>
-          </div>
 
-          <!-- 结果区域 -->
-          <div 
-            class="drop-area"
-            :class="{ 'drag-over': dragOverZone === 'result', 'has-error': hasError('result') }"
-            @dragover.prevent="handleDragOver($event, 'result')"
-            @dragleave="handleDragLeave"
-            @drop="handleDrop($event, 'result')"
-          >
-            <div class="area-label">结果</div>
-            <div class="area-content">
-              <template v-if="resultComponents.length > 0">
-                <div 
-                  v-for="(component, index) in resultComponents" 
-                  :key="component.id"
-                  class="dropped-component"
-                  :class="{ 
-                    'selected': selectedComponent?.id === component.id,
-                    'has-error': hasComponentError(component.id)
-                  }"
-                  :id="`component-${component.id}`"
-                  @click="selectComponent(component)"
-                >
-                  <div class="component-header">
-                    <span class="component-type-tag" :style="{ background: getComponentColor(component.type) }">
-                      {{ getTypeLabel(component.type) }}
-                    </span>
-                    <span class="component-name">{{ component.name || '未命名' }}</span>
-                    <div class="component-actions">
-                      <button class="btn-icon-small" @click.stop="copyComponent(component)">
-                        <svg viewBox="0 0 24 24" width="14" height="14">
-                          <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                        </svg>
-                      </button>
-                      <button class="btn-icon-small" @click.stop="deleteComponent('result', index)">
-                        <svg viewBox="0 0 24 24" width="14" height="14">
-                          <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-                        </svg>
-                      </button>
+            <!-- 结果区域 -->
+            <div 
+              class="drop-area"
+              :class="{ 'drag-over': dragOverZone === 'result', 'has-error': hasError('result') }"
+              @dragover.prevent="handleDragOver($event, 'result')"
+              @dragleave="handleDragLeave"
+              @drop="handleDrop($event, 'result')"
+            >
+              <div class="area-label">结果</div>
+              <div class="area-content">
+                <template v-if="resultComponents.length > 0">
+                  <div 
+                    v-for="(component, index) in resultComponents" 
+                    :key="component.id"
+                    class="dropped-component"
+                    :class="{ 
+                      'selected': selectedComponent?.id === component.id,
+                      'has-error': hasComponentError(component.id)
+                    }"
+                    :id="`component-${component.id}`"
+                    @click="selectComponent(component)"
+                  >
+                    <div class="component-header">
+                      <span class="component-type-tag" :style="{ background: getComponentColor(component.type), color: getComponentTextColor(component.type) }">
+                        {{ getTypeLabel(component.type) }}
+                      </span>
+                      <span class="component-name">{{ component.name || '未命名' }}</span>
+                      <div class="component-actions">
+                        <button class="btn-icon-small" @click.stop="copyComponent(component)" title="复制">
+                          <svg viewBox="0 0 24 24" width="14" height="14">
+                            <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                          </svg>
+                        </button>
+                        <button class="btn-icon-small" @click.stop="deleteComponent('result', index)" title="删除">
+                          <svg viewBox="0 0 24 24" width="14" height="14">
+                            <path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   </div>
+                </template>
+                <div v-else class="empty-hint">
+                  <span class="add-icon">+</span>
+                  <span>将控件拖入此区域</span>
                 </div>
-              </template>
-              <div v-else class="empty-hint">
-                <span class="add-icon">+</span>
-                <span>将控件拖入此区域</span>
               </div>
             </div>
           </div>
-        </div>
         </div>
       </main>
 
@@ -508,17 +541,22 @@
 
 <script setup>
 import { ref, reactive, computed } from 'vue'
+import { designModule } from '../api/module.js'
 
 const props = defineProps({
   templateType: {
     type: String,
     default: 'dataset' // 'dataset' 或 'fragment'
-  }
+  },
+  moduleId: {
+    type: Number,
+    default: 123,
+  },
 })
 
-// 组件类型定义
+// 组件类型定义 - 根据参考图片更新颜色和图标
 const componentTypes = [
-  { value: 'string', label: '字符串型', color: '#e6f7ff', icon: 'M3 5h18v2H3zm0 6h18v2H3zm0 6h18v2H3z', count: 0 },
+  { value: 'string', label: '字符串型', color: '#e8f4fd', icon: 'M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z', count: 0 },
   { value: 'number', label: '数值型', color: '#fff7e6', icon: 'M7 15h2v-2H7v2zm0-8h2V5H7v2zm4 8h2v-2h-2v2zm0-8h2V5h-2v2zm4 8h2v-2h-2v2zm0-8h2V5h-2v2z', count: 0 },
   { value: 'range', label: '范围型', color: '#f6ffed', icon: 'M9 11H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zM3 5h18v2H3V5zm0 12h18v2H3v-2z', count: 0 },
   { value: 'select', label: '候选型', color: '#fff0f6', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z', count: 0 },
@@ -529,6 +567,20 @@ const componentTypes = [
   { value: 'container', label: '容器型', color: '#fff2f0', icon: 'M3 5h18v2H3zm0 6h18v2H3zm0 6h18v2H3z', count: 0 },
   { value: 'generator', label: '生成器型', color: '#fffbe6', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z', count: 0 },
 ]
+
+// 组件类型文字颜色映射
+const componentTextColors = {
+  string: '#1890ff',
+  number: '#faad14',
+  range: '#52c41a',
+  select: '#eb2f96',
+  image: '#722ed1',
+  file: '#fa8c16',
+  array: '#13c2c2',
+  table: '#2f54eb',
+  container: '#f5222d',
+  generator: '#faad14'
+}
 
 // 区域展开状态
 const sections = reactive({
@@ -584,7 +636,12 @@ const getTypeLabel = (type) => {
 // 获取组件颜色
 const getComponentColor = (type) => {
   const found = componentTypes.find(t => t.value === type)
-  return found ? found.color : '#e6f7ff'
+  return found ? found.color : '#e8f4fd'
+}
+
+// 获取组件文字颜色
+const getComponentTextColor = (type) => {
+  return componentTextColors[type] || '#333'
 }
 
 // 生成唯一ID
@@ -793,21 +850,46 @@ const validateForm = () => {
 // 定义事件
 const emit = defineEmits(['back', 'next', 'submit'])
 
-// 下一步
-const nextStep = () => {
+// 下一步（保存模板设计）
+const nextStep = async () => {
   const errors = validateForm()
   if (errors.length > 0) {
     validationErrors.value = errors
     showErrorModal.value = true
   } else {
-    // 根据模板类型决定下一步
-    if (props.templateType === 'dataset') {
-      // 数据模板：进入数据量规则配置
-      emit('next')
-    } else {
-      // 模板片段：直接提交
-      emit('submit')
+    if (!props.moduleId) {
+      alert('模板id缺失，无法保存设计')
+      return
     }
+
+    const componentTypeToColumnType = (t) => {
+      // 后端 DatasetColumnEntity 示例：varchar / int
+      if (t === 'number' || t === 'range') return 'int'
+      return 'varchar'
+    }
+
+    const toColumnItems = (list) =>
+      (list || []).map((c) => ({
+        columnName: String(c.name || '').trim(),
+        type: componentTypeToColumnType(c.type),
+      }))
+
+    const payload = {
+      moduleId: props.moduleId,
+      object: toColumnItems(objectComponents.value),
+      operation: toColumnItems(operationComponents.value),
+      result: toColumnItems(resultComponents.value),
+    }
+
+    try {
+      await designModule(payload)
+    } catch (e) {
+      alert(e?.message || '保存模板设计失败')
+      return
+    }
+
+    // 到此即完成：由父组件弹出成功提示并引导去查看
+    emit('submit', { moduleId: props.moduleId })
   }
 }
 
@@ -903,7 +985,7 @@ const toggleFullscreen = () => {
 <style scoped>
 .design-page {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: #f0f2f5;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -917,6 +999,7 @@ const toggleFullscreen = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 
 .header-left {
@@ -925,44 +1008,47 @@ const toggleFullscreen = () => {
 
 .page-title {
   font-size: 18px;
-  font-weight: 600;
-  color: #333;
+  font-weight: 700;
+  color: #1a1a1a;
 }
 
 .template-id {
   font-size: 14px;
-  color: #999;
+  color: #666;
   font-weight: normal;
+  margin-left: 4px;
 }
 
 .header-center {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
 .step-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #999;
+  color: #666;
   font-size: 14px;
-}
-
-.step-item.active {
-  color: #1a5ce6;
   font-weight: 500;
 }
 
+.step-item.active {
+  color: #1890ff;
+  font-weight: 600;
+}
+
 .step-item.done {
-  color: #1a5ce6;
+  color: #1890ff;
+  font-weight: 600;
 }
 
 .step-icon {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: #1a5ce6;
+  background: #1890ff;
   color: #fff;
   display: flex;
   align-items: center;
@@ -970,25 +1056,26 @@ const toggleFullscreen = () => {
 }
 
 .step-circle {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  border: 2px solid #ddd;
+  border: 2px solid #d9d9d9;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 11px;
   color: #999;
+  font-weight: 500;
 }
 
 .step-line {
   width: 40px;
   height: 1px;
-  background: #e0e0e0;
+  background: #e8e8e8;
 }
 
 .step-line.done {
-  background: #1a5ce6;
+  background: #1890ff;
 }
 
 .header-right {
@@ -997,63 +1084,71 @@ const toggleFullscreen = () => {
 }
 
 .btn-secondary {
-  padding: 6px 16px;
+  padding: 8px 18px;
   border: 1px solid #d9d9d9;
   background: #fff;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #595959;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .btn-secondary:hover {
-  border-color: #1a5ce6;
-  color: #1a5ce6;
+  border-color: #1890ff;
+  color: #1890ff;
 }
 
 .btn-primary {
-  padding: 6px 16px;
-  border: 1px solid #1a5ce6;
-  background: #1a5ce6;
+  padding: 8px 22px;
+  border: none;
+  background: #1890ff;
   color: #fff;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s;
 }
 
 .btn-primary:hover {
-  background: #1246bb;
+  background: #096dd9;
 }
 
 /* 主体区域 */
 .design-body {
   flex: 1;
   display: flex;
-  overflow: visible;
-  position: relative;
+  overflow: hidden;
+  padding: 16px;
+  gap: 16px;
 }
 
-/* 左侧大纲面板 - 固定在顶部 */
+/* 左侧面板 */
 .outline-panel {
   width: 220px;
   background: #fff;
-  border-right: 1px solid #e8e8e8;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
-  position: sticky;
-  top: 0;
-  height: fit-content;
-  max-height: calc(100vh - 80px);
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .panel-header {
   padding: 12px 16px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid #f0f0f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-weight: 500;
+}
+
+.panel-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
 }
 
 .btn-icon {
@@ -1066,82 +1161,94 @@ const toggleFullscreen = () => {
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  color: #666;
+  color: #999;
+  transition: all 0.2s;
 }
 
 .btn-icon:hover {
-  background: #f0f0f0;
+  background: #f5f5f5;
+  color: #666;
 }
 
 .outline-content {
+  flex: 1;
   overflow-y: auto;
   padding: 8px;
-  max-height: calc(100vh - 200px);
 }
 
-.outline-section {
-  margin-bottom: 4px;
+/* 树形结构 */
+.outline-tree {
+  padding: 4px;
 }
 
-.section-title {
-  padding: 8px 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: #333;
-  border-radius: 4px;
+.tree-node {
+  margin-bottom: 2px;
 }
 
-.section-title:hover {
-  background: #f5f5f5;
-}
-
-.toggle-icon {
-  font-size: 10px;
-  transition: transform 0.2s;
-}
-
-.toggle-icon.collapsed {
-  transform: rotate(-90deg);
-}
-
-.section-items {
-  padding-left: 24px;
-}
-
-.outline-item {
-  padding: 6px 12px;
-  cursor: pointer;
+.node-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  padding: 8px 10px;
+  cursor: pointer;
   border-radius: 4px;
+  transition: background 0.2s;
 }
 
-.outline-item:hover {
-  background: #f0f5ff;
+.node-header:hover {
+  background: #f5f5f5;
 }
 
-.outline-item.active {
+.expand-icon {
+  display: flex;
+  align-items: center;
+  color: #999;
+  transition: transform 0.2s;
+}
+
+.expand-icon.collapsed {
+  transform: rotate(-90deg);
+}
+
+.node-label {
+  font-size: 14px;
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.node-children {
+  padding-left: 16px;
+}
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  margin-bottom: 2px;
+}
+
+.tree-item:hover {
   background: #e6f7ff;
-  color: #1a5ce6;
 }
 
-.item-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #999;
+.tree-item.active {
+  background: #e6f7ff;
 }
 
-.outline-item.active .item-dot {
-  background: #1a5ce6;
+.item-icon {
+  display: flex;
+  align-items: center;
+  color: #1890ff;
 }
 
 .item-name {
+  font-size: 13px;
+  color: #262626;
+  font-weight: 500;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1149,50 +1256,56 @@ const toggleFullscreen = () => {
 }
 
 .item-type {
-  color: #999;
   font-size: 12px;
+  color: #8c8c8c;
 }
 
 /* 中间设计区域 */
 .design-area {
   flex: 1;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 80px);
   overflow: hidden;
 }
 
-/* 组件工具栏 - 固定在顶部 */
+/* 组件工具栏 */
 .component-toolbar {
   flex-shrink: 0;
   background: #fff;
-  padding: 12px 24px;
-  border-bottom: 1px solid #e8e8e8;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f0f0f0;
   display: flex;
-  gap: 16px;
+  gap: 24px;
   overflow-x: auto;
 }
-
 
 .component-type {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   cursor: move;
-  padding: 8px;
+  padding: 4px;
   border-radius: 6px;
-  transition: background 0.2s;
-  min-width: 60px;
+  transition: all 0.2s;
+  min-width: 56px;
 }
 
 .component-type:hover {
   background: #f5f5f5;
+  transform: translateY(-2px);
+}
+
+.type-icon-wrapper {
+  position: relative;
 }
 
 .type-icon {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -1200,57 +1313,58 @@ const toggleFullscreen = () => {
   color: #333;
 }
 
-.type-name {
-  font-size: 12px;
-  color: #666;
-}
-
-.type-count {
+.type-badge {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 16px;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
   height: 16px;
-  border-radius: 50%;
+  border-radius: 8px;
   background: #faad14;
   color: #fff;
   font-size: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0 4px;
+  font-weight: 500;
 }
 
-/* 区域头部 - 固定在顶部 */
+.type-name {
+  font-size: 13px;
+  color: #595959;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* 区域头部 */
 .area-header {
   flex-shrink: 0;
   background: #fff;
   padding: 12px 24px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid #f0f0f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-/* 中间内容区 - 可独立滚动 */
-.design-content {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
 .area-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
 }
 
-.title-line {
-  width: 4px;
+.title-indicator {
+  width: 3px;
   height: 16px;
-  background: #1a5ce6;
+  background: #1890ff;
   border-radius: 2px;
+}
+
+.title-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
 }
 
 .area-actions {
@@ -1260,8 +1374,9 @@ const toggleFullscreen = () => {
 }
 
 .action-label {
-  font-size: 13px;
-  color: #666;
+  font-size: 14px;
+  color: #595959;
+  font-weight: 500;
 }
 
 .switch {
@@ -1301,7 +1416,7 @@ const toggleFullscreen = () => {
 }
 
 input:checked + .slider {
-  background-color: #1a5ce6;
+  background-color: #1890ff;
 }
 
 input:checked + .slider:before {
@@ -1311,28 +1426,69 @@ input:checked + .slider:before {
 .btn-text {
   border: none;
   background: transparent;
-  color: #1a5ce6;
+  color: #1890ff;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.btn-text:hover {
+  background: #e6f7ff;
+}
+
+.btn-icon-action {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: #999;
+  transition: all 0.2s;
+}
+
+.btn-icon-action:hover {
+  background: #f5f5f5;
+  color: #666;
+}
+
+/* 中间内容区 */
+.design-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+  background: #fafafa;
 }
 
 .drop-areas {
-  padding: 16px 24px;
-  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .drop-area {
   background: #fff;
-  border: 2px dashed #e8e8e8;
+  border: 2px dashed #d9d9d9;
   border-radius: 8px;
-  margin-bottom: 16px;
   min-height: 120px;
   transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+.drop-area:hover {
+  border-color: #bfbfbf;
 }
 
 .drop-area.drag-over {
-  border-color: #1a5ce6;
-  background: #f0f5ff;
+  border-color: #1890ff;
+  background: #e6f7ff;
 }
 
 .drop-area.has-error {
@@ -1340,16 +1496,19 @@ input:checked + .slider:before {
 }
 
 .area-label {
-  display: inline-block;
-  padding: 4px 12px;
-  background: #1a5ce6;
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 6px 14px;
+  background: #1890ff;
   color: #fff;
-  font-size: 12px;
-  border-radius: 0 0 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 0 0 8px 0;
 }
 
 .area-content {
-  padding: 16px;
+  padding: 40px 20px 20px;
 }
 
 .empty-hint {
@@ -1357,33 +1516,35 @@ input:checked + .slider:before {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  color: #1a5ce6;
-  font-size: 14px;
-  height: 60px;
+  color: #1890ff;
+  font-size: 15px;
+  font-weight: 500;
+  min-height: 60px;
 }
 
 .add-icon {
   font-size: 20px;
+  font-weight: 400;
 }
 
 .dropped-component {
   background: #fff;
   border: 1px solid #e8e8e8;
   border-radius: 6px;
-  padding: 12px;
+  padding: 12px 16px;
   margin-bottom: 12px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .dropped-component:hover {
-  border-color: #1a5ce6;
-  box-shadow: 0 2px 8px rgba(26, 92, 230, 0.1);
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.1);
 }
 
 .dropped-component.selected {
-  border-color: #1a5ce6;
-  box-shadow: 0 0 0 2px rgba(26, 92, 230, 0.2);
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.15);
 }
 
 .dropped-component.has-error {
@@ -1406,21 +1567,22 @@ input:checked + .slider:before {
 .component-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 8px;
 }
 
 .component-type-tag {
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 4px;
-  font-size: 12px;
-  color: #333;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .component-name {
   flex: 1;
-  font-weight: 500;
-  color: #333;
+  font-weight: 600;
+  color: #262626;
+  font-size: 15px;
 }
 
 .component-actions {
@@ -1445,6 +1607,7 @@ input:checked + .slider:before {
   justify-content: center;
   border-radius: 4px;
   color: #999;
+  transition: all 0.2s;
 }
 
 .btn-icon-small:hover {
@@ -1453,23 +1616,23 @@ input:checked + .slider:before {
 }
 
 .component-preview {
-  padding: 8px;
-  background: #fafafa;
+  padding: 10px 12px;
+  background: #f5f5f5;
   border-radius: 4px;
 }
 
 .preview-input {
   width: 100%;
-  padding: 6px 10px;
-  border: 1px solid #e8e8e8;
+  padding: 10px 12px;
+  border: 1px solid #d9d9d9;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 14px;
   background: #fff;
+  color: #8c8c8c;
 }
 
 .preview-input:disabled {
   background: #f5f5f5;
-  color: #999;
 }
 
 .preview-range {
@@ -1480,10 +1643,10 @@ input:checked + .slider:before {
 
 .preview-input-small {
   width: 80px;
-  padding: 6px 10px;
-  border: 1px solid #e8e8e8;
+  padding: 10px 10px;
+  border: 1px solid #d9d9d9;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .range-separator {
@@ -1492,8 +1655,9 @@ input:checked + .slider:before {
 
 .range-unit,
 .number-unit {
-  font-size: 12px;
-  color: #999;
+  font-size: 13px;
+  color: #8c8c8c;
+  font-weight: 500;
 }
 
 .preview-number {
@@ -1502,22 +1666,20 @@ input:checked + .slider:before {
   gap: 8px;
 }
 
-/* 右侧面板 - 固定在顶部 */
+/* 右侧面板 */
 .right-panel {
-  width: 320px;
+  width: 300px;
   background: #fff;
-  border-left: 1px solid #e8e8e8;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
-  position: sticky;
-  top: 0;
-  height: fit-content;
-  max-height: calc(100vh - 80px);
-  overflow-y: auto;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .field-settings {
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .settings-content {
@@ -1531,32 +1693,36 @@ input:checked + .slider:before {
 .setting-group label {
   display: block;
   margin-bottom: 8px;
-  font-size: 13px;
-  color: #333;
+  font-size: 14px;
+  color: #262626;
+  font-weight: 500;
 }
 
 .setting-value {
-  padding: 8px 12px;
+  padding: 10px 12px;
   background: #f5f5f5;
   border-radius: 4px;
-  font-size: 13px;
-  color: #666;
+  font-size: 14px;
+  color: #262626;
+  font-weight: 500;
 }
 
 .setting-input,
 .setting-textarea {
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border: 1px solid #d9d9d9;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 14px;
+  color: #262626;
   transition: all 0.2s;
+  box-sizing: border-box;
 }
 
 .setting-input:focus,
 .setting-textarea:focus {
   outline: none;
-  border-color: #1a5ce6;
+  border-color: #1890ff;
 }
 
 .setting-input.has-error,
@@ -1568,6 +1734,7 @@ input:checked + .slider:before {
 .setting-textarea {
   resize: vertical;
   font-family: inherit;
+  min-height: 60px;
 }
 
 .required {
@@ -1585,11 +1752,13 @@ input:checked + .slider:before {
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
+  color: #262626;
+  font-weight: 500;
 }
 
 .radio-label input {
-  accent-color: #1a5ce6;
+  accent-color: #1890ff;
 }
 
 /* 模板片段库 */
@@ -1602,7 +1771,7 @@ input:checked + .slider:before {
 
 .library-tabs {
   display: flex;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .library-tabs button {
@@ -1611,14 +1780,21 @@ input:checked + .slider:before {
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 13px;
-  color: #666;
+  font-size: 14px;
+  color: #595959;
+  font-weight: 500;
   border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.library-tabs button:hover {
+  color: #1890ff;
 }
 
 .library-tabs button.active {
-  color: #1a5ce6;
-  border-bottom-color: #1a5ce6;
+  color: #1890ff;
+  border-bottom-color: #1890ff;
+  font-weight: 600;
 }
 
 .library-search {
@@ -1629,19 +1805,33 @@ input:checked + .slider:before {
 
 .library-search input {
   flex: 1;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border: 1px solid #d9d9d9;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 14px;
+  color: #262626;
+}
+
+.library-search input:focus {
+  outline: none;
+  border-color: #1890ff;
 }
 
 .btn-search {
-  padding: 6px 12px;
+  padding: 8px 14px;
   border: 1px solid #d9d9d9;
   background: #fff;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #595959;
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-search:hover {
+  border-color: #1890ff;
+  color: #1890ff;
 }
 
 .library-content {
@@ -1651,20 +1841,21 @@ input:checked + .slider:before {
 }
 
 .library-item {
-  padding: 10px;
+  padding: 10px 12px;
   border: 1px solid #e8e8e8;
-  border-radius: 4px;
+  border-radius: 6px;
   margin-bottom: 8px;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
 .library-item:hover {
-  border-color: #1a5ce6;
+  border-color: #1890ff;
 }
 
 .library-item.expanded {
-  border-color: #1a5ce6;
-  background: #f0f5ff;
+  border-color: #1890ff;
+  background: #e6f7ff;
 }
 
 .item-header {
@@ -1674,20 +1865,23 @@ input:checked + .slider:before {
 }
 
 .item-name {
-  font-size: 13px;
-  color: #333;
+  font-size: 14px;
+  color: #262626;
+  font-weight: 500;
 }
 
 .item-badge {
-  width: 18px;
+  min-width: 18px;
   height: 18px;
-  border-radius: 50%;
-  background: #1a5ce6;
+  border-radius: 9px;
+  background: #1890ff;
   color: #fff;
   font-size: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0 5px;
+  font-weight: 500;
 }
 
 .recommend-empty,
@@ -1699,14 +1893,15 @@ input:checked + .slider:before {
 }
 
 .preview-section {
-  border-top: 1px solid #e8e8e8;
+  border-top: 1px solid #f0f0f0;
   padding: 12px;
 }
 
 .preview-title {
-  font-size: 13px;
-  color: #666;
+  font-size: 14px;
+  color: #595959;
   margin-bottom: 12px;
+  font-weight: 600;
 }
 
 /* 错误弹窗 */
@@ -1735,7 +1930,7 @@ input:checked + .slider:before {
 
 .modal-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #e8e8e8;
+  border-bottom: 1px solid #f0f0f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1745,6 +1940,7 @@ input:checked + .slider:before {
   font-size: 16px;
   font-weight: 500;
   color: #333;
+  margin: 0;
 }
 
 .btn-close {
@@ -1756,6 +1952,7 @@ input:checked + .slider:before {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: color 0.2s;
 }
 
 .btn-close:hover {
@@ -1769,7 +1966,7 @@ input:checked + .slider:before {
 }
 
 .error-stats {
-  background: #f5f5f5;
+  background: #fff2f0;
   border-radius: 6px;
   padding: 12px 16px;
   margin-bottom: 16px;
@@ -1841,7 +2038,7 @@ input:checked + .slider:before {
 
 .modal-footer {
   padding: 16px 20px;
-  border-top: 1px solid #e8e8e8;
+  border-top: 1px solid #f0f0f0;
   display: flex;
   justify-content: flex-end;
   gap: 12px;
