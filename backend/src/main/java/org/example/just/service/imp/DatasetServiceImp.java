@@ -9,11 +9,20 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.example.just.dao.DatasetColumnDao;
 import org.example.just.dao.ManuDatasetDao;
 import org.example.just.dao.DatasetDataDao;
+import org.example.just.dao.ModuleColumnDao;
 import org.example.just.dao.ModuleDao;
+import org.example.just.context.UserContext;
+import org.example.just.dto.categoryDto.ProductCategoryTreeQueryDTO;
+import org.example.just.dto.categoryDto.ProductCategoryTreeResult;
+import org.example.just.dto.categoryDto.ProductCategoryTreeVO;
+import org.example.just.dto.categoryDto.ScienceCategoryTreeQueryDTO;
+import org.example.just.dto.categoryDto.ScienceCategoryTreeResult;
+import org.example.just.dto.categoryDto.ScienceCategoryTreeVO;
 import org.example.just.dto.datasetDto.*;
 import org.example.just.entity.DatasetColumnEntity;
 import org.example.just.entity.DatasetDataEntity;
 import org.example.just.entity.ManuDatasetEntity;
+import org.example.just.entity.ModuleColumnEntity;
 import org.example.just.entity.ModuleEntity;
 import org.example.just.service.DatasetService;
 import org.example.just.utils.PageQuery;
@@ -39,19 +48,18 @@ public class DatasetServiceImp implements DatasetService {
     private final DatasetColumnDao DatasetColumnDao;
     private final DatasetDataDao DatasetDataDao;
     private final ModuleDao moduleDao;
-    private final ObjectMapper objectMapper;
-    private final ManuDatasetDao manuDatasetDao;
+    private final ModuleColumnDao moduleColumnDao;
 
     public DatasetServiceImp(ManuDatasetDao DatasetDao,
-                             DatasetColumnDao DatasetColumnDao,
-                             DatasetDataDao DatasetDataDao,
-                             ModuleDao moduleDao, ManuDatasetDao manuDatasetDao) {
+                            DatasetColumnDao DatasetColumnDao,
+                            DatasetDataDao DatasetDataDao,
+                             ModuleDao moduleDao,
+                             ModuleColumnDao moduleColumnDao) {
         this.DatasetDao = DatasetDao;
         this.DatasetColumnDao = DatasetColumnDao;
         this.DatasetDataDao = DatasetDataDao;
         this.moduleDao = moduleDao;
-        this.objectMapper = new ObjectMapper();
-        this.manuDatasetDao = manuDatasetDao;
+        this.moduleColumnDao = moduleColumnDao;
     }
 
     @Transactional
@@ -168,119 +176,563 @@ public class DatasetServiceImp implements DatasetService {
         return Result.success(rootList);
     }
 
+    @Override
+    public ScienceCategoryTreeResult getScienceCategoryTree(ScienceCategoryTreeQueryDTO query) {
+        String keyword = query != null && StringUtils.hasText(query.getKeyword())
+                ? query.getKeyword().trim()
+                : "";
+        int page = query == null || query.getPage() == null || query.getPage() < 1
+                ? 1
+                : query.getPage();
+        int pageSize = query == null || query.getPageSize() == null || query.getPageSize() < 1
+                ? 50
+                : query.getPageSize();
+
+        LambdaQueryWrapper<ManuDatasetEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ManuDatasetEntity::getDeleted, 0)
+                .orderByAsc(ManuDatasetEntity::getId);
+
+        List<ManuDatasetEntity> allList = DatasetDao.selectList(wrapper);
+        if (allList == null || allList.isEmpty()) {
+            return ScienceCategoryTreeResult.success(new ArrayList<>(), 0);
+        }
+
+        List<ManuDatasetEntity> categoryList = allList.stream()
+                .filter(item -> item.getIsMenu() != null && item.getIsMenu() == 1)
+                .collect(Collectors.toList());
+        if (categoryList.isEmpty()) {
+            return ScienceCategoryTreeResult.success(new ArrayList<>(), 0);
+        }
+
+        Map<Integer, ManuDatasetEntity> categoryMap = categoryList.stream()
+                .collect(Collectors.toMap(ManuDatasetEntity::getId, item -> item, (a, b) -> a));
+        Map<Integer, List<ManuDatasetEntity>> categoryChildrenMap = new HashMap<>();
+        for (ManuDatasetEntity item : categoryList) {
+            Integer parentId = item.getParent() == null ? 0 : item.getParent();
+            categoryChildrenMap.computeIfAbsent(parentId, k -> new ArrayList<>()).add(item);
+        }
+        Map<Integer, List<ManuDatasetEntity>> allChildrenMap = new HashMap<>();
+        for (ManuDatasetEntity item : allList) {
+            Integer parentId = item.getParent() == null ? 0 : item.getParent();
+            allChildrenMap.computeIfAbsent(parentId, k -> new ArrayList<>()).add(item);
+        }
+
+        Map<Integer, Integer> datasetCountCache = new HashMap<>();
+        List<ScienceCategoryTreeVO> roots = categoryList.stream()
+                .filter(item -> item.getParent() == null
+                        || item.getParent() == 0
+                        || !categoryMap.containsKey(item.getParent()))
+                .map(item -> buildScienceCategoryNode(item, 0, categoryChildrenMap, allChildrenMap, datasetCountCache))
+                .map(item -> filterScienceCategoryTree(item, keyword))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        int total = roots.size();
+        int fromIndex = Math.min((page - 1) * pageSize, total);
+        int toIndex = Math.min(fromIndex + pageSize, total);
+        return ScienceCategoryTreeResult.success(new ArrayList<>(roots.subList(fromIndex, toIndex)), total);
+    }
+
+    private ScienceCategoryTreeVO buildScienceCategoryNode(ManuDatasetEntity entity,
+                                                           int level,
+                                                           Map<Integer, List<ManuDatasetEntity>> categoryChildrenMap,
+                                                           Map<Integer, List<ManuDatasetEntity>> allChildrenMap,
+                                                           Map<Integer, Integer> datasetCountCache) {
+        ScienceCategoryTreeVO vo = new ScienceCategoryTreeVO();
+        vo.setId(entity.getId());
+        vo.setName(entity.getName());
+        vo.setLevel(level);
+        vo.setDatasetCount(countDatasetsUnderCategory(entity.getId(), allChildrenMap, datasetCountCache));
+        vo.setTemplateCount(0);
+
+        List<ManuDatasetEntity> children = categoryChildrenMap.get(entity.getId());
+        if (children != null && !children.isEmpty()) {
+            List<ScienceCategoryTreeVO> childVOList = children.stream()
+                    .map(child -> buildScienceCategoryNode(child, level + 1, categoryChildrenMap, allChildrenMap, datasetCountCache))
+                    .collect(Collectors.toList());
+            vo.setChildren(childVOList);
+        }
+        return vo;
+    }
+
+    private int countDatasetsUnderCategory(Integer categoryId,
+                                           Map<Integer, List<ManuDatasetEntity>> allChildrenMap,
+                                           Map<Integer, Integer> datasetCountCache) {
+        if (categoryId == null) {
+            return 0;
+        }
+        Integer cached = datasetCountCache.get(categoryId);
+        if (cached != null) {
+            return cached;
+        }
+
+        int count = 0;
+        List<ManuDatasetEntity> children = allChildrenMap.get(categoryId);
+        if (children != null) {
+            for (ManuDatasetEntity child : children) {
+                if (child.getIsMenu() != null && child.getIsMenu() == 1) {
+                    count += countDatasetsUnderCategory(child.getId(), allChildrenMap, datasetCountCache);
+                } else {
+                    count++;
+                }
+            }
+        }
+        datasetCountCache.put(categoryId, count);
+        return count;
+    }
+
+    private ScienceCategoryTreeVO filterScienceCategoryTree(ScienceCategoryTreeVO node, String keyword) {
+        if (!StringUtils.hasText(keyword)) {
+            return node;
+        }
+
+        boolean selfMatched = node.getName() != null && node.getName().contains(keyword);
+        List<ScienceCategoryTreeVO> matchedChildren = node.getChildren().stream()
+                .map(child -> filterScienceCategoryTree(child, keyword))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        if (!selfMatched && matchedChildren.isEmpty()) {
+            return null;
+        }
+        if (!selfMatched) {
+            node.setChildren(matchedChildren);
+        }
+        return node;
+    }
+
+    @Override
+    public ProductCategoryTreeResult getProductCategoryTree(ProductCategoryTreeQueryDTO query) {
+        List<String> keywords = new ArrayList<>();
+        if (query != null && StringUtils.hasText(query.getIndustryKeyword())) {
+            keywords.add(query.getIndustryKeyword().trim());
+        }
+        if (query != null && StringUtils.hasText(query.getSectorKeyword())) {
+            keywords.add(query.getSectorKeyword().trim());
+        }
+        if (query != null && StringUtils.hasText(query.getProductKeyword())) {
+            keywords.add(query.getProductKeyword().trim());
+        }
+
+        LambdaQueryWrapper<ManuDatasetEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ManuDatasetEntity::getDeleted, 0)
+                .orderByAsc(ManuDatasetEntity::getId);
+
+        List<ManuDatasetEntity> allList = DatasetDao.selectList(wrapper);
+        if (allList == null || allList.isEmpty()) {
+            return ProductCategoryTreeResult.success(new ArrayList<>(), 0);
+        }
+
+        List<ManuDatasetEntity> categoryList = allList.stream()
+                .filter(item -> item.getIsMenu() != null && item.getIsMenu() == 1)
+                .collect(Collectors.toList());
+        if (categoryList.isEmpty()) {
+            return ProductCategoryTreeResult.success(new ArrayList<>(), 0);
+        }
+
+        Map<Integer, ManuDatasetEntity> categoryMap = categoryList.stream()
+                .collect(Collectors.toMap(ManuDatasetEntity::getId, item -> item, (a, b) -> a));
+        Map<Integer, List<ManuDatasetEntity>> categoryChildrenMap = new HashMap<>();
+        for (ManuDatasetEntity item : categoryList) {
+            Integer parentId = item.getParent() == null ? 0 : item.getParent();
+            categoryChildrenMap.computeIfAbsent(parentId, k -> new ArrayList<>()).add(item);
+        }
+
+        List<ProductCategoryTreeVO> roots = categoryList.stream()
+                .filter(item -> item.getParent() == null
+                        || item.getParent() == 0
+                        || !categoryMap.containsKey(item.getParent()))
+                .map(item -> buildProductCategoryNode(item, "", categoryChildrenMap))
+                .map(item -> filterProductCategoryTree(item, keywords))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        return ProductCategoryTreeResult.success(roots, roots.size());
+    }
+
+    private ProductCategoryTreeVO buildProductCategoryNode(ManuDatasetEntity entity,
+                                                           String parentCode,
+                                                           Map<Integer, List<ManuDatasetEntity>> categoryChildrenMap) {
+        String currentCode = StringUtils.hasText(parentCode)
+                ? parentCode + "." + entity.getId()
+                : String.valueOf(entity.getId());
+        ProductCategoryTreeVO vo = new ProductCategoryTreeVO();
+        vo.setId("p" + entity.getId());
+        vo.setIndustryCode(currentCode);
+        vo.setIndustryName(entity.getName());
+        vo.setSectorCode("");
+        vo.setSectorName("");
+        vo.setProductCode("");
+        vo.setProductName("");
+
+        List<ManuDatasetEntity> children = categoryChildrenMap.get(entity.getId());
+        if (children != null && !children.isEmpty()) {
+            List<ProductCategoryTreeVO> childVOList = children.stream()
+                    .map(child -> buildProductCategoryNode(child, currentCode, categoryChildrenMap))
+                    .collect(Collectors.toList());
+            vo.setChildren(childVOList);
+        }
+        return vo;
+    }
+
+    private ProductCategoryTreeVO filterProductCategoryTree(ProductCategoryTreeVO node, List<String> keywords) {
+        if (keywords == null || keywords.isEmpty()) {
+            return node;
+        }
+
+        boolean selfMatched = keywords.stream().allMatch(keyword -> productCategoryNodeMatches(node, keyword));
+        List<ProductCategoryTreeVO> matchedChildren = node.getChildren().stream()
+                .map(child -> filterProductCategoryTree(child, keywords))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        if (!selfMatched && matchedChildren.isEmpty()) {
+            return null;
+        }
+        if (!selfMatched) {
+            node.setChildren(matchedChildren);
+        }
+        return node;
+    }
+
+    private boolean productCategoryNodeMatches(ProductCategoryTreeVO node, String keyword) {
+        return containsKeyword(node.getIndustryCode(), keyword)
+                || containsKeyword(node.getIndustryName(), keyword)
+                || containsKeyword(node.getSectorCode(), keyword)
+                || containsKeyword(node.getSectorName(), keyword)
+                || containsKeyword(node.getProductCode(), keyword)
+                || containsKeyword(node.getProductName(), keyword);
+    }
+
+    private boolean containsKeyword(String value, String keyword) {
+        return value != null && value.contains(keyword);
+    }
+
+    @Override
+    public DatasetOptionsResult getDatasetOptions(DatasetOptionsQueryDTO query) {
+        List<Integer> scienceCategoryIds = query == null || query.getScienceCategoryIds() == null
+                ? new ArrayList<>()
+                : query.getScienceCategoryIds().stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        String keyword = query != null && StringUtils.hasText(query.getKeyword())
+                ? query.getKeyword().trim()
+                : "";
+        int page = query == null || query.getPage() == null || query.getPage() < 1
+                ? 1
+                : query.getPage();
+        int pageSize = query == null || query.getPageSize() == null || query.getPageSize() < 1
+                ? 20
+                : query.getPageSize();
+
+        LambdaQueryWrapper<ManuDatasetEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ManuDatasetEntity::getDeleted, 0)
+                .eq(ManuDatasetEntity::getIsMenu, 0);
+        if (!scienceCategoryIds.isEmpty()) {
+            wrapper.in(ManuDatasetEntity::getScienceCategoryId, scienceCategoryIds);
+        }
+        if (StringUtils.hasText(keyword)) {
+            wrapper.like(ManuDatasetEntity::getName, keyword);
+        }
+        wrapper.orderByAsc(ManuDatasetEntity::getId);
+
+        List<ManuDatasetEntity> datasets = DatasetDao.selectList(wrapper);
+        if (datasets == null || datasets.isEmpty()) {
+            return DatasetOptionsResult.success(new ArrayList<>(), 0);
+        }
+
+        datasets = datasets.stream()
+                .filter(dataset -> dataset.getDeleted() == null || dataset.getDeleted() == 0)
+                .filter(dataset -> dataset.getIsMenu() != null && dataset.getIsMenu() == 0)
+                .filter(dataset -> scienceCategoryIds.isEmpty()
+                        || scienceCategoryIds.contains(dataset.getScienceCategoryId()))
+                .filter(dataset -> !StringUtils.hasText(keyword)
+                        || (dataset.getName() != null && dataset.getName().contains(keyword)))
+                .collect(Collectors.toList());
+
+        int total = datasets.size();
+        int fromIndex = Math.min((page - 1) * pageSize, total);
+        int toIndex = Math.min(fromIndex + pageSize, total);
+        List<DatasetOptionsVO> options = datasets.subList(fromIndex, toIndex).stream()
+                .map(dataset -> {
+                    DatasetOptionsVO vo = new DatasetOptionsVO();
+                    vo.setId(dataset.getId());
+                    vo.setName(dataset.getName());
+                    vo.setDataLevel(dataset.getDataLevel());
+                    vo.setRecordCount(countDatasetRecords(dataset.getName()));
+                    return vo;
+                })
+                .collect(Collectors.toList());
+
+        return DatasetOptionsResult.success(options, total);
+    }
+
+    private Long countDatasetRecords(String datasetName) {
+        if (!StringUtils.hasText(datasetName)) {
+            return 0L;
+        }
+
+        LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
+        columnWrapper.eq(DatasetColumnEntity::getDatasetName, datasetName)
+                .eq(DatasetColumnEntity::getDeleted, 0)
+                .orderByAsc(DatasetColumnEntity::getId);
+        List<DatasetColumnEntity> columns = DatasetColumnDao.selectList(columnWrapper);
+        if (columns == null || columns.isEmpty()) {
+            return 0L;
+        }
+
+        List<Integer> columnIds = columns.stream()
+                .map(DatasetColumnEntity::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (columnIds.isEmpty()) {
+            return 0L;
+        }
+
+        Long count = DatasetDataDao.countDistinctRowIds(columnIds);
+        return count == null ? 0L : count;
+    }
+
+    @Override
+    public Result<OnlineFormSchemaVO> getOnlineFormSchema(OnlineFormSchemaQueryDTO query) {
+        if (query == null || query.getDatasetId() == null) {
+            return Result.fail("数据集ID不能为空");
+        }
+
+        LambdaQueryWrapper<ManuDatasetEntity> datasetWrapper = new LambdaQueryWrapper<>();
+        datasetWrapper.eq(ManuDatasetEntity::getId, query.getDatasetId())
+                .eq(ManuDatasetEntity::getIsMenu, 0)
+                .eq(ManuDatasetEntity::getDeleted, 0)
+                .last("limit 1");
+        ManuDatasetEntity dataset = DatasetDao.selectOne(datasetWrapper);
+        if (dataset == null) {
+            return Result.fail("数据集不存在");
+        }
+
+        LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
+        columnWrapper.eq(DatasetColumnEntity::getDatasetName, dataset.getName())
+                .eq(DatasetColumnEntity::getDeleted, 0)
+                .orderByAsc(DatasetColumnEntity::getId);
+        List<DatasetColumnEntity> columns = DatasetColumnDao.selectList(columnWrapper);
+        if (columns == null) {
+            columns = new ArrayList<>();
+        }
+
+        OnlineFormSectionVO section = new OnlineFormSectionVO();
+        section.setId("object");
+        section.setTitle("对象区域");
+        section.setSubtitle("");
+
+        List<OnlineFormFieldVO> fields = new ArrayList<>();
+        int dataSourceInsertIndex = columns.isEmpty() ? 0 : 1;
+        for (int i = 0; i < columns.size(); i++) {
+            if (i == dataSourceInsertIndex) {
+                fields.add(buildDataSourceField());
+            }
+            fields.add(buildOnlineFormField(columns.get(i), i));
+        }
+        if (columns.size() <= dataSourceInsertIndex) {
+            fields.add(buildDataSourceField());
+        }
+        section.setFields(fields);
+
+        OnlineFormSchemaVO schema = new OnlineFormSchemaVO();
+        schema.setSections(List.of(section));
+        return Result.success(0, "success", schema);
+    }
+
+    private OnlineFormFieldVO buildOnlineFormField(DatasetColumnEntity column, int index) {
+        OnlineFormFieldVO field = new OnlineFormFieldVO();
+        field.setId(column.getId() == null ? "field" + (index + 1) : "column" + column.getId());
+        field.setLabel(column.getColumnName());
+        field.setType(toOnlineFormFieldType(column.getColumnType()));
+        field.setRequired(true);
+        field.setPlaceholder("");
+        field.setDescription("");
+        if ("select".equals(field.getType())) {
+            field.setOptions(new ArrayList<>());
+        }
+        return field;
+    }
+
+    private OnlineFormFieldVO buildDataSourceField() {
+        OnlineFormFieldVO field = new OnlineFormFieldVO();
+        field.setId("dataSource");
+        field.setLabel("数据来源");
+        field.setType("select");
+        field.setRequired(true);
+        field.setPlaceholder("请选择");
+        field.setDescription("选取一种类型以生成对应的表单");
+        field.setOptions(List.of(
+                new OnlineFormFieldOptionVO("experiment", "实验测量"),
+                new OnlineFormFieldOptionVO("simulation", "数值模拟")
+        ));
+        return field;
+    }
+
+    private String toOnlineFormFieldType(String columnType) {
+        if (!StringUtils.hasText(columnType)) {
+            return "text";
+        }
+        String normalizedType = columnType.trim().toLowerCase(Locale.ROOT);
+        if (normalizedType.contains("select") || normalizedType.contains("enum")) {
+            return "select";
+        }
+        if (normalizedType.contains("textarea") || normalizedType.contains("longtext")) {
+            return "textarea";
+        }
+        return "text";
+    }
+
     @Transactional
     @Override
-    public Result<String> createDataset(CreateDatasetDTO dto) {
+    public Result<CreateDatasetResultVO> createDatasetForApi(CreateDatasetDTO dto) {
         if (dto == null) {
             return Result.fail("请求参数不能为空");
         }
         if (!StringUtils.hasText(dto.getName())) {
             return Result.fail("数据集名称不能为空");
         }
-        if (!StringUtils.hasText(dto.getCreator())) {
-            return Result.fail("创建人不能为空");
+        if (dto.getName().trim().length() > 200) {
+            return Result.fail("数据集名称不能超过200字");
         }
-        if (dto.getParent() == null || dto.getParent() == 0) {
-            return Result.fail("父目录不能为空");
+        if (!StringUtils.hasText(dto.getSummary())) {
+            return Result.fail("数据集摘要不能为空");
         }
-        if (dto.getModule() == null) {
-            return Result.fail("所属module不能为空");
+        if (dto.getSummary().trim().length() > 500) {
+            return Result.fail("数据集摘要不能超过500字");
         }
-        if (dto.getColumns() == null || dto.getColumns().isEmpty()) {
-            return Result.fail("数据集列不能为空");
+        if (dto.getScienceCategoryId() == null) {
+            return Result.fail("科学分类不能为空");
+        }
+        if (dto.getProductCategoryId() == null) {
+            return Result.fail("产品分类不能为空");
+        }
+        if (!StringUtils.hasText(dto.getDataLevel())) {
+            return Result.fail("数据级别不能为空");
+        }
+        if (!StringUtils.hasText(dto.getDataCategory())) {
+            return Result.fail("数据类别不能为空");
+        }
+        if (dto.getTemplateTagId() == null) {
+            return Result.fail("模板标签不能为空");
+        }
+        if (dto.getTemplateId() == null) {
+            return Result.fail("模板不能为空");
         }
 
         String datasetName = dto.getName().trim();
-        String creator = dto.getCreator().trim();
-        Integer parentId = dto.getParent();
-        Integer moduleId = dto.getModule();
-        List<DatasetColumnDTO> columns = dto.getColumns();
-
-        // 1. 校验父目录存在，并且必须是目录
-        LambdaQueryWrapper<ManuDatasetEntity> parentWrapper = new LambdaQueryWrapper<>();
-        parentWrapper.eq(ManuDatasetEntity::getId, parentId)
-                .eq(ManuDatasetEntity::getIsMenu, 1)
-                .eq(ManuDatasetEntity::getDeleted, 0)
-                .last("limit 1");
-
-        ManuDatasetEntity parentDataset = DatasetDao.selectOne(parentWrapper);
-        if (parentDataset == null) {
-            return Result.fail("父目录不存在");
+        String summary = dto.getSummary().trim();
+        String coverUrl = StringUtils.hasText(dto.getCoverUrl()) ? dto.getCoverUrl().trim() : null;
+        String dataLevel = dto.getDataLevel().trim();
+        String dataCategory = dto.getDataCategory().trim();
+        Integer templateId = dto.getTemplateId();
+        String creator = UserContext.getCurrentUserName();
+        if (!StringUtils.hasText(creator)) {
+            Integer currentUserId = UserContext.getCurrentUserId();
+            if (currentUserId == null) {
+                return Result.fail(401, "未登录");
+            }
+            creator = String.valueOf(currentUserId);
+        }
+        if (!Set.of("highvalue", "public", "private").contains(dataLevel)) {
+            return Result.fail("数据级别不合法");
+        }
+        if (!"dataset".equals(dataCategory)) {
+            return Result.fail("数据类别必须为dataset");
         }
 
-        // 2. 校验所属module存在
         LambdaQueryWrapper<ModuleEntity> moduleWrapper = new LambdaQueryWrapper<>();
-        moduleWrapper.eq(ModuleEntity::getId, moduleId)
+        moduleWrapper.eq(ModuleEntity::getId, templateId)
                 .eq(ModuleEntity::getDeleted, 0)
                 .last("limit 1");
 
         ModuleEntity moduleEntity = moduleDao.selectOne(moduleWrapper);
         if (moduleEntity == null) {
-            return Result.fail("所属module不存在");
+            return Result.fail("模板不存在");
         }
 
-        // 3. 校验同一父目录下、同一module下数据集名称不能重复
         LambdaQueryWrapper<ManuDatasetEntity> datasetWrapper = new LambdaQueryWrapper<>();
         datasetWrapper.eq(ManuDatasetEntity::getName, datasetName)
-                .eq(ManuDatasetEntity::getParent, parentId)
-                .eq(ManuDatasetEntity::getModule, moduleId)
                 .eq(ManuDatasetEntity::getIsMenu, 0)
                 .eq(ManuDatasetEntity::getDeleted, 0);
 
         if (DatasetDao.selectCount(datasetWrapper) > 0) {
-            return Result.fail("同一目录下该module已存在同名模板");
+            return Result.fail(4001, "数据集名称已存在");
         }
 
-        // 4. 校验列定义
-        Set<String> columnNameSet = new HashSet<>();
-        for (DatasetColumnDTO column : columns) {
-            if (column == null) {
-                return Result.fail("模板列参数不能为空");
-            }
-            if (!StringUtils.hasText(column.getColumnName())) {
-                return Result.fail("列名不能为空");
-            }
-            if (!StringUtils.hasText(column.getColumnType())) {
-                return Result.fail("列类型不能为空");
-            }
+        LambdaQueryWrapper<ModuleColumnEntity> templateColumnWrapper = new LambdaQueryWrapper<>();
+        templateColumnWrapper.eq(ModuleColumnEntity::getModuleId, templateId)
+                .eq(ModuleColumnEntity::getDeleted, 0)
+                .orderByAsc(ModuleColumnEntity::getCreateTime)
+                .orderByAsc(ModuleColumnEntity::getId);
 
-            String columnName = column.getColumnName().trim();
-            if (!columnNameSet.add(columnName)) {
-                return Result.fail("模板列名称不能重复: " + columnName);
-            }
+        List<ModuleColumnEntity> templateColumns = moduleColumnDao.selectList(templateColumnWrapper);
+        if (templateColumns == null || templateColumns.isEmpty()) {
+            return Result.fail("模板字段不能为空");
         }
 
-        // 5. 插入 manu_dataset 表
+        LocalDateTime now = LocalDateTime.now();
         ManuDatasetEntity dataset = new ManuDatasetEntity();
         dataset.setName(datasetName);
+        dataset.setSummary(summary);
+        dataset.setCoverUrl(coverUrl);
         dataset.setCreator(creator);
-        dataset.setCreateTime(LocalDateTime.now());
-        dataset.setParent(parentId);
+        dataset.setCreateTime(now);
+        dataset.setParent(0);
         dataset.setIsMenu(0);
         dataset.setDeleted(0);
-        dataset.setModule(moduleId);
+        dataset.setModule(templateId);
+        dataset.setScienceCategoryId(dto.getScienceCategoryId());
+        dataset.setProductCategoryId(dto.getProductCategoryId());
+        dataset.setDataLevel(dataLevel);
+        dataset.setDataCategory(dataCategory);
+        dataset.setTemplateTagId(dto.getTemplateTagId());
+        dataset.setDatasetTagIds(toJsonArray(dto.getDatasetTagIds()));
+        dataset.setAuditStatus(0);
 
         int datasetRows = DatasetDao.insert(dataset);
         if (datasetRows <= 0) {
-            return Result.fail("创建模板失败");
+            return Result.fail("创建数据集失败");
         }
 
-        // 6. 插入 dataset_column 表
-        for (DatasetColumnDTO column : columns) {
+        for (ModuleColumnEntity templateColumn : templateColumns) {
+            if (!StringUtils.hasText(templateColumn.getColumnName())) {
+                throw new RuntimeException("模板字段名称不能为空");
+            }
+            if (!StringUtils.hasText(templateColumn.getType())) {
+                throw new RuntimeException("模板字段类型不能为空");
+            }
             DatasetColumnEntity datasetColumn = new DatasetColumnEntity();
-            datasetColumn.setColumnName(column.getColumnName().trim());
-            datasetColumn.setColumnType(column.getColumnType().trim());
+            datasetColumn.setColumnName(templateColumn.getColumnName().trim());
+            datasetColumn.setColumnType(templateColumn.getType().trim());
             datasetColumn.setDatasetName(datasetName);
             datasetColumn.setDeleted(0);
 
             int columnRows = DatasetColumnDao.insert(datasetColumn);
             if (columnRows <= 0) {
-                throw new RuntimeException("插入模板列失败");
+                throw new RuntimeException("插入数据集字段失败");
             }
         }
 
-        return Result.success("创建模板成功");
+        CreateDatasetResultVO resultVO = new CreateDatasetResultVO();
+        resultVO.setDatasetId(dataset.getId());
+        resultVO.setName(datasetName);
+        resultVO.setCreatedAt(now);
+        return Result.success(0, "success", resultVO);
     }
+
+    private String toJsonArray(List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return null;
+        }
+        return ids.stream()
+                .filter(Objects::nonNull)
+                .map(String::valueOf)
+                .collect(Collectors.joining(",", "[", "]"));
+    }
+
     @Transactional
     @Override
     public Result<String> importDatasetData(String DatasetName, MultipartFile file) {
@@ -855,4 +1307,5 @@ public class DatasetServiceImp implements DatasetService {
         }
         return count;
     }
+
 }

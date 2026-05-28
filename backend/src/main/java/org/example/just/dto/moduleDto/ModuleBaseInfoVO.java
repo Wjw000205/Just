@@ -24,6 +24,9 @@ public class ModuleBaseInfoVO {
     @Schema(description = "创建者id")
     private Integer creator;
 
+    @Schema(description = "创建者用户名")
+    private String username;
+
     @Schema(description = "可见范围 1:public 0:private")
     private Integer visibleArea;
 

@@ -3,8 +3,10 @@ package org.example.just.service.imp;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.example.just.dao.ModuleColumnDao;
+import org.example.just.dao.UserDao;
 import org.example.just.dto.moduleDto.*;
 import org.example.just.entity.ModuleColumnEntity;
+import org.example.just.entity.UserEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.example.just.dao.ModuleDao;
 import org.example.just.entity.ModuleEntity;
@@ -26,10 +28,12 @@ public class ModuleServiceImp implements ModuleService {
 
     private final ModuleDao moduleDao;
     private final ModuleColumnDao moduleColumnDao;
+    private final UserDao userDao;
 
-    public ModuleServiceImp(ModuleDao moduleDao, ModuleColumnDao moduleColumnDao) {
+    public ModuleServiceImp(ModuleDao moduleDao, ModuleColumnDao moduleColumnDao, UserDao userDao) {
         this.moduleDao = moduleDao;
         this.moduleColumnDao = moduleColumnDao;
+        this.userDao = userDao;
     }
 
     @Override
@@ -275,6 +279,12 @@ public class ModuleServiceImp implements ModuleService {
 
         ModuleBaseInfoVO vo = new ModuleBaseInfoVO();
         BeanUtils.copyProperties(moduleEntity, vo);
+        if (moduleEntity.getCreator() != null) {
+            UserEntity creator = userDao.selectById(moduleEntity.getCreator());
+            if (creator != null) {
+                vo.setUsername(creator.getUsername());
+            }
+        }
 
         return Result.success(vo);
     }
