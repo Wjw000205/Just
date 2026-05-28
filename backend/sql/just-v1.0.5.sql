@@ -107,12 +107,20 @@ DROP TABLE IF EXISTS `manu_dataset`;
 CREATE TABLE `manu_dataset` (
   `id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  `summary` varchar(500) NOT NULL DEFAULT '' COMMENT '数据集摘要',
+  `cover_url` varchar(1024) DEFAULT NULL COMMENT '封面图URL',
   `creator` varchar(255) NOT NULL,
   `create_time` datetime NOT NULL,
   `parent` int NOT NULL DEFAULT '0' COMMENT '上级模板目录，0代表位第一级目录',
   `is_menu` int NOT NULL DEFAULT '0' COMMENT '0:不是目录，是数据集；1：是目录',
   `deleted` int NOT NULL DEFAULT '0' COMMENT '0：未删除；1：已删除',
   `module` int DEFAULT NULL COMMENT '在是数据库时字段才有意义',
+  `science_category_id` int DEFAULT NULL COMMENT '科学分类ID',
+  `product_category_id` int DEFAULT NULL COMMENT '产业/产品分类ID',
+  `data_level` varchar(32) DEFAULT NULL COMMENT '数据级别',
+  `data_category` varchar(32) NOT NULL DEFAULT 'dataset' COMMENT '数据类别',
+  `template_tag_id` int DEFAULT NULL COMMENT '模板标签ID',
+  `dataset_tag_ids` varchar(255) DEFAULT NULL COMMENT '数据集标签ID列表JSON',
   `audit_status` int NOT NULL DEFAULT '0' COMMENT '审核状态',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -124,7 +132,7 @@ CREATE TABLE `manu_dataset` (
 
 LOCK TABLES `manu_dataset` WRITE;
 /*!40000 ALTER TABLE `manu_dataset` DISABLE KEYS */;
-INSERT INTO `manu_dataset` VALUES (1,'基础模板','admin','2026-03-24 17:11:23',0,1,0,NULL,0),(2,'人物模板','admin','2026-03-24 17:11:43',1,1,0,NULL,0),(3,'人物细节模板','admin','2026-03-24 17:31:07',2,0,0,NULL,0),(4,'武器模板','admin','2026-03-24 19:27:09',1,1,0,NULL,0),(5,'武器具体模板','admin','2026-03-24 19:32:35',4,0,0,NULL,0);
+INSERT INTO `manu_dataset` (`id`,`name`,`creator`,`create_time`,`parent`,`is_menu`,`deleted`,`module`,`audit_status`) VALUES (1,'基础模板','admin','2026-03-24 17:11:23',0,1,0,NULL,0),(2,'人物模板','admin','2026-03-24 17:11:43',1,1,0,NULL,0),(3,'人物细节模板','admin','2026-03-24 17:31:07',2,0,0,NULL,0),(4,'武器模板','admin','2026-03-24 19:27:09',1,1,0,NULL,0),(5,'武器具体模板','admin','2026-03-24 19:32:35',4,0,0,NULL,0);
 /*!40000 ALTER TABLE `manu_dataset` ENABLE KEYS */;
 UNLOCK TABLES;
 

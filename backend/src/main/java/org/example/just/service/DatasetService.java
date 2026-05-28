@@ -1,6 +1,10 @@
 package org.example.just.service;
 
 import jakarta.servlet.http.HttpServletResponse;
+import org.example.just.dto.categoryDto.ProductCategoryTreeQueryDTO;
+import org.example.just.dto.categoryDto.ProductCategoryTreeResult;
+import org.example.just.dto.categoryDto.ScienceCategoryTreeQueryDTO;
+import org.example.just.dto.categoryDto.ScienceCategoryTreeResult;
 import org.example.just.dto.datasetDto.*;
 import org.example.just.utils.PageQuery;
 import org.example.just.utils.Result;
@@ -14,7 +18,15 @@ public interface DatasetService {
 
     Result<List<ManuDatasetTreeVO>> getDatasetTree();
 
-    Result<String> createDataset(CreateDatasetDTO dto);
+    ScienceCategoryTreeResult getScienceCategoryTree(ScienceCategoryTreeQueryDTO query);
+
+    ProductCategoryTreeResult getProductCategoryTree(ProductCategoryTreeQueryDTO query);
+
+    DatasetOptionsResult getDatasetOptions(DatasetOptionsQueryDTO query);
+
+    Result<OnlineFormSchemaVO> getOnlineFormSchema(OnlineFormSchemaQueryDTO query);
+
+    Result<CreateDatasetResultVO> createDatasetForApi(CreateDatasetDTO dto);
 
     Result<String> importDatasetData(String DatasetName, MultipartFile file);
 

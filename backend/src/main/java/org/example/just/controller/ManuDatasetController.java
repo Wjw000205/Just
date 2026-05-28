@@ -3,6 +3,10 @@ package org.example.just.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
+import org.example.just.dto.categoryDto.ProductCategoryTreeQueryDTO;
+import org.example.just.dto.categoryDto.ProductCategoryTreeResult;
+import org.example.just.dto.categoryDto.ScienceCategoryTreeQueryDTO;
+import org.example.just.dto.categoryDto.ScienceCategoryTreeResult;
 import org.example.just.dto.datasetDto.*;
 import org.example.just.service.DatasetService;
 import org.example.just.utils.PageQuery;
@@ -13,7 +17,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 @RestController
-@RequestMapping("/Dataset")
 @Tag(name = "目录数据库操作接口", description = "模板目录相关操作")
 public class ManuDatasetController {
 
@@ -23,69 +26,87 @@ public class ManuDatasetController {
         this.datasetService = datasetService;
     }
 
-    @PostMapping("/create-menu")
+    @PostMapping("/Dataset/create-menu")
     @Operation(summary = "创建目录", description = "仅向 Dataset 表插入一条目录记录")
     public Result<String> createMenu(@RequestBody CreateMenuDatasetDTO dto) {
         return datasetService.createMenu(dto);
     }
 
-    @GetMapping("/getManuList")
-    @Operation(summary = "查询模板目录树", description = "按父子关系返回模板目录树形结构")
-    public Result<List<ManuDatasetTreeVO>> getDatasetTree() {
-        return datasetService.getDatasetTree();
+    @PostMapping("/api/categories/science/tree")
+    @Operation(summary = "科学分类树", description = "科学分类弹窗树结构的数据源")
+    public ScienceCategoryTreeResult getDatasetTree(@RequestBody(required = false) ScienceCategoryTreeQueryDTO query) {
+        return datasetService.getScienceCategoryTree(query);
     }
 
-    @PostMapping("/create-template")
-    @Operation(summary = "创建数据集", description = "模板名称、父目录、所属module写入Dataset表，模板列写入Dataset_column表")
-    public Result<String> createDataset(@RequestBody CreateDatasetDTO dto) {
-        return datasetService.createDataset(dto);
+    @PostMapping("/api/categories/product/tree")
+    @Operation(summary = "产业/产品分类树", description = "产品分类弹窗表格的数据源")
+    public ProductCategoryTreeResult getProductCategoryTree(@RequestBody(required = false) ProductCategoryTreeQueryDTO query) {
+        return datasetService.getProductCategoryTree(query);
     }
 
-    @PostMapping("/import-data")
+    @PostMapping("/api/datasets/options")
+    @Operation(summary = "获取可用数据集列表", description = "上传数据页面中选择数据集下拉框数据源")
+    public DatasetOptionsResult getDatasetOptions(@RequestBody(required = false) DatasetOptionsQueryDTO query) {
+        return datasetService.getDatasetOptions(query);
+    }
+
+    @PostMapping("/api/data/online/schema")
+    @Operation(summary = "获取在线填写表单结构", description = "上传数据页面点击在线填写并选择数据集后获取表单结构")
+    public Result<OnlineFormSchemaVO> getOnlineFormSchema(@RequestBody OnlineFormSchemaQueryDTO query) {
+        return datasetService.getOnlineFormSchema(query);
+    }
+
+    @PostMapping("/api/datasets")
+    @Operation(summary = "创建数据集", description = "根据模板创建新的数据集，并返回新建数据集ID")
+    public Result<CreateDatasetResultVO> createDataset(@RequestBody CreateDatasetDTO dto) {
+        return datasetService.createDatasetForApi(dto);
+    }
+
+    @PostMapping("/Dataset/import-data")
     @Operation(summary = "导入数据表数据", description = "上传Excel，将数据按数据集列映射后批量插入Dataset_data表")
     public Result<String> importDatasetData(@RequestParam("DatasetName") String DatasetName,
                                            @RequestPart("file") MultipartFile file) {
         return datasetService.importDatasetData(DatasetName, file);
     }
 
-    @GetMapping("/data-page")
+    @GetMapping("/Dataset/data-page")
     @Operation(summary = "按模板分页查询数据", description = "根据数据表名称查询模板下所有数据，分页大小由前端指定")
     public Result<DatasetDataPageVO> getDatasetDataPage(@RequestParam("DatasetName") String DatasetName,
                                                        PageQuery pageQuery) {
         return datasetService.getDatasetDataPage(DatasetName, pageQuery);
     }
 
-    @GetMapping("/export-template")
+    @GetMapping("/Dataset/export-template")
     @Operation(summary = "导出数据表结构", description = "只导出数据集列为Excel表头，不导出具体数据")
     public void exportDatasetTemplate(@RequestParam("DatasetName") String DatasetName,
                                      HttpServletResponse response) {
         datasetService.exportDatasetTemplate(DatasetName, response);
     }
 
-    @PostMapping("/add-column")
+    @PostMapping("/Dataset/add-column")
     @Operation(summary = "新增数据表列", description = "向指定数据表新增一列，写入Dataset_column表")
     public Result<String> addDatasetColumn(@RequestBody AddDatasetColumnDTO dto) {
         return datasetService.addDatasetColumn(dto);
     }
 
-    @DeleteMapping("/delete-column")
+    @DeleteMapping("/Dataset/delete-column")
     @Operation(summary = "删除数据表列", description = "逻辑删除数据表列，并逻辑删除该列对应的数据表数据")
     public Result<String> deleteDatasetColumn(@RequestBody DeleteDatabaseColumnDTO dto) {
         return datasetService.deleteDatasetColumn(dto);
     }
 
-    @DeleteMapping("/delete-row")
+    @DeleteMapping("/Dataset/delete-row")
     @Operation(summary = "删除数据表具体行", description = "按数据集名称和rowId逻辑删除该数据表下的一整行数据")
     public Result<String> deleteDatasetRow(@RequestBody DeleteDatasetRowDTO dto) {
         return datasetService.deleteDatasetRow(dto);
     }
-    @PostMapping("/audit-template")
+    @PostMapping("/Dataset/audit-template")
     @Operation(summary = "审核数据集", description = "对指定数据集进行状态变更，如通过或驳回")
     public Result<AuditDatasetResultVO> auditDataset(@RequestBody AuditDatasetDTO dto) {
         return datasetService.auditDataset(dto);
     }
 
-    @GetMapping("/count-under-menu")
+    @GetMapping("/Dataset/count-under-menu")
     @Operation(summary = "获取当前目录下数据集总数", description = "递归统计当前目录及其所有子目录下的数据集数量，仅统计is_menu=0且deleted=0的数据")
     public Result<Long> countDatasetsUnderMenu(@RequestParam("menuId") Integer menuId) {
         return datasetService.countDatasetsUnderMenu(menuId);
