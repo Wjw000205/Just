@@ -1,5 +1,5 @@
 /**
- * 数据库页面相关接口（与 Vite proxy 的 /api -> 后端一致）
+ * 数据库页面相关接口（直连后端）
  */
 
 function getAuthHeader() {
@@ -25,7 +25,7 @@ function normalizeOption(raw) {
 
 /**
  * 数据库筛选下拉框选项拉取（聚合接口）
- * GET /api/database/filter-options
+ * GET /database/filter-options
  *
  * @returns {Promise<{
  *   industryCategories: OptionItem[],
@@ -34,23 +34,7 @@ function normalizeOption(raw) {
  * }>}
  */
 export async function fetchDatabaseFilterOptions() {
-  const resp = await fetch('/api/database/filter-options', {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-    },
-  })
-
-  const json = await resp.json().catch(() => null)
-  if (resp.status === 401 || json?.code === 401) {
-    throw new Error(json?.message || '未登录或无权限')
-  }
-  if (!json || json.code !== 200 || !json.data) {
-    throw new Error(json?.message || '加载下拉选项失败')
-  }
-
-  const d = json.data
+  const d = await fetchDatabasePageInit()
   return {
     industryCategories: Array.isArray(d.industryCategories) ? d.industryCategories.map(normalizeOption) : [],
     dataCategories: Array.isArray(d.dataCategories) ? d.dataCategories.map(normalizeOption) : [],
@@ -156,22 +140,17 @@ function parseDatasetListPayload(d) {
 
 /**
  * 数据库页首次进入：聚合返回左侧树 + 筛选项 + 首屏列表
- * POST /api/database/page/init
+ * GET /database/page/init
  *
  * @param {{ page?: number, pageSize?: number } & Record<string, any>} body
  */
 export async function fetchDatabasePageInit(body = {}) {
-  const resp = await fetch('/api/database/page/init', {
-    method: 'POST',
+  const resp = await fetch('/database/page/init', {
+    method: 'GET',
     headers: {
       'Content-Type': 'application/json',
       ...getAuthHeader(),
     },
-    body: JSON.stringify({
-      page: body.page ?? 1,
-      pageSize: body.pageSize ?? 10,
-      ...body,
-    }),
   })
 
   const json = await resp.json().catch(() => null)
@@ -209,12 +188,12 @@ export async function fetchDatabasePageInit(body = {}) {
 
 /**
  * 列表查询（筛选、侧栏节点、侧栏搜索、分页）
- * POST /api/database/datasets/query
+ * POST /database/datasets/query
  *
  * @param {Record<string, any>} body
  */
 export async function queryDatabaseDatasets(body) {
-  const resp = await fetch('/api/database/datasets/query', {
+  const resp = await fetch('/database/datasets/query', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -235,13 +214,13 @@ export async function queryDatabaseDatasets(body) {
 
 /**
  * 获取“部分字段下载”的可选字段（由后端决定）
- * GET /api/database/datasets/{id}/download-fields
+ * GET /database/datasets/{id}/download-fields
  *
  * @param {string|number} id
  * @returns {Promise<OptionItem[]>}
  */
 export async function fetchDatabaseDownloadFields(id) {
-  const resp = await fetch(`/api/database/datasets/${encodeURIComponent(String(id))}/download-fields`, {
+  const resp = await fetch(`/database/datasets/${encodeURIComponent(String(id))}/download-fields`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -281,7 +260,7 @@ function parseFilenameFromContentDisposition(cd) {
 
 /**
  * 直接下载文件（方案A：后端返回文件流）
- * POST /api/database/datasets/{id}/download
+ * POST /database/datasets/{id}/download
  *
  * @param {string|number} id
  * @param {{
@@ -293,7 +272,7 @@ function parseFilenameFromContentDisposition(cd) {
  * @returns {Promise<{ blob: Blob, filename: string, contentType: string }>}
  */
 export async function downloadDatabaseDatasetFile(id, body) {
-  const resp = await fetch(`/api/database/datasets/${encodeURIComponent(String(id))}/download`, {
+  const resp = await fetch(`/database/datasets/${encodeURIComponent(String(id))}/download`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

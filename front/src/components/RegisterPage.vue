@@ -162,6 +162,10 @@ async function handleRegister() {
     alert('请输入用户名')
     return
   }
+  if (!form.realName?.trim()) {
+    alert('请输入真实姓名')
+    return
+  }
   if (!form.password || form.password.length < 6) {
     alert('请输入至少6位密码')
     return
@@ -190,11 +194,12 @@ async function handleRegister() {
   if (submitting.value) return
   submitting.value = true
   try {
-    const res = await fetch('http://localhost:8083/user/register', {
+    const res = await fetch('/user/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username: form.username.trim(),
+        realName: form.realName.trim(),
         password: form.password,
         telephone: form.telephone.trim(),
         email: form.email.trim(),
@@ -213,7 +218,8 @@ async function handleRegister() {
       return
     }
 
-    if (json && json.code === 0) {
+    const ok = json && (json.code === 200 || json.code === 0)
+    if (ok) {
       alert(json.message || '注册成功')
       emit('register-success', json)
     } else {

@@ -134,34 +134,61 @@
       <!-- 模板标签 -->
       <div class="form-row">
         <label class="form-label required">模板标签</label>
-        <div class="form-field-wrap">
-          <select v-model="form.templateTag" class="form-select">
-            <option value="" disabled>请选择模板标签</option>
-            <option
+        <div class="form-field-wrap" ref="templateTagDropRef">
+          <div
+            class="form-select form-select-custom"
+            :class="{ open: templateTagDropOpen }"
+            @click="templateTagDropOpen = !templateTagDropOpen"
+          >
+            <span v-if="selectedTemplateTagOption">{{ selectedTemplateTagOption.label }}</span>
+            <span v-else class="form-select-placeholder">请选择模板标签</span>
+            <svg class="form-select-caret" width="10" height="6" viewBox="0 0 10 6">
+              <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <ul v-if="templateTagDropOpen" class="form-select-dropdown" @click.stop>
+            <li class="form-select-option disabled">请选择模板标签</li>
+            <li
               v-for="opt in templateTagOptions"
               :key="opt.value"
-              :value="opt.value"
+              class="form-select-option"
+              @click="selectTemplateTag(opt)"
             >
               {{ opt.label }}
-            </option>
-          </select>
+            </li>
+          </ul>
         </div>
       </div>
 
       <!-- 选择模板 -->
       <div class="form-row">
         <label class="form-label required">选择模板</label>
-        <div class="form-field-wrap">
-          <select v-model="form.template" class="form-select">
-            <option value="" disabled>请选择模板</option>
-            <option
-              v-for="opt in templateOptions"
-              :key="opt.value"
-              :value="opt.value"
-            >
-              {{ opt.label }}
-            </option>
-          </select>
+        <div class="form-field-wrap" ref="templateDropRef">
+          <div
+            class="form-select form-select-custom"
+            :class="{ open: templateDropOpen }"
+            @click="toggleTemplateDrop"
+          >
+            <span v-if="selectedTemplateOption">{{ selectedTemplateOption.label }}</span>
+            <span v-else class="form-select-placeholder">{{ form.templateTag ? '请选择模板' : '请先选择模板标签' }}</span>
+            <svg class="form-select-caret" width="10" height="6" viewBox="0 0 10 6">
+              <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <ul v-if="templateDropOpen" class="form-select-dropdown" @click.stop>
+            <li v-if="templateLoading" class="form-select-option disabled">加载中...</li>
+            <li v-else-if="templateOptions.length === 0" class="form-select-option disabled">暂无模板</li>
+            <template v-else>
+              <li
+                v-for="opt in templateOptions"
+                :key="opt.value"
+                class="form-select-option"
+                @click="selectTemplate(opt)"
+              >
+                {{ opt.label }}
+              </li>
+            </template>
+          </ul>
         </div>
       </div>
 
@@ -396,6 +423,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { getModuleListByTag } from '../api/module.js'
 
 const getAuthHeader = () => {
   const token =
@@ -408,7 +436,17 @@ const coverInputRef = ref(null)
 const coverPreview = ref('')
 const dataLevelDropRef = ref(null)
 const dataLevelDropOpen = ref(false)
-const templateTagOptions = ref([])
+const templateTagDropRef = ref(null)
+const templateTagDropOpen = ref(false)
+const templateDropRef = ref(null)
+const templateDropOpen = ref(false)
+const templateLoading = ref(false)
+const templateTagOptions = ref([
+  { value: '生物医用材料（科学）', label: '生物医用材料（科学）' },
+  { value: '生物医用材料（产业）', label: '生物医用材料（产业）' },
+  { value: '先进基础材料', label: '先进基础材料' },
+  { value: '先进钢铁材料', label: '先进钢铁材料' },
+])
 const templateOptions = ref([])
 
 const form = reactive({
@@ -432,59 +470,65 @@ const dataLevelOptions = [
 const dataLevelOption = computed(() =>
   dataLevelOptions.find((o) => o.value === form.dataLevel)
 )
+const selectedTemplateTagOption = computed(() =>
+  templateTagOptions.value.find((o) => o.value === form.templateTag)
+)
+const selectedTemplateOption = computed(() =>
+  templateOptions.value.find((o) => o.value === form.template)
+)
 
-async function loadTemplateTags() {
+async function loadTemplatesByTag(tag) {
+  if (!tag) {
+    templateOptions.value = []
+    return
+  }
+  templateLoading.value = true
   try {
-    const resp = await fetch('/api/dicts/template-tags', {
-      headers: getAuthHeader(),
-    })
-    const json = await resp.json().catch(() => null)
-    if (resp.status === 401 || json?.code === 401) {
-      alert(json?.message || '未登录或无权限')
-      return
-    }
-    if (json?.code === 200 && Array.isArray(json.data)) {
-      templateTagOptions.value = json.data.map((item) => ({
-        value: item.id,
-        label: item.name,
-      }))
-    }
+    const list = await getModuleListByTag(tag)
+    templateOptions.value = list.map((item) => ({
+      value: item.id,
+      label: item.moduleName || item.name || String(item.id),
+    }))
   } catch (e) {
-    console.error('loadTemplateTags error', e)
+    templateOptions.value = []
+    alert(e?.message || '获取模板列表失败')
+  } finally {
+    templateLoading.value = false
   }
 }
 
-async function loadTemplates() {
-  try {
-    const resp = await fetch('/api/dicts/templates', {
-      headers: getAuthHeader(),
-    })
-    const json = await resp.json().catch(() => null)
-    if (resp.status === 401 || json?.code === 401) {
-      alert(json?.message || '未登录或无权限')
-      return
-    }
-    if (json?.code === 200 && Array.isArray(json.data)) {
-      templateOptions.value = json.data.map((item) => ({
-        value: item.id,
-        label: item.name,
-      }))
-    }
-  } catch (e) {
-    console.error('loadTemplates error', e)
-  }
+function selectTemplateTag(opt) {
+  form.templateTag = opt.value
+  form.template = ''
+  templateOptions.value = []
+  templateTagDropOpen.value = false
+  loadTemplatesByTag(opt.value)
+}
+
+function toggleTemplateDrop() {
+  if (!form.templateTag) return
+  templateDropOpen.value = !templateDropOpen.value
+}
+
+function selectTemplate(opt) {
+  form.template = opt.value
+  templateDropOpen.value = false
 }
 
 function onDocClickDataLevel(e) {
   if (dataLevelDropRef.value && !dataLevelDropRef.value.contains(e.target)) {
     dataLevelDropOpen.value = false
   }
+  if (templateTagDropRef.value && !templateTagDropRef.value.contains(e.target)) {
+    templateTagDropOpen.value = false
+  }
+  if (templateDropRef.value && !templateDropRef.value.contains(e.target)) {
+    templateDropOpen.value = false
+  }
 }
 
 onMounted(() => {
   document.addEventListener('click', onDocClickDataLevel)
-  loadTemplateTags()
-  loadTemplates()
 })
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClickDataLevel)
@@ -520,28 +564,27 @@ function flattenScienceTree(nodes, level = 0, acc = []) {
 
 async function loadScienceCategory() {
   try {
-    const resp = await fetch('/api/categories/science/tree', {
-      method: 'POST',
+    const resp = await fetch('http://localhost:8083/Dataset/getManuList', {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         ...getAuthHeader(),
       },
-      body: JSON.stringify({
-        keyword: scienceCategoryKeyword.value || '',
-        page: scienceCategoryPage.value,
-        pageSize: scienceCategoryPageSize.value,
-      }),
     })
     const json = await resp.json().catch(() => null)
     if (resp.status === 401 || json?.code === 401) {
       alert(json?.message || '未登录或无权限')
       return
     }
-    if (json?.code === 200) {
-      scienceCategoryRows.value = flattenScienceTree(json.data || [])
+    if (json?.code === 200 || json?.code === 0) {
+      const rows = flattenScienceTree(json.data || [])
+      const keyword = scienceCategoryKeyword.value.trim()
+      scienceCategoryRows.value = keyword
+        ? rows.filter((row) => row.name.includes(keyword))
+        : rows
     }
   } catch (e) {
     console.error('loadScienceCategory error', e)
+    alert(e?.message || '获取科学分类目录树失败')
   }
 }
 
@@ -1041,6 +1084,15 @@ function onSubmit() {
 
 .form-select-option:hover {
   background: #f0f4fa;
+}
+
+.form-select-option.disabled {
+  color: var(--text-gray);
+  cursor: default;
+}
+
+.form-select-option.disabled:hover {
+  background: transparent;
 }
 
 /* 数据级别标签：圆角底色 + 白字 */

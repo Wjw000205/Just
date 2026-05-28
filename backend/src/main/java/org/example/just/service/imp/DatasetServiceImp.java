@@ -2,6 +2,7 @@ package org.example.just.service.imp;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -1283,6 +1284,11 @@ public class DatasetServiceImp implements DatasetService {
 
         long count = countDatasetRecursively(menuId, parentChildrenMap);
         return Result.success(count);
+    }
+
+    @Override
+    public Long getTotal() {
+        return manuDatasetDao.selectCount(null);
     }
 
     private long countDatasetRecursively(Integer parentId, Map<Integer, List<ManuDatasetEntity>> parentChildrenMap) {

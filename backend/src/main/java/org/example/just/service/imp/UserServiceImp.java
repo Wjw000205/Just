@@ -2,6 +2,7 @@ package org.example.just.service.imp;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import org.example.just.context.UserContext;
 import org.example.just.dto.userDto.*;
 import org.example.just.dao.UserDao;
 import org.example.just.entity.UserEntity;
@@ -336,8 +337,9 @@ public class UserServiceImp implements UserService {
 
         int rows = userDao.update(null, updateWrapper);
         if (rows <= 0) {
-            return Result.fail("修改二级密码失败");
+            return Result.success("修改二级密码失败");
         }
+
 
         return Result.success("修改二级密码成功");
     }
@@ -387,5 +389,49 @@ public class UserServiceImp implements UserService {
         }
 
         return Result.success("完善用户信息成功");
+    }
+
+    @Override
+    public Result<AuthProfileVO> getAuthProfile() {
+        // 从 UserContext 获取当前用户信息
+        Integer userId = UserContext.getCurrentUserId();
+        String userName = UserContext.getCurrentUserName();
+        Integer roleValue = UserContext.getCurrentUserRole();
+
+        if (userId == null || userName == null) {
+            // 这种情况理论上不会发生，因为能通过 JWT 拦截器说明已经登录
+            return Result.fail(401, "未登录或 Token 无效");
+        }
+
+        // 转换角色代码为字符串
+        String roleStr = convertRoleToString(roleValue);
+
+        AuthProfileVO vo = new AuthProfileVO();
+        vo.setUserId(userId);
+        vo.setName(userName);
+        vo.setRole(roleStr);
+
+        return Result.success(vo);
+    }
+
+    /**
+     * 将角色代码转换为字符串
+     * 0: USER（普通用户）
+     * 1: ADMIN（管理员）
+     * 2: SUPER_ADMIN（超级管理员）
+     */
+    private String convertRoleToString(Integer role) {
+        if (role == null) {
+            return "USER";
+        }
+        switch (role) {
+            case 2:
+                return "SUPER_ADMIN";
+            case 1:
+                return "ADMIN";
+            case 0:
+            default:
+                return "USER";
+        }
     }
 }
