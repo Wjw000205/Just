@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.example.just.dao.DatasetColumnDao;
 import org.example.just.dao.ManuDatasetDao;
@@ -38,11 +39,14 @@ import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 public class DatasetServiceImp implements DatasetService {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final ManuDatasetDao DatasetDao;
     private final DatasetColumnDao DatasetColumnDao;
@@ -468,6 +472,36 @@ public class DatasetServiceImp implements DatasetService {
         return DatasetOptionsResult.success(options, total);
     }
 
+    @Override
+    public Result<List<DatasetTagVO>> getDatasetTags() {
+        LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
+        columnWrapper.eq(DatasetColumnEntity::getDeleted, 0)
+                .orderByAsc(DatasetColumnEntity::getId);
+        List<DatasetColumnEntity> columns = DatasetColumnDao.selectList(columnWrapper);
+        if (columns == null || columns.isEmpty()) {
+            return Result.success(0, "success", new ArrayList<>());
+        }
+
+        Map<String, DatasetTagVO> tagMap = new LinkedHashMap<>();
+        for (DatasetColumnEntity column : columns) {
+            if (column == null
+                    || (column.getDeleted() != null && column.getDeleted() == 1)
+                    || !StringUtils.hasText(column.getColumnName())) {
+                continue;
+            }
+            String tagName = column.getColumnName().trim();
+            DatasetTagVO existing = tagMap.get(tagName);
+            if (existing == null) {
+                tagMap.put(tagName, new DatasetTagVO(column.getId(), tagName));
+            } else if (column.getId() != null
+                    && (existing.getId() == null || column.getId() < existing.getId())) {
+                existing.setId(column.getId());
+            }
+        }
+
+        return Result.success(0, "success", new ArrayList<>(tagMap.values()));
+    }
+
     private Long countDatasetRecords(String datasetName) {
         if (!StringUtils.hasText(datasetName)) {
             return 0L;
@@ -510,41 +544,289 @@ public class DatasetServiceImp implements DatasetService {
             return Result.fail("数据集不存在");
         }
 
-        LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
-        columnWrapper.eq(DatasetColumnEntity::getDatasetName, dataset.getName())
-                .eq(DatasetColumnEntity::getDeleted, 0)
-                .orderByAsc(DatasetColumnEntity::getId);
-        List<DatasetColumnEntity> columns = DatasetColumnDao.selectList(columnWrapper);
+        List<DatasetColumnEntity> datasetColumns = queryDatasetColumns(dataset.getName());
+        List<OnlineFormSectionVO> sections = new ArrayList<>();
+        if (dataset.getModule() != null) {
+            LambdaQueryWrapper<ModuleColumnEntity> templateColumnWrapper = new LambdaQueryWrapper<>();
+            templateColumnWrapper.eq(ModuleColumnEntity::getModuleId, dataset.getModule())
+                    .eq(ModuleColumnEntity::getDeleted, 0)
+                    .orderByAsc(ModuleColumnEntity::getCreateTime)
+                    .orderByAsc(ModuleColumnEntity::getId);
+            List<ModuleColumnEntity> templateColumns = moduleColumnDao.selectList(templateColumnWrapper);
+            sections = buildTemplateSections(datasetColumns, templateColumns);
+        }
+
+        if (sections.isEmpty()) {
+            sections = buildDatasetColumnSections(dataset, datasetColumns);
+        }
+
+        OnlineFormSchemaVO schema = new OnlineFormSchemaVO();
+        schema.setSections(sections);
+        return Result.success(0, "success", schema);
+    }
+
+    private List<OnlineFormSectionVO> buildTemplateSections(List<DatasetColumnEntity> datasetColumns,
+                                                            List<ModuleColumnEntity> templateColumns) {
+        if (datasetColumns == null || datasetColumns.isEmpty() || templateColumns == null || templateColumns.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        Map<Integer, String> belongByColumnId = matchDatasetColumnBelongs(datasetColumns, templateColumns);
+        Map<String, List<OnlineFormFieldVO>> fieldsByBelong = new LinkedHashMap<>();
+        for (int i = 0; i < datasetColumns.size(); i++) {
+            DatasetColumnEntity column = datasetColumns.get(i);
+            String belong = normalizeTemplateBelong(belongByColumnId.get(column.getId()));
+            fieldsByBelong
+                    .computeIfAbsent(belong, key -> new ArrayList<>())
+                    .add(buildOnlineFormField(column, i));
+        }
+
+        List<OnlineFormSectionVO> sections = new ArrayList<>();
+        addTemplateSection(sections, fieldsByBelong.remove("Object"), "Object");
+        addTemplateSection(sections, fieldsByBelong.remove("Operation"), "Operation");
+        addTemplateSection(sections, fieldsByBelong.remove("Result"), "Result");
+
+        for (Map.Entry<String, List<OnlineFormFieldVO>> entry : fieldsByBelong.entrySet()) {
+            addTemplateSection(sections, entry.getValue(), entry.getKey());
+        }
+        return sections;
+    }
+
+    private Map<Integer, String> matchDatasetColumnBelongs(List<DatasetColumnEntity> datasetColumns,
+                                                           List<ModuleColumnEntity> templateColumns) {
+        Map<String, Deque<ModuleColumnEntity>> templateColumnsByName = new LinkedHashMap<>();
+        for (ModuleColumnEntity templateColumn : templateColumns) {
+            if (!StringUtils.hasText(templateColumn.getColumnName())) {
+                continue;
+            }
+            templateColumnsByName
+                    .computeIfAbsent(templateColumn.getColumnName().trim(), key -> new ArrayDeque<>())
+                    .add(templateColumn);
+        }
+
+        Map<Integer, String> belongByColumnId = new LinkedHashMap<>();
+        for (int i = 0; i < datasetColumns.size(); i++) {
+            DatasetColumnEntity datasetColumn = datasetColumns.get(i);
+            ModuleColumnEntity matchedTemplateColumn = null;
+            if (StringUtils.hasText(datasetColumn.getColumnName())) {
+                Deque<ModuleColumnEntity> sameNameColumns = templateColumnsByName.get(datasetColumn.getColumnName().trim());
+                if (sameNameColumns != null && !sameNameColumns.isEmpty()) {
+                    matchedTemplateColumn = sameNameColumns.pollFirst();
+                }
+            }
+            if (matchedTemplateColumn == null && i < templateColumns.size()) {
+                matchedTemplateColumn = templateColumns.get(i);
+            }
+            if (matchedTemplateColumn != null && datasetColumn.getId() != null) {
+                belongByColumnId.put(datasetColumn.getId(), matchedTemplateColumn.getBelong());
+            }
+        }
+        return belongByColumnId;
+    }
+
+    private List<OnlineFormSectionVO> buildDatasetColumnSections(ManuDatasetEntity dataset,
+                                                                 List<DatasetColumnEntity> columns) {
         if (columns == null) {
             columns = new ArrayList<>();
         }
 
         OnlineFormSectionVO section = new OnlineFormSectionVO();
-        section.setId("object");
-        section.setTitle("对象区域");
+        section.setId(dataset.getId() == null ? "dataset" : "dataset" + dataset.getId());
+        section.setTitle(StringUtils.hasText(dataset.getName()) ? dataset.getName() : "数据集字段");
         section.setSubtitle("");
 
         List<OnlineFormFieldVO> fields = new ArrayList<>();
-        int dataSourceInsertIndex = columns.isEmpty() ? 0 : 1;
         for (int i = 0; i < columns.size(); i++) {
-            if (i == dataSourceInsertIndex) {
-                fields.add(buildDataSourceField());
-            }
             fields.add(buildOnlineFormField(columns.get(i), i));
-        }
-        if (columns.size() <= dataSourceInsertIndex) {
-            fields.add(buildDataSourceField());
         }
         section.setFields(fields);
 
-        OnlineFormSchemaVO schema = new OnlineFormSchemaVO();
-        schema.setSections(List.of(section));
-        return Result.success(0, "success", schema);
+        return List.of(section);
+    }
+
+    private List<DatasetColumnEntity> queryDatasetColumns(String datasetName) {
+        LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
+        columnWrapper.eq(DatasetColumnEntity::getDatasetName, datasetName)
+                .eq(DatasetColumnEntity::getDeleted, 0)
+                .orderByAsc(DatasetColumnEntity::getId);
+        List<DatasetColumnEntity> columns = DatasetColumnDao.selectList(columnWrapper);
+        if (columns == null) {
+            return new ArrayList<>();
+        }
+        return columns;
+    }
+
+    @Transactional
+    @Override
+    public Result<OnlineFormSubmitResultVO> submitOnlineFormData(OnlineFormSubmitDTO dto) {
+        if (dto == null) {
+            return Result.fail("请求参数不能为空");
+        }
+        if (dto.getDatasetId() == null) {
+            return Result.fail("数据集ID不能为空");
+        }
+        if (dto.getRecords() == null || dto.getRecords().isEmpty()) {
+            return Result.fail("记录数组不能为空");
+        }
+
+        LambdaQueryWrapper<ManuDatasetEntity> datasetWrapper = new LambdaQueryWrapper<>();
+        datasetWrapper.eq(ManuDatasetEntity::getId, dto.getDatasetId())
+                .eq(ManuDatasetEntity::getIsMenu, 0)
+                .eq(ManuDatasetEntity::getDeleted, 0)
+                .last("limit 1");
+        ManuDatasetEntity dataset = DatasetDao.selectOne(datasetWrapper);
+        if (dataset == null) {
+            return Result.fail("数据集不存在");
+        }
+
+        List<DatasetColumnEntity> columns = queryDatasetColumns(dataset.getName());
+        if (columns.isEmpty()) {
+            return Result.fail("当前数据集未定义列");
+        }
+
+        List<Integer> columnIds = columns.stream()
+                .map(DatasetColumnEntity::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (columnIds.isEmpty()) {
+            return Result.fail("当前数据集未定义有效列");
+        }
+
+        Map<String, DatasetColumnEntity> columnsByField = buildOnlineSubmitColumnIndex(columns);
+        Integer maxRowId = DatasetDataDao.selectMaxRowIdByColumnIds(columnIds);
+        int nextRowId = (maxRowId == null ? 0 : maxRowId) + 1;
+
+        OnlineFormSubmitResultVO resultVO = new OnlineFormSubmitResultVO();
+        List<OnlineFormSubmitErrorVO> errors = new ArrayList<>();
+        List<DatasetDataEntity> batchList = new ArrayList<>();
+        int acceptedCount = 0;
+        int failedCount = 0;
+
+        for (int rowIndex = 0; rowIndex < dto.getRecords().size(); rowIndex++) {
+            Map<String, Object> record = dto.getRecords().get(rowIndex);
+            List<OnlineFormSubmitErrorVO> rowErrors = validateOnlineSubmitRecord(rowIndex, record, columns, columnsByField);
+            if (!rowErrors.isEmpty()) {
+                failedCount++;
+                errors.addAll(rowErrors);
+                continue;
+            }
+
+            for (int columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+                DatasetColumnEntity column = columns.get(columnIndex);
+                Object value = getOnlineSubmitValue(record, column, columnIndex);
+
+                DatasetDataEntity data = new DatasetDataEntity();
+                data.setColumnId(column.getId());
+                data.setRowId(nextRowId);
+                data.setDataType(column.getColumnType());
+                data.setData(toOnlineSubmitData(value));
+                data.setDeleted(0);
+                batchList.add(data);
+            }
+            acceptedCount++;
+            nextRowId++;
+        }
+
+        if (!batchList.isEmpty()) {
+            int rows = DatasetDataDao.insertBatch(batchList);
+            if (rows <= 0) {
+                throw new RuntimeException("在线填写数据保存失败");
+            }
+        }
+
+        resultVO.setAcceptedCount(acceptedCount);
+        resultVO.setFailedCount(failedCount);
+        resultVO.setErrors(errors);
+
+        String message = "success";
+        if (failedCount > 0) {
+            message = acceptedCount > 0 ? "partially_success" : "failed";
+        }
+        return Result.success(0, message, resultVO);
+    }
+
+    private Map<String, DatasetColumnEntity> buildOnlineSubmitColumnIndex(List<DatasetColumnEntity> columns) {
+        Map<String, DatasetColumnEntity> columnsByField = new LinkedHashMap<>();
+        for (int i = 0; i < columns.size(); i++) {
+            DatasetColumnEntity column = columns.get(i);
+            columnsByField.put(getOnlineFormFieldId(column, i), column);
+            if (StringUtils.hasText(column.getColumnName())) {
+                columnsByField.putIfAbsent(column.getColumnName().trim(), column);
+            }
+        }
+        return columnsByField;
+    }
+
+    private List<OnlineFormSubmitErrorVO> validateOnlineSubmitRecord(Integer rowIndex,
+                                                                     Map<String, Object> record,
+                                                                     List<DatasetColumnEntity> columns,
+                                                                     Map<String, DatasetColumnEntity> columnsByField) {
+        List<OnlineFormSubmitErrorVO> errors = new ArrayList<>();
+        if (record == null || record.isEmpty()) {
+            errors.add(new OnlineFormSubmitErrorVO(rowIndex, "", "记录不能为空"));
+            return errors;
+        }
+
+        for (String field : record.keySet()) {
+            if (!columnsByField.containsKey(field)) {
+                errors.add(new OnlineFormSubmitErrorVO(rowIndex, field, "字段不存在"));
+            }
+        }
+
+        for (int columnIndex = 0; columnIndex < columns.size(); columnIndex++) {
+            DatasetColumnEntity column = columns.get(columnIndex);
+            String field = getOnlineFormFieldId(column, columnIndex);
+            String value = toOnlineSubmitData(getOnlineSubmitValue(record, column, columnIndex));
+            if (!StringUtils.hasText(value)) {
+                errors.add(new OnlineFormSubmitErrorVO(rowIndex, field, column.getColumnName() + "不能为空"));
+            }
+        }
+        return errors;
+    }
+
+    private Object getOnlineSubmitValue(Map<String, Object> record, DatasetColumnEntity column, int columnIndex) {
+        String field = getOnlineFormFieldId(column, columnIndex);
+        if (record.containsKey(field)) {
+            return record.get(field);
+        }
+        if (StringUtils.hasText(column.getColumnName()) && record.containsKey(column.getColumnName().trim())) {
+            return record.get(column.getColumnName().trim());
+        }
+        return null;
+    }
+
+    private String toOnlineSubmitData(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof String text) {
+            return text.trim();
+        }
+        if (value instanceof Number || value instanceof Boolean) {
+            return String.valueOf(value);
+        }
+        try {
+            return OBJECT_MAPPER.writeValueAsString(value);
+        } catch (Exception ignored) {
+            return String.valueOf(value);
+        }
+    }
+
+    private void addTemplateSection(List<OnlineFormSectionVO> sections, List<OnlineFormFieldVO> fields, String belong) {
+        if (fields == null || fields.isEmpty()) {
+            return;
+        }
+        OnlineFormSectionVO section = new OnlineFormSectionVO();
+        section.setId(toOnlineFormSectionId(belong));
+        section.setTitle(toOnlineFormSectionTitle(belong));
+        section.setSubtitle("");
+        section.setFields(fields);
+        sections.add(section);
     }
 
     private OnlineFormFieldVO buildOnlineFormField(DatasetColumnEntity column, int index) {
         OnlineFormFieldVO field = new OnlineFormFieldVO();
-        field.setId(column.getId() == null ? "field" + (index + 1) : "column" + column.getId());
+        field.setId(getOnlineFormFieldId(column, index));
         field.setLabel(column.getColumnName());
         field.setType(toOnlineFormFieldType(column.getColumnType()));
         field.setRequired(true);
@@ -556,19 +838,53 @@ public class DatasetServiceImp implements DatasetService {
         return field;
     }
 
-    private OnlineFormFieldVO buildDataSourceField() {
-        OnlineFormFieldVO field = new OnlineFormFieldVO();
-        field.setId("dataSource");
-        field.setLabel("数据来源");
-        field.setType("select");
-        field.setRequired(true);
-        field.setPlaceholder("请选择");
-        field.setDescription("选取一种类型以生成对应的表单");
-        field.setOptions(List.of(
-                new OnlineFormFieldOptionVO("experiment", "实验测量"),
-                new OnlineFormFieldOptionVO("simulation", "数值模拟")
-        ));
-        return field;
+    private String getOnlineFormFieldId(DatasetColumnEntity column, int index) {
+        return column.getId() == null ? "field" + (index + 1) : "column" + column.getId();
+    }
+
+    private String normalizeTemplateBelong(String belong) {
+        if (!StringUtils.hasText(belong)) {
+            return "Dataset";
+        }
+        String normalizedBelong = belong.trim();
+        if ("Object".equalsIgnoreCase(normalizedBelong)) {
+            return "Object";
+        }
+        if ("Operation".equalsIgnoreCase(normalizedBelong)) {
+            return "Operation";
+        }
+        if ("Result".equalsIgnoreCase(normalizedBelong)) {
+            return "Result";
+        }
+        return normalizedBelong;
+    }
+
+    private String toOnlineFormSectionId(String belong) {
+        String normalizedBelong = normalizeTemplateBelong(belong);
+        if ("Object".equals(normalizedBelong)) {
+            return "object";
+        }
+        if ("Operation".equals(normalizedBelong)) {
+            return "operation";
+        }
+        if ("Result".equals(normalizedBelong)) {
+            return "result";
+        }
+        return normalizedBelong.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String toOnlineFormSectionTitle(String belong) {
+        String normalizedBelong = normalizeTemplateBelong(belong);
+        if ("Object".equals(normalizedBelong)) {
+            return "对象区域";
+        }
+        if ("Operation".equals(normalizedBelong)) {
+            return "操作区域";
+        }
+        if ("Result".equals(normalizedBelong)) {
+            return "结果区域";
+        }
+        return normalizedBelong;
     }
 
     private String toOnlineFormFieldType(String columnType) {
@@ -735,44 +1051,36 @@ public class DatasetServiceImp implements DatasetService {
 
     @Transactional
     @Override
-    public Result<String> importDatasetData(String DatasetName, MultipartFile file) {
-        if (!StringUtils.hasText(DatasetName)) {
-            return Result.fail("模板名称不能为空");
+    public Result<BatchUploadResultVO> importDatasetData(Integer datasetId, MultipartFile file) {
+        if (datasetId == null) {
+            return Result.fail("数据集ID不能为空");
         }
         if (file == null || file.isEmpty()) {
             return Result.fail("上传文件不能为空");
         }
 
-        // 1. 校验模板存在，并且必须是模板，不是目录
-        LambdaQueryWrapper<ManuDatasetEntity> DatasetWrapper = new LambdaQueryWrapper<>();
-        DatasetWrapper.eq(ManuDatasetEntity::getName, DatasetName.trim())
+        LambdaQueryWrapper<ManuDatasetEntity> datasetWrapper = new LambdaQueryWrapper<>();
+        datasetWrapper.eq(ManuDatasetEntity::getId, datasetId)
                 .eq(ManuDatasetEntity::getIsMenu, 0)
+                .eq(ManuDatasetEntity::getDeleted, 0)
                 .last("limit 1");
-        ManuDatasetEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
-        if (Dataset == null) {
-            return Result.fail("模板不存在");
+        ManuDatasetEntity dataset = DatasetDao.selectOne(datasetWrapper);
+        if (dataset == null) {
+            return Result.fail("数据集不存在");
         }
 
-        // 2. 查模板对应列
-        LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
-        columnWrapper.eq(DatasetColumnEntity::getDatasetName, DatasetName.trim());
-        List<DatasetColumnEntity> columnList = DatasetColumnDao.selectList(columnWrapper);
-        if (columnList == null || columnList.isEmpty()) {
-            return Result.fail("当前模板未定义列");
+        List<DatasetColumnEntity> columns = queryDatasetColumns(dataset.getName());
+        if (columns.isEmpty()) {
+            return Result.fail("当前数据集未定义列");
         }
 
-        Map<String, DatasetColumnEntity> columnMap = columnList.stream()
-                .collect(Collectors.toMap(DatasetColumnEntity::getColumnName, item -> item, (a, b) -> a));
-
-        List<Integer> columnIds = columnList.stream()
+        List<Integer> columnIds = columns.stream()
                 .map(DatasetColumnEntity::getId)
-                .collect(Collectors.toList());
-
-        Integer maxRowId = DatasetDataDao.selectMaxRowIdByColumnIds(columnIds);
-        int nextRowId = (maxRowId == null ? 0 : maxRowId) + 1;
-
-        List<DatasetDataEntity> batchList = new ArrayList<>();
-        DataFormatter dataFormatter = new DataFormatter();
+                .filter(Objects::nonNull)
+                .toList();
+        if (columnIds.isEmpty()) {
+            return Result.fail("当前数据集未定义有效列");
+        }
 
         try (InputStream inputStream = file.getInputStream();
              Workbook workbook = WorkbookFactory.create(inputStream)) {
@@ -782,36 +1090,54 @@ public class DatasetServiceImp implements DatasetService {
                 return Result.fail("Excel中没有可读取的Sheet");
             }
 
-            Row headerRow = sheet.getRow(0);
-            if (headerRow == null) {
-                return Result.fail("Excel表头不能为空");
+            Row groupHeaderRow = sheet.getRow(0);
+            Row fieldHeaderRow = sheet.getRow(1);
+            if (groupHeaderRow == null || fieldHeaderRow == null) {
+                return Result.fail("Excel表头必须包含分组行和字段行");
             }
 
-            // 3. 读取表头，并建立 Excel 列索引 -> 模板列 的映射
+            List<TemplateColumnGroup> templateGroups = buildTemplateColumnGroups(dataset, columns);
             Map<Integer, DatasetColumnEntity> matchedColumnIndexMap = new LinkedHashMap<>();
-            int lastCellNum = headerRow.getLastCellNum();
+            DataFormatter dataFormatter = new DataFormatter();
+            int lastCellNum = Math.max(groupHeaderRow.getLastCellNum(), fieldHeaderRow.getLastCellNum());
+            String lastGroupName = null;
             for (int i = 0; i < lastCellNum; i++) {
-                Cell cell = headerRow.getCell(i);
-                String headerName = dataFormatter.formatCellValue(cell).trim();
-                if (!StringUtils.hasText(headerName)) {
+                String groupName = getHeaderCellValue(sheet, groupHeaderRow, i, dataFormatter);
+                if (StringUtils.hasText(groupName)) {
+                    lastGroupName = groupName;
+                } else {
+                    groupName = lastGroupName;
+                }
+
+                String fieldName = dataFormatter.formatCellValue(fieldHeaderRow.getCell(i)).trim();
+                if (!StringUtils.hasText(fieldName)) {
                     continue;
                 }
 
-                DatasetColumnEntity matchedColumn = columnMap.get(headerName);
+                DatasetColumnEntity matchedColumn = findBatchUploadColumn(templateGroups, groupName, fieldName);
                 if (matchedColumn != null) {
                     matchedColumnIndexMap.put(i, matchedColumn);
                 }
             }
 
             if (matchedColumnIndexMap.isEmpty()) {
-                return Result.fail("Excel表头与模板列没有任何匹配项");
+                return Result.fail("Excel表头与数据集字段没有任何匹配项");
             }
 
-            // 4. 遍历数据行
+            Integer maxRowId = DatasetDataDao.selectMaxRowIdByColumnIds(columnIds);
+            int nextRowId = (maxRowId == null ? 0 : maxRowId) + 1;
+            int firstMatchedColumnIndex = matchedColumnIndexMap.keySet().iterator().next();
+            DatasetColumnEntity rowKeyColumn = matchedColumnIndexMap.get(firstMatchedColumnIndex);
+            Set<String> rowKeys = new HashSet<>();
+            BatchUploadResultVO resultVO = new BatchUploadResultVO();
+            resultVO.setTaskId(createBatchUploadTaskId());
+            List<BatchUploadErrorVO> errors = new ArrayList<>();
+            List<DatasetDataEntity> batchList = new ArrayList<>();
             int lastRowNum = sheet.getLastRowNum();
-            int importedRowCount = 0;
+            int acceptedCount = 0;
+            int failedCount = 0;
 
-            for (int rowIndex = 1; rowIndex <= lastRowNum; rowIndex++) {
+            for (int rowIndex = 2; rowIndex <= lastRowNum; rowIndex++) {
                 Row dataRow = sheet.getRow(rowIndex);
                 if (dataRow == null) {
                     continue;
@@ -819,51 +1145,120 @@ public class DatasetServiceImp implements DatasetService {
 
                 boolean rowHasValue = false;
                 List<DatasetDataEntity> currentRowDataList = new ArrayList<>();
-
                 for (Map.Entry<Integer, DatasetColumnEntity> entry : matchedColumnIndexMap.entrySet()) {
                     Integer cellIndex = entry.getKey();
-                    DatasetColumnEntity DatasetColumn = entry.getValue();
+                    DatasetColumnEntity datasetColumn = entry.getValue();
 
-                    Cell cell = dataRow.getCell(cellIndex);
-                    String cellValue = dataFormatter.formatCellValue(cell);
-                    if (cellValue != null) {
-                        cellValue = cellValue.trim();
-                    }
+                    String cellValue = dataFormatter.formatCellValue(dataRow.getCell(cellIndex)).trim();
 
                     if (StringUtils.hasText(cellValue)) {
                         rowHasValue = true;
                     }
 
-                    DatasetDataEntity DatasetData = new DatasetDataEntity();
-                    DatasetData.setColumnId(DatasetColumn.getId());
-                    DatasetData.setRowId(nextRowId);
-                    DatasetData.setDataType(DatasetColumn.getColumnType());
-                    DatasetData.setData(cellValue);
-                    DatasetData.setDeleted(0);
+                    DatasetDataEntity datasetData = new DatasetDataEntity();
+                    datasetData.setColumnId(datasetColumn.getId());
+                    datasetData.setRowId(nextRowId);
+                    datasetData.setDataType(datasetColumn.getColumnType());
+                    datasetData.setData(cellValue);
+                    datasetData.setDeleted(0);
 
-                    currentRowDataList.add(DatasetData);
+                    currentRowDataList.add(datasetData);
                 }
 
-                // 整行都为空，跳过，不占 row_id
                 if (!rowHasValue) {
                     continue;
                 }
 
+                int excelRowIndex = rowIndex + 1;
+                String rowKey = dataFormatter.formatCellValue(dataRow.getCell(firstMatchedColumnIndex)).trim();
+                if (!StringUtils.hasText(rowKey)) {
+                    failedCount++;
+                    errors.add(new BatchUploadErrorVO(excelRowIndex, rowKeyColumn.getColumnName() + "不能为空"));
+                    continue;
+                }
+                if (!rowKeys.add(rowKey)) {
+                    failedCount++;
+                    errors.add(new BatchUploadErrorVO(excelRowIndex, rowKeyColumn.getColumnName() + "重复"));
+                    continue;
+                }
+
                 batchList.addAll(currentRowDataList);
-                importedRowCount++;
+                acceptedCount++;
                 nextRowId++;
             }
 
-            if (batchList.isEmpty()) {
-                return Result.fail("没有可导入的数据");
+            if (!batchList.isEmpty()) {
+                int rows = DatasetDataDao.insertBatch(batchList);
+                if (rows <= 0) {
+                    throw new RuntimeException("批量上传数据保存失败");
+                }
             }
 
-            DatasetDataDao.insertBatch(batchList);
-            return Result.success("导入成功，共导入 " + importedRowCount + " 行数据");
+            resultVO.setAcceptedCount(acceptedCount);
+            resultVO.setFailedCount(failedCount);
+            resultVO.setErrors(errors);
+            return Result.success(0, "success", resultVO);
 
         } catch (Exception e) {
-            throw new RuntimeException("导入模板数据失败: " + e.getMessage(), e);
+            throw new RuntimeException("批量上传数据失败: " + e.getMessage(), e);
         }
+    }
+
+    private String getHeaderCellValue(Sheet sheet, Row row, int columnIndex, DataFormatter dataFormatter) {
+        String value = dataFormatter.formatCellValue(row.getCell(columnIndex)).trim();
+        if (StringUtils.hasText(value)) {
+            return value;
+        }
+
+        for (CellRangeAddress mergedRegion : sheet.getMergedRegions()) {
+            if (!mergedRegion.isInRange(row.getRowNum(), columnIndex)) {
+                continue;
+            }
+            Row firstRow = sheet.getRow(mergedRegion.getFirstRow());
+            if (firstRow == null) {
+                return "";
+            }
+            return dataFormatter.formatCellValue(firstRow.getCell(mergedRegion.getFirstColumn())).trim();
+        }
+        return "";
+    }
+
+    private DatasetColumnEntity findBatchUploadColumn(List<TemplateColumnGroup> templateGroups,
+                                                      String groupName,
+                                                      String fieldName) {
+        if (!StringUtils.hasText(fieldName)) {
+            return null;
+        }
+
+        String normalizedGroupName = normalizeBatchHeader(groupName);
+        String normalizedFieldName = fieldName.trim();
+        DatasetColumnEntity fieldOnlyMatch = null;
+        int fieldOnlyMatchCount = 0;
+
+        for (TemplateColumnGroup group : templateGroups) {
+            boolean groupMatched = normalizeBatchHeader(group.getName()).equals(normalizedGroupName);
+            for (DatasetColumnEntity column : group.getColumns()) {
+                if (!StringUtils.hasText(column.getColumnName())
+                        || !column.getColumnName().trim().equals(normalizedFieldName)) {
+                    continue;
+                }
+                if (groupMatched) {
+                    return column;
+                }
+                fieldOnlyMatch = column;
+                fieldOnlyMatchCount++;
+            }
+        }
+
+        return fieldOnlyMatchCount == 1 ? fieldOnlyMatch : null;
+    }
+
+    private String normalizeBatchHeader(String value) {
+        return StringUtils.hasText(value) ? value.trim().toLowerCase(Locale.ROOT) : "";
+    }
+
+    private String createBatchUploadTaskId() {
+        return "job-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"));
     }
 
     @Override
@@ -973,62 +1368,205 @@ public class DatasetServiceImp implements DatasetService {
     }
 
     @Override
-    public void exportDatasetTemplate(String DatasetName, HttpServletResponse response) {
-        if (!StringUtils.hasText(DatasetName)) {
-            throw new RuntimeException("模板名称不能为空");
+    public void exportDatasetTemplate(Integer datasetId, String format, HttpServletResponse response) {
+        if (datasetId == null) {
+            writeTemplateError(response, 400, "数据集ID不能为空");
+            return;
+        }
+        if (!StringUtils.hasText(format)) {
+            writeTemplateError(response, 400, "模板格式不能为空");
+            return;
         }
 
-        // 1. 校验模板存在，并且必须是模板，不是目录
-        LambdaQueryWrapper<ManuDatasetEntity> DatasetWrapper = new LambdaQueryWrapper<>();
-        DatasetWrapper.eq(ManuDatasetEntity::getName, DatasetName.trim())
+        String normalizedFormat = format.trim().toLowerCase(Locale.ROOT);
+        if ("xlsx".equals(normalizedFormat)) {
+            normalizedFormat = "excel";
+        }
+        if (!"json".equals(normalizedFormat) && !"excel".equals(normalizedFormat)) {
+            writeTemplateError(response, 400, "模板格式只支持 json 或 excel");
+            return;
+        }
+
+        LambdaQueryWrapper<ManuDatasetEntity> datasetWrapper = new LambdaQueryWrapper<>();
+        datasetWrapper.eq(ManuDatasetEntity::getId, datasetId)
                 .eq(ManuDatasetEntity::getIsMenu, 0)
+                .eq(ManuDatasetEntity::getDeleted, 0)
                 .last("limit 1");
-
-        ManuDatasetEntity Dataset = DatasetDao.selectOne(DatasetWrapper);
-        if (Dataset == null) {
-            throw new RuntimeException("模板不存在");
+        ManuDatasetEntity dataset = DatasetDao.selectOne(datasetWrapper);
+        if (dataset == null) {
+            writeTemplateError(response, 404, "数据集不存在");
+            return;
         }
 
-        // 2. 查询模板列
-        LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
-        columnWrapper.eq(DatasetColumnEntity::getDatasetName, DatasetName.trim())
-                .orderByAsc(DatasetColumnEntity::getId);
-
-        List<DatasetColumnEntity> columnList = DatasetColumnDao.selectList(columnWrapper);
-        if (columnList == null || columnList.isEmpty()) {
-            throw new RuntimeException("当前模板未定义列，无法导出模板结构");
+        List<DatasetColumnEntity> columns = queryDatasetColumns(dataset.getName());
+        if (columns.isEmpty()) {
+            writeTemplateError(response, 400, "当前数据集未定义列，无法导出模板");
+            return;
         }
 
-        // 3. 创建 Excel，只写表头，不写数据
+        List<TemplateColumnGroup> groups = buildTemplateColumnGroups(dataset, columns);
+        try {
+            if ("json".equals(normalizedFormat)) {
+                writeJsonTemplate(dataset, groups, response);
+            } else {
+                writeExcelTemplate(dataset, groups, response);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("导出模板失败: " + e.getMessage(), e);
+        }
+    }
+
+    private List<TemplateColumnGroup> buildTemplateColumnGroups(ManuDatasetEntity dataset,
+                                                                List<DatasetColumnEntity> columns) {
+        Map<Integer, String> belongByColumnId = new LinkedHashMap<>();
+        if (dataset.getModule() != null) {
+            LambdaQueryWrapper<ModuleColumnEntity> templateColumnWrapper = new LambdaQueryWrapper<>();
+            templateColumnWrapper.eq(ModuleColumnEntity::getModuleId, dataset.getModule())
+                    .eq(ModuleColumnEntity::getDeleted, 0)
+                    .orderByAsc(ModuleColumnEntity::getCreateTime)
+                    .orderByAsc(ModuleColumnEntity::getId);
+            List<ModuleColumnEntity> templateColumns = moduleColumnDao.selectList(templateColumnWrapper);
+            if (templateColumns != null && !templateColumns.isEmpty()) {
+                belongByColumnId = matchDatasetColumnBelongs(columns, templateColumns);
+            }
+        }
+
+        Map<String, TemplateColumnGroup> groupMap = new LinkedHashMap<>();
+        for (DatasetColumnEntity column : columns) {
+            String belong = normalizeTemplateBelong(belongByColumnId.get(column.getId()));
+            TemplateColumnGroup group = groupMap.computeIfAbsent(belong, key ->
+                    new TemplateColumnGroup(toOnlineFormSectionId(key), new ArrayList<>()));
+            group.getColumns().add(column);
+        }
+
+        List<TemplateColumnGroup> result = new ArrayList<>();
+        addTemplateColumnGroup(result, groupMap.remove("Object"));
+        addTemplateColumnGroup(result, groupMap.remove("Operation"));
+        addTemplateColumnGroup(result, groupMap.remove("Result"));
+        for (TemplateColumnGroup group : groupMap.values()) {
+            addTemplateColumnGroup(result, group);
+        }
+        return result;
+    }
+
+    private void addTemplateColumnGroup(List<TemplateColumnGroup> result, TemplateColumnGroup group) {
+        if (group != null && !group.getColumns().isEmpty()) {
+            result.add(group);
+        }
+    }
+
+    private void writeExcelTemplate(ManuDatasetEntity dataset,
+                                    List<TemplateColumnGroup> groups,
+                                    HttpServletResponse response) throws Exception {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
-            var sheet = workbook.createSheet("模板结构");
+            Sheet sheet = workbook.createSheet("template");
+            Row groupRow = sheet.createRow(0);
+            Row fieldRow = sheet.createRow(1);
 
-            Row headerRow = sheet.createRow(0);
+            CellStyle groupStyle = workbook.createCellStyle();
+            groupStyle.setAlignment(HorizontalAlignment.CENTER);
+            groupStyle.setVerticalAlignment(VerticalAlignment.CENTER);
 
-            for (int i = 0; i < columnList.size(); i++) {
-                DatasetColumnEntity column = columnList.get(i);
-                Cell cell = headerRow.createCell(i);
-                cell.setCellValue(column.getColumnName());
+            int columnIndex = 0;
+            for (TemplateColumnGroup group : groups) {
+                int startIndex = columnIndex;
+                Cell groupCell = groupRow.createCell(startIndex);
+                groupCell.setCellValue(group.getName());
+                groupCell.setCellStyle(groupStyle);
+
+                for (DatasetColumnEntity column : group.getColumns()) {
+                    Cell fieldCell = fieldRow.createCell(columnIndex);
+                    fieldCell.setCellValue(column.getColumnName());
+                    columnIndex++;
+                }
+
+                if (columnIndex - startIndex > 1) {
+                    sheet.addMergedRegion(new CellRangeAddress(0, 0, startIndex, columnIndex - 1));
+                }
+            }
+
+            for (int i = 0; i < columnIndex; i++) {
                 sheet.autoSizeColumn(i);
             }
 
-            // 4. 设置响应头
-            String fileName = DatasetName.trim() + "_模板结构.xlsx";
-            String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8)
-                    .replaceAll("\\+", "%20");
-
-            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-            response.setCharacterEncoding("UTF-8");
-            response.setHeader("Content-Disposition",
-                    "attachment; filename*=UTF-8''" + encodedFileName);
-
-            // 5. 输出到前端
+            setTemplateDownloadHeaders(response, dataset.getName() + "_template.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
             OutputStream outputStream = response.getOutputStream();
             workbook.write(outputStream);
             outputStream.flush();
+        }
+    }
 
+    private void writeJsonTemplate(ManuDatasetEntity dataset,
+                                   List<TemplateColumnGroup> groups,
+                                   HttpServletResponse response) throws Exception {
+        List<String> groupHeader = new ArrayList<>();
+        List<String> fieldHeader = new ArrayList<>();
+        List<Map<String, Object>> sections = new ArrayList<>();
+
+        for (TemplateColumnGroup group : groups) {
+            List<String> fields = new ArrayList<>();
+            for (int i = 0; i < group.getColumns().size(); i++) {
+                DatasetColumnEntity column = group.getColumns().get(i);
+                groupHeader.add(i == 0 ? group.getName() : "");
+                fieldHeader.add(column.getColumnName());
+                fields.add(column.getColumnName());
+            }
+
+            Map<String, Object> section = new LinkedHashMap<>();
+            section.put("name", group.getName());
+            section.put("fields", fields);
+            sections.add(section);
+        }
+
+        Map<String, Object> template = new LinkedHashMap<>();
+        template.put("datasetId", dataset.getId());
+        template.put("datasetName", dataset.getName());
+        template.put("headers", List.of(groupHeader, fieldHeader));
+        template.put("sections", sections);
+
+        setTemplateDownloadHeaders(response, dataset.getName() + "_template.json", "application/json;charset=UTF-8");
+        OBJECT_MAPPER.writerWithDefaultPrettyPrinter().writeValue(response.getOutputStream(), template);
+        response.getOutputStream().flush();
+    }
+
+    private void setTemplateDownloadHeaders(HttpServletResponse response, String fileName, String contentType) {
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8)
+                .replaceAll("\\+", "%20");
+        response.setContentType(contentType);
+        if (contentType.startsWith("application/json")) {
+            response.setCharacterEncoding("UTF-8");
+        }
+        response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFileName);
+    }
+
+    private void writeTemplateError(HttpServletResponse response, Integer code, String message) {
+        try {
+            response.setStatus(code);
+            response.setContentType("application/json;charset=UTF-8");
+            response.setCharacterEncoding("UTF-8");
+            OBJECT_MAPPER.writeValue(response.getOutputStream(), Result.fail(code, message));
+            response.getOutputStream().flush();
         } catch (Exception e) {
-            throw new RuntimeException("导出模板结构失败: " + e.getMessage(), e);
+            throw new RuntimeException("写入模板错误响应失败: " + e.getMessage(), e);
+        }
+    }
+
+    private static class TemplateColumnGroup {
+        private final String name;
+        private final List<DatasetColumnEntity> columns;
+
+        private TemplateColumnGroup(String name, List<DatasetColumnEntity> columns) {
+            this.name = name;
+            this.columns = columns;
+        }
+
+        private String getName() {
+            return name;
+        }
+
+        private List<DatasetColumnEntity> getColumns() {
+            return columns;
         }
     }
 
@@ -1288,7 +1826,7 @@ public class DatasetServiceImp implements DatasetService {
 
     @Override
     public Long getTotal() {
-        return manuDatasetDao.selectCount(null);
+        return DatasetDao.selectCount(null);
     }
 
     private long countDatasetRecursively(Integer parentId, Map<Integer, List<ManuDatasetEntity>> parentChildrenMap) {

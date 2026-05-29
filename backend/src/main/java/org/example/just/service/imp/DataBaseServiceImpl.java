@@ -10,7 +10,6 @@ import org.example.just.dto.databaseDto.*;
 import org.example.just.entity.*;
 import org.example.just.service.DataBaseService;
 import org.example.just.service.DatasetService;
-import org.example.just.service.ModuleService;
 import org.example.just.utils.JwtUtil;
 import org.example.just.utils.Result;
 import org.springframework.stereotype.Service;
@@ -51,9 +50,6 @@ public class DataBaseServiceImpl implements DataBaseService {
 
     @Resource
     private DatasetService datasetService;
-
-    @Resource
-    private ModuleService moduleService;
 
     @Resource
     private FavoriteDao favoriteDao;
@@ -627,12 +623,10 @@ public class DataBaseServiceImpl implements DataBaseService {
 
     @Override
     public void downloadDataset(Long id, DownloadRequest request, HttpServletResponse response) {
-        String moduleName =
-        moduleService.getModuleBaseInfo(
-                id.intValue()).getData().getModuleName();
         datasetService.exportDatasetTemplate(
-                moduleName
-                , response);
+                id.intValue(),
+                request == null ? "json" : request.getFileType(),
+                response);
     }
 
     @Override
