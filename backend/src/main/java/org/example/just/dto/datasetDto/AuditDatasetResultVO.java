@@ -6,7 +6,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@Schema(name = "AuditModuleResultVO", description = "审核模板返回对象")
+@Schema(name = "AuditDatasetResultVO", description = "审核数据集返回对象")
 public class AuditDatasetResultVO {
 
     @Schema(description = "数据集 ID")
@@ -15,7 +15,7 @@ public class AuditDatasetResultVO {
     @Schema(description = "数据集名称")
     private String datasetName;
 
-    @Schema(description = "审核状态：0-驳回，1-通过")
+    @Schema(description = "审核状态：1-通过，2-驳回")
     private Integer status;
 
     @Schema(description = "审核意见")

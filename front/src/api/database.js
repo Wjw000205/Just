@@ -59,6 +59,91 @@ function normalizeSidebarTreeNode(raw, depth = 0) {
   return { id, label, children }
 }
 
+/**
+ * 数据库页左侧科学分类树。
+ * POST /api/categories/science/tree
+ *
+ * @param {{ keyword?: string, page?: number, pageSize?: number }} params
+ * @returns {Promise<Array<{ id: string, label: string, children: any[] }>>}
+ */
+export async function fetchDatabaseScienceTree(params = {}) {
+  const resp = await fetch('/api/categories/science/tree', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+    body: JSON.stringify({
+      keyword: params.keyword ?? '',
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 500,
+    }),
+  })
+
+  const json = await resp.json().catch(() => null)
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!json || (json.code !== 0 && json.code !== 200)) {
+    throw new Error(json?.message || '加载科学分类树失败')
+  }
+
+  const tree = Array.isArray(json.data) ? json.data.map((n) => normalizeSidebarTreeNode(n)) : []
+  return [
+    {
+      id: 'all',
+      label: '全部',
+      children: tree,
+    },
+  ]
+}
+
+function normalizeDatasetOptionRow(raw) {
+  return {
+    id: raw?.id,
+    name: raw?.name != null ? String(raw.name) : '',
+    dataLevel: raw?.dataLevel != null ? String(raw.dataLevel) : '',
+    auditStatus: raw?.auditStatus,
+    recordCount: raw?.recordCount ?? 0,
+  }
+}
+
+/**
+ * 按科学分类查询可用数据集列表。
+ * POST /api/datasets/options
+ *
+ * @param {{ scienceCategoryIds?: number[], keyword?: string, page?: number, pageSize?: number }} body
+ * @returns {Promise<{ total: number, list: Array<{ id: number, name: string, dataLevel: string, recordCount: number }> }>}
+ */
+export async function fetchDatasetOptions(body = {}) {
+  const resp = await fetch('/api/datasets/options', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+    body: JSON.stringify({
+      scienceCategoryIds: Array.isArray(body.scienceCategoryIds) ? body.scienceCategoryIds : [],
+      keyword: body.keyword ?? '',
+      page: body.page ?? 1,
+      pageSize: body.pageSize ?? 20,
+    }),
+  })
+
+  const json = await resp.json().catch(() => null)
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!json || (json.code !== 0 && json.code !== 200)) {
+    throw new Error(json?.message || '查询数据集失败')
+  }
+
+  return {
+    total: Number(json.total ?? 0),
+    list: Array.isArray(json.data) ? json.data.map(normalizeDatasetOptionRow) : [],
+  }
+}
+
 function normalizeDataLevel(raw) {
   if (raw == null) return { text: '', kind: 'public' }
   if (typeof raw === 'object' && raw.text != null) {
@@ -296,4 +381,3 @@ export async function downloadDatabaseDatasetFile(id, body) {
   const filename = parseFilenameFromContentDisposition(cd)
   return { blob, filename, contentType }
 }
-

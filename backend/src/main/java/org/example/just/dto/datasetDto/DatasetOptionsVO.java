@@ -16,6 +16,9 @@ public class DatasetOptionsVO {
     @Schema(description = "数据级别", example = "public")
     private String dataLevel;
 
+    @Schema(description = "审核状态：0未审核，1审核通过，2审核未通过")
+    private Integer auditStatus;
+
     @Schema(description = "已上传记录数", example = "256")
     private Long recordCount;
 }

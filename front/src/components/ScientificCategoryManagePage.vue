@@ -256,19 +256,20 @@ const searchForm = ref({
 // 所属目录选项（从当前树收集目录名称）
 const parentOptions = ref([])
 
-/** 接口 ManuDatasetTreeVO → 页面展示节点 */
-function mapApiToViewNode(apiNode, level = 1) {
+/** 接口 ScienceCategoryTreeVO → 页面展示节点 */
+function mapApiToViewNode(apiNode, level = 1, parentName = '-') {
   const rawChildren = Array.isArray(apiNode.children) ? apiNode.children : []
-  const children = rawChildren.map((ch) => mapApiToViewNode(ch, level + 1))
+  const nodeName = apiNode.name ?? ''
+  const children = rawChildren.map((ch) => mapApiToViewNode(ch, level + 1, nodeName))
   return {
     id: apiNode.id,
-    name: apiNode.name ?? '',
+    name: nodeName,
     level,
     parentId: apiNode.parent ?? 0,
-    parentName: '',
+    parentName,
     childrenCount: children.length,
-    dataCount: '—',
-    templateCount: '—',
+    dataCount: apiNode.datasetCount ?? 0,
+    templateCount: apiNode.templateCount ?? 0,
     expanded: true,
     creator: apiNode.creator,
     createTime: apiNode.createTime,
@@ -448,11 +449,9 @@ async function loadTree() {
   loading.value = true
   loadError.value = ''
   try {
-    const res = await getManuList()
+    const res = await getManuList({ page: 1, pageSize: 500 })
     const list = Array.isArray(res.data) ? res.data : []
-    treeData.value = list.map((n) => mapApiToViewNode(n, 1))
-    const idNameMap = buildIdNameMap(treeData.value)
-    fillParentNameById(treeData.value, idNameMap)
+    treeData.value = list.map((n) => mapApiToViewNode(n, 1, '-'))
     parentOptions.value = collectNamesForParentSelect(treeData.value)
   } catch (e) {
     loadError.value = e?.message || '加载模板目录树失败'

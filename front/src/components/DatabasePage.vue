@@ -127,75 +127,33 @@
             <thead>
               <tr>
                 <th class="col-index">序号</th>
-                <th class="col-name">数据集名称 <span class="sort-caret" aria-hidden="true">⇅</span></th>
-                <th class="col-tags">科学分类 <span class="sort-caret" aria-hidden="true">⇅</span></th>
-                <th class="col-tags">产业分类 <span class="sort-caret" aria-hidden="true">⇅</span></th>
-                <th class="col-tags">产品代码 <span class="sort-caret" aria-hidden="true">⇅</span></th>
+                <th class="col-name">数据集名称</th>
                 <th class="col-level">数据级别</th>
-                <th class="col-count">数据量</th>
-                <th class="col-tpl">模板名称</th>
-                <th class="col-cat">数据类别</th>
-                <th class="col-dept">所属部门</th>
-                <th class="col-creator">创建人</th>
-                <th class="col-time">创建时间</th>
-                <th class="col-time">最近更新时间</th>
+                <th class="col-count">已上传记录数</th>
                 <th class="col-action">操作</th>
               </tr>
             </thead>
 
             <tbody v-if="loading">
               <tr>
-                <td colspan="14" class="table-hint">加载中…</td>
+                <td colspan="5" class="table-hint">加载中…</td>
               </tr>
             </tbody>
             <tbody v-else-if="rows.length === 0">
               <tr>
-                <td colspan="14" class="table-hint muted">暂无数据</td>
+                <td colspan="5" class="table-hint muted">暂无数据</td>
               </tr>
             </tbody>
             <tbody v-else>
               <tr v-for="(r, idx) in rows" :key="String(r.id ?? idx)">
                 <td class="col-index">{{ (page - 1) * pageSize + idx + 1 }}</td>
                 <td class="col-name">
-                  <span class="ellipsis" :title="r.datasetName">{{ r.datasetName }}</span>
-                </td>
-                <td class="col-tags">
-                  <div class="tag-stack">
-                    <span v-for="(t, i) in r.scienceCategories" :key="'s' + i" class="tag-badge blue">{{ t }}</span>
-                  </div>
-                </td>
-                <td class="col-tags">
-                  <div class="tag-stack">
-                    <span v-for="(t, i) in r.industryCategories" :key="'i' + i" class="tag-badge blue">{{ t }}</span>
-                  </div>
-                </td>
-                <td class="col-tags">
-                  <div class="tag-stack">
-                    <span v-for="(t, i) in r.productCodes" :key="'p' + i" class="tag-badge blue">{{ t }}</span>
-                  </div>
+                  <span class="ellipsis" :title="r.name">{{ r.name }}</span>
                 </td>
                 <td class="col-level">
-                  <span class="level-badge" :class="r.dataLevel.kind === 'high' ? 'high' : 'public'">{{ r.dataLevel.text }}</span>
+                  <span class="level-badge" :class="r.dataLevel === 'highvalue' ? 'high' : 'public'">{{ dataLevelText(r.dataLevel) }}</span>
                 </td>
-                <td class="col-count">{{ r.dataCount }}</td>
-                <td class="col-tpl">
-                  <span class="ellipsis" :title="r.templateName">{{ r.templateName }}</span>
-                </td>
-                <td class="col-cat">
-                  <span class="ellipsis" :title="r.dataCategory">{{ r.dataCategory }}</span>
-                </td>
-                <td class="col-dept">
-                  <span class="ellipsis" :title="r.department">{{ r.department }}</span>
-                </td>
-                <td class="col-creator">
-                  <span class="ellipsis" :title="r.creator">{{ r.creator }}</span>
-                </td>
-                <td class="col-time">
-                  <span class="ellipsis" :title="r.createTime">{{ r.createTime }}</span>
-                </td>
-                <td class="col-time">
-                  <span class="ellipsis" :title="r.updateTime">{{ r.updateTime }}</span>
-                </td>
+                <td class="col-count">{{ r.recordCount }}</td>
                 <td class="col-action">
                   <div class="action-btns">
                     <button type="button" class="action-btn" title="查看" data-tip="查看" @click="handleView(r)">
@@ -253,10 +211,10 @@
         </div>
 
         <div class="download-info">
-          <div class="info-line"><span class="k">数据集名称：</span><span class="v">{{ downloadTarget?.datasetName || '-' }}</span></div>
+          <div class="info-line"><span class="k">数据集名称：</span><span class="v">{{ downloadTarget?.name || '-' }}</span></div>
           <div class="info-line"><span class="k">数据资源目录：</span><span class="v">-</span></div>
-          <div class="info-line"><span class="k">数据量：</span><span class="v">{{ downloadTarget?.dataCount ?? '-' }}</span></div>
-          <div class="info-line"><span class="k">模板名称：</span><span class="v">{{ downloadTarget?.templateName || '-' }}</span></div>
+          <div class="info-line"><span class="k">已上传记录数：</span><span class="v">{{ downloadTarget?.recordCount ?? '-' }}</span></div>
+          <div class="info-line"><span class="k">数据级别：</span><span class="v">{{ dataLevelText(downloadTarget?.dataLevel) || '-' }}</span></div>
         </div>
 
         <div class="download-options">
@@ -320,8 +278,8 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import {
-  fetchDatabasePageInit,
-  queryDatabaseDatasets,
+  fetchDatabaseScienceTree,
+  fetchDatasetOptions,
   fetchDatabaseDownloadFields,
   downloadDatabaseDatasetFile,
 } from '../api/database.js'
@@ -373,8 +331,21 @@ function onSidebarToggleExpand(id) {
   }
 }
 
-function handleCategorySearch() {
+async function handleCategorySearch() {
   page.value = 1
+  try {
+    sidebarTree.value = await fetchDatabaseScienceTree({
+      keyword: categoryKeyword.value,
+      page: 1,
+      pageSize: 500,
+    })
+    sidebarExpanded.value = collectExpandedDefaults(sidebarTree.value)
+    activeNodeId.value = findDefaultActiveId(sidebarTree.value)
+  } catch (e) {
+    console.error('handleCategorySearch', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes('未登录') || msg.includes('无权限')) alert(msg)
+  }
   loadRows()
 }
 
@@ -395,6 +366,17 @@ function toggleDropdown(key) {
 const industryOptions = ref([])
 const dataCategoryOptions = ref([])
 const deptOptions = ref([])
+
+function loadLocalFilterOptions() {
+  industryOptions.value = [
+    { label: '产品分类1', value: '1' },
+    { label: '产品分类2', value: '2' },
+  ]
+  dataCategoryOptions.value = [
+    { label: '数据集', value: 'dataset' },
+  ]
+  deptOptions.value = []
+}
 
 const industryLabel = computed(() => {
   const v = searchForm.value.industryCategory
@@ -423,6 +405,15 @@ function pickDataCategory(v) {
 function pickDepartment(v) {
   searchForm.value.department = v
   dropdownOpen.value = null
+}
+
+function dataLevelText(level) {
+  const map = {
+    public: '公益',
+    highvalue: '高值',
+    private: '私有',
+  }
+  return map[level] || level || ''
 }
 
 const page = ref(1)
@@ -496,7 +487,11 @@ function goToPage(p) {
 }
 
 function handleView(row) {
-  emit('view-detail', row)
+  emit('view-detail', {
+    ...row,
+    datasetName: row.name,
+    dataCount: row.recordCount,
+  })
 }
 function handleDownload(row) {
   downloadTarget.value = row
@@ -541,7 +536,7 @@ async function confirmDownload() {
     const ext = downloadFileType.value === 'xlsx' ? 'xlsx' : 'json'
     const safeName =
       filename ||
-      `${String(downloadTarget.value?.datasetName || 'dataset')}-${downloadFieldMode.value === 'partial' ? '部分字段' : '全部字段'}.${ext}`
+      `${String(downloadTarget.value?.name || 'dataset')}-${downloadFieldMode.value === 'partial' ? '部分字段' : '全部字段'}.${ext}`
 
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -573,20 +568,20 @@ function handleClickOutside(e) {
 async function loadRows() {
   loading.value = true
   try {
-    const { total: t, list } = await queryDatabaseDatasets({
-      datasetName: searchForm.value.datasetName,
-      industryCategory: searchForm.value.industryCategory,
-      dataCategory: searchForm.value.dataCategory,
-      templateName: searchForm.value.templateName,
-      creator: searchForm.value.creator,
-      department: searchForm.value.department,
-      sidebarNodeId: activeNodeId.value,
-      sidebarKeyword: categoryKeyword.value,
+    const selectedId = Number(activeNodeId.value)
+    const scienceCategoryIds =
+      activeNodeId.value && activeNodeId.value !== 'all' && Number.isFinite(selectedId)
+        ? [selectedId]
+        : []
+    const { total: t, list } = await fetchDatasetOptions({
+      scienceCategoryIds,
+      keyword: searchForm.value.datasetName,
       page: page.value,
       pageSize: pageSize.value,
     })
-    total.value = t
-    rows.value = list
+    const approvedList = list.filter((item) => Number(item.auditStatus) === 1)
+    total.value = Math.min(t, approvedList.length)
+    rows.value = approvedList
   } catch (e) {
     console.error('loadRows', e)
     const msg = e instanceof Error ? e.message : String(e)
@@ -600,20 +595,16 @@ async function loadRows() {
 
 async function loadPageInit() {
   try {
-    const res = await fetchDatabasePageInit({
-      page: page.value,
-      pageSize: pageSize.value,
+    loadLocalFilterOptions()
+
+    sidebarTree.value = await fetchDatabaseScienceTree({
+      keyword: categoryKeyword.value,
+      page: 1,
+      pageSize: 500,
     })
-    sidebarTree.value = Array.isArray(res.tree) ? res.tree : []
     sidebarExpanded.value = collectExpandedDefaults(sidebarTree.value)
     activeNodeId.value = findDefaultActiveId(sidebarTree.value)
-
-    industryOptions.value = res.industryCategories
-    dataCategoryOptions.value = res.dataCategories
-    deptOptions.value = res.departments
-
-    total.value = res.total
-    rows.value = res.list
+    await loadRows()
   } catch (e) {
     console.error('loadPageInit', e)
     const msg = e instanceof Error ? e.message : String(e)
@@ -1430,4 +1421,3 @@ onBeforeUnmount(() => {
 }
 
 </style>
-

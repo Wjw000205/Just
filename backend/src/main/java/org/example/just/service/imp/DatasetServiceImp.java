@@ -464,6 +464,7 @@ public class DatasetServiceImp implements DatasetService {
                     vo.setId(dataset.getId());
                     vo.setName(dataset.getName());
                     vo.setDataLevel(dataset.getDataLevel());
+                    vo.setAuditStatus(dataset.getAuditStatus());
                     vo.setRecordCount(countDatasetRecords(dataset.getName()));
                     return vo;
                 })
@@ -1577,7 +1578,7 @@ public class DatasetServiceImp implements DatasetService {
             return Result.fail("请求参数不能为空");
         }
         if (!StringUtils.hasText(dto.getDatasetName())) {
-            return Result.fail("模板名称不能为空");
+            return Result.fail("数据集名称不能为空");
         }
         if (!StringUtils.hasText(dto.getColumnName())) {
             return Result.fail("列名称不能为空");

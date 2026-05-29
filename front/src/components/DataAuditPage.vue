@@ -8,8 +8,9 @@
             v-model="categorySearch"
             class="sidebar-search-input"
             placeholder="请输入科学分类名称"
+            @keyup.enter="handleCategorySearch"
           />
-          <button class="sidebar-search-btn">
+          <button class="sidebar-search-btn" @click="handleCategorySearch">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -18,37 +19,18 @@
         </div>
 
         <ul class="category-list">
-          <li
-            class="category-item"
-            :class="{ active: selectedCategory === 'all' }"
-            @click="selectedCategory = 'all'"
-          >
-            全部
-          </li>
-          <li
-            v-for="category in categoryList"
-            :key="category.id"
-            class="category-item"
-            :class="{ active: selectedCategory === category.id, expanded: category.expanded }"
-          >
-            <span class="category-arrow" @click.stop="toggleCategory(category)">
-              <svg v-if="category.children" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="9 18 15 12 9 6"></polyline>
-              </svg>
-            </span>
-            <span class="category-name" @click="selectedCategory = category.id">{{ category.name }}</span>
-            <ul v-if="category.expanded && category.children" class="subcategory-list">
-              <li
-                v-for="child in category.children"
-                :key="child.id"
-                class="subcategory-item"
-                :class="{ active: selectedCategory === child.id }"
-                @click.stop="selectedCategory = child.id"
-              >
-                {{ child.name }}
-              </li>
-            </ul>
-          </li>
+          <template v-if="categoryList.length">
+            <DatabaseSidebarTreeRow
+              v-for="node in categoryList"
+              :key="node.id"
+              :node="node"
+              :active-id="selectedCategory"
+              :expanded-ids="categoryExpanded"
+              @select="selectCategory"
+              @toggle-expand="toggleCategory"
+            />
+          </template>
+          <li v-else class="category-empty">暂无目录数据</li>
         </ul>
       </aside>
 
@@ -152,12 +134,12 @@
         <div class="batch-action-area">
           <div class="batch-left">
             <label class="checkbox-label">
-              <input type="checkbox" v-model="selectAll" @change="handleSelectAll" />
+              <input type="checkbox" v-model="selectAll" />
               <span>全选</span>
             </label>
-            <button class="batch-btn" @click="handleCancelSelect">取消全选</button>
+            <button type="button" class="batch-btn" @click="handleCancelSelect">取消全选</button>
             <span class="selected-count">已选：{{ selectedCount }}</span>
-            <button class="batch-audit-btn" @click="handleBatchAudit">
+            <button type="button" class="batch-audit-btn" @click="handleBatchAudit">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="20 6 9 17 4 12"></polyline>
               </svg>
@@ -174,31 +156,37 @@
                 <th class="col-checkbox"></th>
                 <th class="col-index">序号</th>
                 <th class="col-dataset">数据集名称</th>
-                <th class="col-scientific">科学分类</th>
-                <th class="col-industry">产业分类</th>
-                <th class="col-product">产品代码</th>
                 <th class="col-level">数据级别</th>
+                <th class="col-product">已上传记录数</th>
+                <th class="col-scientific">审核状态</th>
                 <th class="col-action">操作</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody v-if="loading">
+              <tr>
+                <td colspan="7" class="table-empty">加载中...</td>
+              </tr>
+            </tbody>
+            <tbody v-else-if="tableData.length === 0">
+              <tr>
+                <td colspan="7" class="table-empty">暂无数据</td>
+              </tr>
+            </tbody>
+            <tbody v-else>
               <tr v-for="(item, index) in tableData" :key="item.id">
                 <td class="col-checkbox">
                   <input type="checkbox" v-model="item.selected" />
                 </td>
-                <td class="col-index">{{ index + 1 }}</td>
+                <td class="col-index">{{ (currentPage - 1) * pageSize + index + 1 }}</td>
                 <td class="col-dataset" :title="item.datasetName">{{ item.datasetName }}</td>
-                <td class="col-scientific">
-                  <span class="tag-badge blue">{{ item.scientificCategory }}</span>
-                </td>
-                <td class="col-industry">
-                  <span class="tag-badge light-blue">{{ item.industryCategory }}</span>
-                </td>
-                <td class="col-product">{{ item.productCode || '-' }}</td>
                 <td class="col-level">
                   <span :class="['level-badge', getLevelClass(item.dataLevel)]">
-                    {{ item.dataLevel }}
+                    {{ dataLevelText(item.dataLevel) }}
                   </span>
+                </td>
+                <td class="col-product">{{ item.recordCount ?? 0 }}</td>
+                <td class="col-scientific">
+                  <span :class="['tag-badge', auditStatusClass(item.auditStatus)]">{{ auditStatusText(item.auditStatus) }}</span>
                 </td>
                 <td class="col-action">
                   <div class="action-icons">
@@ -208,9 +196,15 @@
                         <circle cx="12" cy="12" r="3"/>
                       </svg>
                     </button>
-                    <button class="icon-btn audit" title="审核" @click="handleAudit(item)">
+                    <button class="icon-btn audit" title="通过" @click="handleAudit(item, 1)">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                    </button>
+                    <button class="icon-btn delete" title="驳回" @click="handleAudit(item, 2)">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
                       </svg>
                     </button>
                   </div>
@@ -223,9 +217,9 @@
         <!-- 分页 -->
         <div class="pagination">
           <span class="total">共 {{ total }} 条</span>
-          <button class="page-btn" :disabled="currentPage === 1" @click="currentPage--">上一页</button>
+          <button class="page-btn" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">上一页</button>
           <span class="page-current">{{ currentPage }}</span>
-          <button class="page-btn" :disabled="currentPage >= totalPages" @click="currentPage++">下一页</button>
+          <button class="page-btn" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">下一页</button>
         </div>
       </main>
     </div>
@@ -234,33 +228,17 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { fetchDatabaseScienceTree, fetchDatasetOptions } from '../api/database.js'
+import DatabaseSidebarTreeRow from './DatabaseSidebarTreeRow.vue'
 
 const emit = defineEmits(['go-home', 'go-audit-manage'])
 
 // 分类搜索
 const categorySearch = ref('')
 const selectedCategory = ref('all')
-
-// 分类列表
-const categoryList = ref([
-  {
-    id: 'bio-science',
-    name: '生物医用材料（科学）',
-    expanded: false,
-    children: []
-  },
-  {
-    id: 'bio-industry',
-    name: '生物医用材料（产业）',
-    expanded: false,
-    children: []
-  }
-])
-
-// 切换分类展开
-const toggleCategory = (category) => {
-  category.expanded = !category.expanded
-}
+const categoryList = ref([])
+const categoryExpanded = ref({})
+const loading = ref(false)
 
 // 搜索表单
 const searchForm = ref({
@@ -280,69 +258,13 @@ const dropdowns = ref({
   industry: false
 })
 
-// 表格数据
-const tableData = ref([
-  {
-    id: 1,
-    datasetName: '纳米羟基磷灰石体表征数据',
-    scientificCategory: '羟基磷灰石',
-    industryCategory: '生物医用材料制造',
-    productCode: '',
-    dataLevel: '公开',
-    selected: false
-  },
-  {
-    id: 2,
-    datasetName: '高通量羟基磷灰石制备与表征数据集',
-    scientificCategory: '羟基磷灰石',
-    industryCategory: '生物医用材料制造',
-    productCode: '',
-    dataLevel: '公开',
-    selected: false
-  },
-  {
-    id: 3,
-    datasetName: 'DLP3D磷酸陶瓷打印高值数据',
-    scientificCategory: '双相磷酸钙',
-    industryCategory: '生物医用材料制造',
-    productCode: '',
-    dataLevel: '高值',
-    selected: false
-  },
-  {
-    id: 4,
-    datasetName: '0318生物医用对接数据集',
-    scientificCategory: 'α-磷酸三钙',
-    industryCategory: '铝及铝合金制造',
-    productCode: '',
-    dataLevel: '高值',
-    selected: false
-  },
-  {
-    id: 5,
-    datasetName: '表格1',
-    scientificCategory: '羟基磷灰石',
-    industryCategory: '先进制造基础零部件',
-    productCode: '',
-    dataLevel: '高值',
-    selected: false
-  },
-  {
-    id: 6,
-    datasetName: '22',
-    scientificCategory: '羟基磷灰石',
-    industryCategory: '先进制造基础零部件',
-    productCode: '',
-    dataLevel: '高值',
-    selected: false
-  }
-])
+const tableData = ref([])
 
 // 分页
 const currentPage = ref(1)
 const pageSize = ref(10)
-const total = ref(6)
-const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
+const total = ref(0)
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
 // 全选
 const selectAll = computed({
@@ -356,11 +278,134 @@ const selectedCount = computed(() => tableData.value.filter(item => item.selecte
 // 获取数据级别样式
 const getLevelClass = (level) => {
   const map = {
-    '公开': 'public',
-    '高值': 'high',
-    '内部': 'internal'
+    public: 'public',
+    highvalue: 'high',
+    private: 'internal'
   }
   return map[level] || 'public'
+}
+
+function dataLevelText(level) {
+  return {
+    public: '公开',
+    highvalue: '高值',
+    private: '内部',
+  }[level] || level || '-'
+}
+
+function auditStatusText(status) {
+  return {
+    0: '待审核',
+    1: '已通过',
+    2: '已驳回',
+  }[Number(status)] || '待审核'
+}
+
+function auditStatusClass(status) {
+  return Number(status) === 1 ? 'blue' : Number(status) === 2 ? 'light-blue' : 'pending'
+}
+
+function auditStatusValue(label) {
+  return {
+    待审核: 0,
+    已通过: 1,
+    已驳回: 2,
+  }[label]
+}
+
+function collectExpandedDefaults(nodes) {
+  const result = {}
+  const walk = (items) => {
+    for (const item of items || []) {
+      if (item.children?.length) {
+        result[String(item.id)] = true
+        walk(item.children)
+      }
+    }
+  }
+  walk(nodes)
+  return result
+}
+
+async function loadCategories() {
+  categoryList.value = await fetchDatabaseScienceTree({
+    keyword: categorySearch.value,
+    page: 1,
+    pageSize: 500,
+  })
+  categoryExpanded.value = collectExpandedDefaults(categoryList.value)
+}
+
+function selectedScienceCategoryIds() {
+  const id = Number(selectedCategory.value)
+  return selectedCategory.value !== 'all' && Number.isFinite(id) ? [id] : []
+}
+
+async function loadTableData() {
+  loading.value = true
+  try {
+    const { total: t, list } = await fetchDatasetOptions({
+      scienceCategoryIds: selectedScienceCategoryIds(),
+      keyword: searchForm.value.datasetName,
+      auditStatus: auditStatusValue(searchForm.value.auditStatus) ?? -1,
+      page: currentPage.value,
+      pageSize: pageSize.value,
+    })
+    const auditFilter = auditStatusValue(searchForm.value.auditStatus)
+    const filteredList = list
+      .filter((item) => auditFilter == null || Number(item.auditStatus ?? 0) === auditFilter)
+      .filter((item) => {
+        if (searchForm.value.dataLevel) {
+          return dataLevelText(item.dataLevel) === searchForm.value.dataLevel
+        }
+        return true
+      })
+    total.value = Math.min(t, filteredList.length)
+    tableData.value = filteredList
+      .map((item) => ({
+        id: item.id,
+        datasetName: item.name,
+        dataLevel: item.dataLevel,
+        auditStatus: item.auditStatus ?? 0,
+        recordCount: item.recordCount ?? 0,
+        selected: false,
+      }))
+  } catch (e) {
+    console.error('loadTableData', e)
+    total.value = 0
+    tableData.value = []
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes('未登录') || msg.includes('无权限')) alert(msg)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function selectCategory(id) {
+  selectedCategory.value = id
+  currentPage.value = 1
+  await loadTableData()
+}
+
+async function handleCategorySearch() {
+  currentPage.value = 1
+  await loadCategories()
+  selectedCategory.value = 'all'
+  await loadTableData()
+}
+
+function goToPage(page) {
+  if (page < 1 || page > totalPages.value) return
+  currentPage.value = page
+  loadTableData()
+}
+
+function toggleCategory(id) {
+  const key = String(id)
+  categoryExpanded.value = {
+    ...categoryExpanded.value,
+    [key]: categoryExpanded.value[key] !== true,
+  }
 }
 
 // 下拉框控制
@@ -378,7 +423,8 @@ const selectOption = (name, value) => {
 
 // 操作函数
 const handleSearch = () => {
-  console.log('搜索:', searchForm.value)
+  currentPage.value = 1
+  loadTableData()
 }
 
 const handleReset = () => {
@@ -390,25 +436,29 @@ const handleReset = () => {
     dataLevel: '',
     industry: ''
   }
-}
-
-const handleSelectAll = () => {
-  const newValue = !selectAll.value
-  tableData.value.forEach(item => item.selected = newValue)
+  currentPage.value = 1
+  loadTableData()
 }
 
 const handleCancelSelect = () => {
   tableData.value.forEach(item => item.selected = false)
 }
 
-const handleBatchAudit = () => {
+const handleBatchAudit = async () => {
   const selected = tableData.value.filter(item => item.selected)
   if (selected.length === 0) {
     alert('请先选择要审核的数据')
     return
   }
-  console.log('批量审核:', selected)
-  alert(`批量审核 ${selected.length} 条数据`)
+  if (!confirm(`确定通过选中的 ${selected.length} 个数据集吗？`)) return
+  try {
+    await Promise.all(selected.map((item) => auditDataset(item, 1)))
+    alert(`已通过 ${selected.length} 个数据集`)
+    await loadTableData()
+  } catch (e) {
+    console.error('handleBatchAudit', e)
+    alert(e?.message || '批量审核失败')
+  }
 }
 
 const handleView = (item) => {
@@ -416,9 +466,49 @@ const handleView = (item) => {
   alert(`查看: ${item.datasetName}`)
 }
 
-const handleAudit = (item) => {
-  console.log('审核:', item)
-  alert(`审核: ${item.datasetName}`)
+async function auditDataset(item, status) {
+  const resp = await fetch('/Dataset/audit-template', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+    body: JSON.stringify({
+      datasetName: item.datasetName,
+      status: status === 2 ? 0 : status,
+      remark: status === 1 ? '审核通过' : '审核驳回',
+      auditor: getCurrentAuditor(),
+    }),
+  })
+  const json = await resp.json().catch(() => null)
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!json || (json.code !== 0 && json.code !== 200)) {
+    throw new Error(json?.message || '审核失败')
+  }
+  return json
+}
+
+const handleAudit = async (item, status) => {
+  const action = status === 1 ? '通过' : '驳回'
+  if (!confirm(`确定${action}「${item.datasetName}」吗？`)) return
+  try {
+    await auditDataset(item, status)
+    await loadTableData()
+  } catch (e) {
+    console.error('handleAudit', e)
+    alert(e?.message || '审核失败')
+  }
+}
+
+function getAuthHeader() {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+function getCurrentAuditor() {
+  return localStorage.getItem('username') || sessionStorage.getItem('username') || 'admin'
 }
 
 const goHome = () => {
@@ -439,6 +529,7 @@ const handleClickOutside = (e) => {
 }
 
 onMounted(() => {
+  loadCategories().then(loadTableData)
   document.addEventListener('click', handleClickOutside)
 })
 

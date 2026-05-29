@@ -17,17 +17,17 @@
 
         <div class="upload-form-row">
           <label class="upload-label required">科学分类：</label>
-          <div class="upload-field">
-            <select v-model="form.scienceCategoryId" class="upload-select" @change="onScienceCategoryChange">
-              <option value="" disabled>请选择</option>
-              <option
-                v-for="opt in scienceCategoryOptions"
-                :key="opt.value"
-                :value="opt.value"
-              >
-                {{ opt.label }}
-              </option>
-            </select>
+          <div class="upload-field upload-field-with-btn">
+            <input
+              v-model="form.scienceCategory"
+              type="text"
+              class="upload-input"
+              placeholder="请点击选择"
+              readonly
+            />
+            <button type="button" class="upload-select-btn" @click="openScienceCategory">
+              选择
+            </button>
           </div>
         </div>
 
@@ -166,8 +166,7 @@
                 <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" />
               </svg>
               <ul v-if="templateMenuVisible" class="download-menu">
-                <li class="download-menu-item" @click="downloadTemplate('json')">下载JSON模板</li>
-                <li class="download-menu-item" @click="downloadTemplate('excel')">下载EXCEL模板</li>
+                <li class="download-menu-item" @click="downloadTemplate">下载EXCEL模板</li>
               </ul>
             </div>
           </div>
@@ -193,11 +192,89 @@
         </div>
       </section>
     </div>
+
+    <Teleport to="body">
+      <div v-if="scienceCategoryModalVisible" class="select-modal-mask" @click.self="closeScienceCategoryModal">
+        <div class="select-modal">
+          <div class="select-modal-header">
+            <span class="select-modal-title">选择</span>
+            <button type="button" class="select-modal-close" @click="closeScienceCategoryModal">×</button>
+          </div>
+          <div class="select-modal-body">
+            <div class="select-modal-search">
+              <label class="select-modal-label">科学分类</label>
+              <input
+                v-model="scienceCategoryKeyword"
+                type="text"
+                class="select-modal-input"
+                placeholder="请输入科学分类"
+                @keyup.enter="queryScienceCategory"
+              />
+              <button type="button" class="select-modal-btn primary" @click="queryScienceCategory">查询</button>
+              <button type="button" class="select-modal-btn ghost" @click="resetScienceCategoryQuery">重置</button>
+            </div>
+            <div class="select-modal-current">
+              当前选中：<span class="select-modal-tags">{{ scienceCategorySelectedLabels || ' ' }}</span>
+            </div>
+            <div class="select-modal-table-wrap">
+              <table class="select-modal-table">
+                <thead>
+                  <tr>
+                    <th class="col-check"><input type="checkbox" :checked="scienceCategoryAllChecked" @change="toggleScienceCategoryAll" /></th>
+                    <th class="col-num">序号</th>
+                    <th class="col-name">科学分类</th>
+                    <th class="col-count">数据集数</th>
+                    <th class="col-count">模板数</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(row, index) in scienceCategoryTableRows"
+                    :key="row.id"
+                    :class="{ selected: scienceCategoryCheckedIds.has(row.id) }"
+                  >
+                    <td class="col-check">
+                      <input
+                        type="checkbox"
+                        :checked="scienceCategoryCheckedIds.has(row.id)"
+                        @change="toggleScienceCategoryRow(row)"
+                      />
+                    </td>
+                    <td class="col-num">{{ (scienceCategoryPage - 1) * scienceCategoryPageSize + index + 1 }}</td>
+                    <td class="col-name" :style="{ paddingLeft: (row.level * 20 + 12) + 'px' }">
+                      <span v-if="row.hasChildren" class="tree-chevron" @click="toggleScienceCategoryRowExpand(row)">
+                        {{ row.expanded ? '▼' : '▶' }}
+                      </span>
+                      <span v-else class="tree-chevron-placeholder"></span>
+                      {{ row.name }}
+                    </td>
+                    <td class="col-count">{{ row.datasetCount }}</td>
+                    <td class="col-count">{{ row.templateCount }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="select-modal-pagination">
+              <span class="select-modal-total">共{{ scienceCategoryTotal }}条</span>
+              <div class="select-modal-pager">
+                <button type="button" class="pager-btn" :disabled="scienceCategoryPage <= 1" @click="scienceCategoryPage--">上一页</button>
+                <span class="pager-num">{{ scienceCategoryPage }}</span>
+                <button type="button" class="pager-btn" :disabled="scienceCategoryPage >= scienceCategoryTotalPages" @click="scienceCategoryPage++">下一页</button>
+              </div>
+            </div>
+          </div>
+          <div class="select-modal-footer">
+            <button type="button" class="select-modal-footer-btn ghost" @click="closeScienceCategoryModal">取消</button>
+            <button type="button" class="select-modal-footer-btn primary" @click="confirmScienceCategory">提交</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </section>
 </template>
 
 <script setup>
-import { reactive, ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, reactive, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const getAuthHeader = () => {
   const token =
@@ -208,11 +285,11 @@ const getAuthHeader = () => {
 
 const form = reactive({
   scienceCategoryId: '',
+  scienceCategory: '',
   datasetId: '',
   mode: 'online',
 })
 
-const scienceCategoryOptions = ref([])
 const datasetOptions = ref([])
 const datasetSchema = ref(null)
 const schemaLoading = ref(false)
@@ -221,7 +298,34 @@ const onlineForm = reactive({})
 const templateMenuVisible = ref(false)
 const templateDownloadLoading = ref(false)
 
-async function loadScienceCategoryOptions() {
+const scienceCategoryModalVisible = ref(false)
+const scienceCategoryKeyword = ref('')
+const scienceCategoryPage = ref(1)
+const scienceCategoryPageSize = ref(10)
+const scienceCategoryCheckedIds = ref(new Set())
+const scienceCategoryRows = ref([])
+
+function flattenScienceTree(nodes, level = 0, acc = []) {
+  if (!Array.isArray(nodes)) return acc
+  for (const node of nodes) {
+    const item = {
+      id: node.id,
+      name: node.name,
+      level,
+      datasetCount: node.datasetCount ?? 0,
+      templateCount: node.templateCount ?? 0,
+      hasChildren: Array.isArray(node.children) && node.children.length > 0,
+      expanded: true,
+    }
+    acc.push(item)
+    if (item.hasChildren) {
+      flattenScienceTree(node.children, level + 1, acc)
+    }
+  }
+  return acc
+}
+
+async function loadScienceCategory() {
   try {
     const resp = await fetch('/api/categories/science/tree', {
       method: 'POST',
@@ -229,31 +333,127 @@ async function loadScienceCategoryOptions() {
         'Content-Type': 'application/json',
         ...getAuthHeader(),
       },
-      body: JSON.stringify({ keyword: '', page: 1, pageSize: 1000 }),
+      body: JSON.stringify({
+        keyword: scienceCategoryKeyword.value || '',
+        page: scienceCategoryPage.value,
+        pageSize: scienceCategoryPageSize.value,
+      }),
     })
     const json = await resp.json().catch(() => null)
     if (resp.status === 401 || json?.code === 401) {
       alert(json?.message || '未登录或无权限')
       return
     }
-    if (json?.code === 200 && Array.isArray(json.data)) {
-      // 简单展平为一级下拉：只取叶子节点或所有节点名称
-      const opts = []
-      const walk = (nodes) => {
-        if (!Array.isArray(nodes)) return
-        for (const n of nodes) {
-          opts.push({ value: n.id, label: n.name })
-          if (Array.isArray(n.children) && n.children.length) {
-            walk(n.children)
-          }
-        }
-      }
-      walk(json.data)
-      scienceCategoryOptions.value = opts
+    if ((json?.code === 0 || json?.code === 200) && Array.isArray(json.data)) {
+      const rows = flattenScienceTree(json.data || [])
+      const keyword = scienceCategoryKeyword.value.trim()
+      scienceCategoryRows.value = keyword
+        ? rows.filter((row) => row.name.includes(keyword))
+        : rows
+    } else {
+      scienceCategoryRows.value = []
     }
   } catch (e) {
-    console.error('loadScienceCategoryOptions error', e)
+    console.error('loadScienceCategory error', e)
+    alert(e?.message || '获取科学分类目录树失败')
+    scienceCategoryRows.value = []
   }
+}
+
+const scienceCategoryVisibleRows = computed(() => {
+  const rows = scienceCategoryRows.value
+  const visible = []
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    if (row.level === 0) {
+      visible.push(row)
+      continue
+    }
+    let parentExpanded = true
+    for (let j = i - 1; j >= 0; j--) {
+      if (rows[j].level < row.level) {
+        parentExpanded = rows[j].expanded !== false
+        break
+      }
+    }
+    if (parentExpanded) visible.push(row)
+  }
+  return visible
+})
+
+const scienceCategoryTableRows = computed(() => {
+  const visible = scienceCategoryVisibleRows.value
+  const start = (scienceCategoryPage.value - 1) * scienceCategoryPageSize.value
+  return visible.slice(start, start + scienceCategoryPageSize.value)
+})
+
+const scienceCategoryTotal = computed(() => scienceCategoryVisibleRows.value.length)
+
+const scienceCategoryTotalPages = computed(() =>
+  Math.max(1, Math.ceil(scienceCategoryTotal.value / scienceCategoryPageSize.value))
+)
+
+const scienceCategorySelectedLabels = computed(() => {
+  const ids = scienceCategoryCheckedIds.value
+  const names = scienceCategoryRows.value.filter((r) => ids.has(r.id)).map((r) => r.name)
+  return names.join('、') || ''
+})
+
+const scienceCategoryAllChecked = computed(() => {
+  const rows = scienceCategoryTableRows.value
+  return rows.length > 0 && rows.every((r) => scienceCategoryCheckedIds.value.has(r.id))
+})
+
+function openScienceCategory() {
+  scienceCategoryModalVisible.value = true
+  scienceCategoryKeyword.value = ''
+  scienceCategoryPage.value = 1
+  loadScienceCategory()
+}
+
+function closeScienceCategoryModal() {
+  scienceCategoryModalVisible.value = false
+}
+
+function queryScienceCategory() {
+  scienceCategoryPage.value = 1
+  loadScienceCategory()
+}
+
+function resetScienceCategoryQuery() {
+  scienceCategoryKeyword.value = ''
+  scienceCategoryPage.value = 1
+  loadScienceCategory()
+}
+
+function toggleScienceCategoryRow(row) {
+  scienceCategoryCheckedIds.value = new Set([row.id])
+}
+
+function toggleScienceCategoryAll() {
+  const rows = scienceCategoryTableRows.value
+  const set = new Set(scienceCategoryCheckedIds.value)
+  const allChecked = rows.every((r) => set.has(r.id))
+  if (allChecked) rows.forEach((r) => set.delete(r.id))
+  else rows.forEach((r) => set.add(r.id))
+  scienceCategoryCheckedIds.value = set
+}
+
+function toggleScienceCategoryRowExpand(row) {
+  row.expanded = !row.expanded
+}
+
+function confirmScienceCategory() {
+  const row = scienceCategoryRows.value.find((r) => scienceCategoryCheckedIds.value.has(r.id))
+  if (!row) {
+    alert('请选择科学分类')
+    return
+  }
+  form.scienceCategoryId = row.id
+  form.scienceCategory = row.name
+  form.datasetId = ''
+  datasetOptions.value = []
+  closeScienceCategoryModal()
 }
 
 async function loadDatasetOptions() {
@@ -270,7 +470,7 @@ async function loadDatasetOptions() {
         ...getAuthHeader(),
       },
       body: JSON.stringify({
-        scienceCategoryId: form.scienceCategoryId,
+        scienceCategoryIds: [Number(form.scienceCategoryId)].filter(Number.isFinite),
         keyword: '',
         page: 1,
         pageSize: 200,
@@ -281,28 +481,33 @@ async function loadDatasetOptions() {
       alert(json?.message || '未登录或无权限')
       return
     }
-    if (json?.code === 200 && Array.isArray(json.data)) {
-      datasetOptions.value = json.data.map((item) => ({
+    if ((json?.code === 0 || json?.code === 200) && Array.isArray(json.data)) {
+      datasetOptions.value = json.data.filter((item) => Number(item.auditStatus) === 1).map((item) => ({
         value: item.id,
-        label: item.name,
+        name: item.name,
+        label: item.recordCount != null ? `${item.name}（${item.recordCount}条）` : item.name,
       }))
       // 如果当前选中的 datasetId 不在新列表中，则清空
-      if (!datasetOptions.value.some((o) => o.value === form.datasetId)) {
+      if (!datasetOptions.value.some((o) => String(o.value) === String(form.datasetId))) {
         form.datasetId = ''
       }
+    } else {
+      datasetOptions.value = []
+      form.datasetId = ''
     }
   } catch (e) {
     console.error('loadDatasetOptions error', e)
+    datasetOptions.value = []
+    form.datasetId = ''
   }
-}
-
-function onScienceCategoryChange() {
-  loadDatasetOptions()
 }
 
 async function loadDatasetSchema() {
   if (!form.datasetId || form.mode !== 'online') {
     datasetSchema.value = null
+    if (form.mode === 'online' && !form.datasetId) {
+      schemaError.value = '请先选择科学分类和数据集'
+    }
     return
   }
   schemaLoading.value = true
@@ -322,7 +527,7 @@ async function loadDatasetSchema() {
       datasetSchema.value = null
       return
     }
-    if (json?.code === 200 && json.data) {
+    if ((json?.code === 0 || json?.code === 200) && json.data) {
       datasetSchema.value = json.data
       // 初始化在线填写表单默认值
       Object.keys(onlineForm).forEach((k) => {
@@ -378,15 +583,16 @@ function getFilenameFromContentDisposition(cd) {
 
 async function downloadTemplate(type) {
   templateMenuVisible.value = false
-  if (!form.datasetId) return
+  const selectedDataset = datasetOptions.value.find((item) => String(item.value) === String(form.datasetId))
+  if (!selectedDataset?.name) {
+    alert('请先选择数据集')
+    return
+  }
   if (templateDownloadLoading.value) return
 
   templateDownloadLoading.value = true
   try {
-    const format = type === 'excel' ? 'excel' : 'json'
-    const url = `/api/data/batch/template?datasetId=${encodeURIComponent(
-      form.datasetId
-    )}&format=${encodeURIComponent(format)}`
+    const url = `/Dataset/export-template?DatasetName=${encodeURIComponent(selectedDataset.name)}`
 
     const resp = await fetch(url, {
       method: 'GET',
@@ -396,7 +602,7 @@ async function downloadTemplate(type) {
 
     const blob = await resp.blob()
     const cd = resp.headers.get('content-disposition') || ''
-    const fallbackName = `template_${form.datasetId}.${format === 'excel' ? 'xlsx' : 'json'}`
+    const fallbackName = `${selectedDataset.name}_template.xlsx`
     const filename = getFilenameFromContentDisposition(cd) || fallbackName
 
     const blobUrl = URL.createObjectURL(blob)
@@ -424,7 +630,6 @@ function onDocClickCloseMenus(e) {
 }
 
 onMounted(() => {
-  loadScienceCategoryOptions()
   document.addEventListener('click', onDocClickCloseMenus)
 })
 onBeforeUnmount(() => {
@@ -524,6 +729,12 @@ watch(
   flex: 1;
 }
 
+.upload-field-with-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .upload-select {
   width: 100%;
   padding: 8px 12px;
@@ -537,6 +748,22 @@ watch(
 
 .upload-select:focus {
   border-color: var(--primary);
+}
+
+.upload-select-btn {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  font-size: 14px;
+  color: var(--white);
+  background: var(--primary);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.upload-select-btn:hover {
+  background: var(--primary-dark);
 }
 
 .upload-mode-row {
@@ -786,5 +1013,279 @@ watch(
   border-color: var(--primary);
   color: var(--white);
 }
-</style>
 
+.select-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.select-modal {
+  background: var(--white);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15);
+  width: 100%;
+  max-width: 960px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.select-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.select-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.select-modal-close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-gray);
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+}
+
+.select-modal-close:hover {
+  color: var(--text-main);
+  background: #f0f2f5;
+}
+
+.select-modal-body {
+  padding: 20px;
+  overflow: auto;
+  flex: 1;
+}
+
+.select-modal-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.select-modal-label {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.select-modal-input {
+  flex: 1;
+  max-width: 280px;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+}
+
+.select-modal-input:focus {
+  border-color: var(--primary);
+}
+
+.select-modal-btn {
+  padding: 8px 16px;
+  font-size: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.select-modal-btn.primary {
+  color: var(--white);
+  background: var(--primary);
+  border: none;
+}
+
+.select-modal-btn.primary:hover {
+  background: var(--primary-dark);
+}
+
+.select-modal-btn.ghost {
+  color: var(--text-main);
+  background: var(--white);
+  border: 1px solid var(--border);
+}
+
+.select-modal-btn.ghost:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.select-modal-current {
+  font-size: 13px;
+  color: var(--text-gray);
+  margin-bottom: 12px;
+}
+
+.select-modal-tags {
+  color: var(--text-main);
+}
+
+.select-modal-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.select-modal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.select-modal-table th,
+.select-modal-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.select-modal-table thead {
+  background: #fafbfc;
+}
+
+.select-modal-table th {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.select-modal-table tbody tr:hover {
+  background: #f8fafd;
+}
+
+.select-modal-table tbody tr.selected {
+  background: #e8f2fe;
+}
+
+.col-check {
+  width: 48px;
+  text-align: center;
+}
+
+.col-num {
+  width: 56px;
+}
+
+.col-name {
+  min-width: 200px;
+}
+
+.col-count {
+  width: 90px;
+}
+
+.tree-chevron,
+.tree-chevron-placeholder {
+  display: inline-block;
+  width: 16px;
+  margin-right: 4px;
+  font-size: 10px;
+  color: var(--text-gray);
+  cursor: pointer;
+}
+
+.tree-chevron-placeholder {
+  cursor: default;
+  visibility: hidden;
+}
+
+.select-modal-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-gray);
+}
+
+.select-modal-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pager-btn {
+  padding: 4px 10px;
+  font-size: 13px;
+  color: var(--text-main);
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pager-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.pager-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.pager-num {
+  padding: 4px 10px;
+  font-weight: 500;
+  color: var(--primary);
+}
+
+.select-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.select-modal-footer-btn {
+  padding: 8px 24px;
+  font-size: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.select-modal-footer-btn.primary {
+  color: var(--white);
+  background: var(--primary);
+  border: none;
+}
+
+.select-modal-footer-btn.primary:hover {
+  background: var(--primary-dark);
+}
+
+.select-modal-footer-btn.ghost {
+  color: var(--text-main);
+  background: var(--white);
+  border: 1px solid var(--border);
+}
+
+.select-modal-footer-btn.ghost:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+</style>
