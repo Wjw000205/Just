@@ -24,15 +24,19 @@ public interface DatasetService {
 
     DatasetOptionsResult getDatasetOptions(DatasetOptionsQueryDTO query);
 
+    Result<List<DatasetTagVO>> getDatasetTags();
+
     Result<OnlineFormSchemaVO> getOnlineFormSchema(OnlineFormSchemaQueryDTO query);
+
+    Result<OnlineFormSubmitResultVO> submitOnlineFormData(OnlineFormSubmitDTO dto);
 
     Result<CreateDatasetResultVO> createDatasetForApi(CreateDatasetDTO dto);
 
-    Result<String> importDatasetData(String DatasetName, MultipartFile file);
+    Result<BatchUploadResultVO> importDatasetData(Integer datasetId, MultipartFile file);
 
     Result<DatasetDataPageVO> getDatasetDataPage(String DatasetName, PageQuery pageQuery);
 
-    void exportDatasetTemplate(String DatasetName, HttpServletResponse response);
+    void exportDatasetTemplate(Integer datasetId, String format, HttpServletResponse response);
 
     Result<String> addDatasetColumn(AddDatasetColumnDTO dto);
 
@@ -45,4 +49,6 @@ public interface DatasetService {
     Long getTotal();
 
     Result<Long> countDatasetsUnderMenu(Integer menuId);
+
+    Long getTotal();
 }

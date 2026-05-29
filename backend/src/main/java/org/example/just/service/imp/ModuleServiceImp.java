@@ -20,8 +20,12 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class ModuleServiceImp implements ModuleService {
@@ -30,7 +34,9 @@ public class ModuleServiceImp implements ModuleService {
     private final ModuleColumnDao moduleColumnDao;
     private final UserDao userDao;
 
-    public ModuleServiceImp(ModuleDao moduleDao, ModuleColumnDao moduleColumnDao, UserDao userDao) {
+    public ModuleServiceImp(ModuleDao moduleDao,
+                            ModuleColumnDao moduleColumnDao,
+                            UserDao userDao) {
         this.moduleDao = moduleDao;
         this.moduleColumnDao = moduleColumnDao;
         this.userDao = userDao;
@@ -116,6 +122,61 @@ public class ModuleServiceImp implements ModuleService {
         }
 
         return Result.success(resultList);
+    }
+
+    @Override
+    public Result<List<TemplateTagVO>> getTemplateTags() {
+        List<ModuleEntity> modules = listAvailableModules();
+        if (modules.isEmpty()) {
+            return Result.success(0, "success", new ArrayList<>());
+        }
+
+        Map<String, TemplateTagVO> tagMap = new LinkedHashMap<>();
+        for (ModuleEntity module : modules) {
+            if (module == null || !StringUtils.hasText(module.getTag())) {
+                continue;
+            }
+            String tagName = module.getTag().trim();
+            TemplateTagVO existing = tagMap.get(tagName);
+            if (existing == null) {
+                tagMap.put(tagName, new TemplateTagVO(module.getId(), tagName));
+            } else if (module.getId() != null
+                    && (existing.getId() == null || module.getId() < existing.getId())) {
+                existing.setId(module.getId());
+            }
+        }
+
+        return Result.success(0, "success", new ArrayList<>(tagMap.values()));
+    }
+
+    @Override
+    public Result<List<TemplateOptionVO>> getTemplateOptions(Integer templateTagId, Integer scienceCategoryId) {
+        List<ModuleEntity> modules = listAvailableModules(scienceCategoryId);
+        if (modules.isEmpty()) {
+            return Result.success(0, "success", new ArrayList<>());
+        }
+
+        String tagName = null;
+        if (templateTagId != null) {
+            tagName = resolveTemplateTagName(modules, templateTagId);
+            if (!StringUtils.hasText(tagName)) {
+                return Result.success(0, "success", new ArrayList<>());
+            }
+        }
+
+        Map<Integer, TemplateOptionVO> optionMap = new LinkedHashMap<>();
+        for (ModuleEntity module : modules) {
+            if (module == null || module.getId() == null || !StringUtils.hasText(module.getModuleName())) {
+                continue;
+            }
+            if (StringUtils.hasText(tagName)
+                    && (!StringUtils.hasText(module.getTag()) || !tagName.equals(module.getTag().trim()))) {
+                continue;
+            }
+            optionMap.putIfAbsent(module.getId(), new TemplateOptionVO(module.getId(), module.getModuleName().trim()));
+        }
+
+        return Result.success(0, "success", new ArrayList<>(optionMap.values()));
     }
 
     @Override
@@ -335,6 +396,55 @@ public class ModuleServiceImp implements ModuleService {
 
         return Result.success(vo);
     }
+
+    private List<ModuleEntity> listAvailableModules() {
+        return listAvailableModules(null);
+    }
+
+    private List<ModuleEntity> listAvailableModules(Integer scienceCategoryId) {
+        List<ModuleEntity> modules = scienceCategoryId == null
+                ? moduleDao.selectAvailableTemplates()
+                : moduleDao.selectAvailableTemplatesByScienceCategory(scienceCategoryId);
+        if (modules == null || modules.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return modules.stream()
+                .filter(Objects::nonNull)
+                .filter(module -> module.getDeleted() == null || module.getDeleted() == 0)
+                .filter(module -> module.getAuditState() == null || module.getAuditState() == 2)
+                .sorted((left, right) -> {
+                    Integer leftId = left.getId() == null ? Integer.MAX_VALUE : left.getId();
+                    Integer rightId = right.getId() == null ? Integer.MAX_VALUE : right.getId();
+                    return leftId.compareTo(rightId);
+                })
+                .collect(Collectors.toList());
+    }
+
+    private String resolveTemplateTagName(List<ModuleEntity> modules, Integer templateTagId) {
+        if (templateTagId == null || CollectionUtils.isEmpty(modules)) {
+            return null;
+        }
+
+        Map<String, Integer> tagIdMap = new LinkedHashMap<>();
+        for (ModuleEntity module : modules) {
+            if (module == null || module.getId() == null || !StringUtils.hasText(module.getTag())) {
+                continue;
+            }
+            String tagName = module.getTag().trim();
+            Integer existingId = tagIdMap.get(tagName);
+            if (existingId == null || module.getId() < existingId) {
+                tagIdMap.put(tagName, module.getId());
+            }
+        }
+
+        for (Map.Entry<String, Integer> entry : tagIdMap.entrySet()) {
+            if (templateTagId.equals(entry.getValue())) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
     private String validateColumnList(List<ModuleColumnItemDTO> list, String belong) {
         if (CollectionUtils.isEmpty(list)) {
             return null;

@@ -50,10 +50,22 @@ public class ManuDatasetController {
         return datasetService.getDatasetOptions(query);
     }
 
+    @GetMapping("/api/dicts/dataset-tags")
+    @Operation(summary = "数据集标签列表", description = "获取数据集标签字典列表")
+    public Result<List<DatasetTagVO>> getDatasetTags() {
+        return datasetService.getDatasetTags();
+    }
+
     @PostMapping("/api/data/online/schema")
     @Operation(summary = "获取在线填写表单结构", description = "上传数据页面点击在线填写并选择数据集后获取表单结构")
     public Result<OnlineFormSchemaVO> getOnlineFormSchema(@RequestBody OnlineFormSchemaQueryDTO query) {
         return datasetService.getOnlineFormSchema(query);
+    }
+
+    @PostMapping("/api/data/online/submit")
+    @Operation(summary = "在线填写提交数据", description = "在线填写模式下提交多条记录")
+    public Result<OnlineFormSubmitResultVO> submitOnlineFormData(@RequestBody OnlineFormSubmitDTO dto) {
+        return datasetService.submitOnlineFormData(dto);
     }
 
     @PostMapping("/api/datasets")
@@ -62,11 +74,11 @@ public class ManuDatasetController {
         return datasetService.createDatasetForApi(dto);
     }
 
-    @PostMapping("/Dataset/import-data")
-    @Operation(summary = "导入数据表数据", description = "上传Excel，将数据按数据集列映射后批量插入Dataset_data表")
-    public Result<String> importDatasetData(@RequestParam("DatasetName") String DatasetName,
-                                           @RequestPart("file") MultipartFile file) {
-        return datasetService.importDatasetData(DatasetName, file);
+    @PostMapping("/api/data/batch/upload")
+    @Operation(summary = "批量上传文件", description = "批量上传模式下上传 Excel/CSV 等文件")
+    public Result<BatchUploadResultVO> importDatasetData(@RequestParam("datasetId") Integer datasetId,
+                                                        @RequestPart("file") MultipartFile file) {
+        return datasetService.importDatasetData(datasetId, file);
     }
 
     @GetMapping("/Dataset/data-page")
@@ -76,11 +88,12 @@ public class ManuDatasetController {
         return datasetService.getDatasetDataPage(DatasetName, pageQuery);
     }
 
-    @GetMapping("/Dataset/export-template")
-    @Operation(summary = "导出数据表结构", description = "只导出数据集列为Excel表头，不导出具体数据")
-    public void exportDatasetTemplate(@RequestParam("DatasetName") String DatasetName,
-                                     HttpServletResponse response) {
-        datasetService.exportDatasetTemplate(DatasetName, response);
+    @GetMapping("/api/data/batch/template")
+    @Operation(summary = "批量上传-下载模板", description = "批量上传区域点击下载模板时下载固定模板文件")
+    public void exportDatasetTemplate(@RequestParam("datasetId") Integer datasetId,
+                                      @RequestParam("format") String format,
+                                      HttpServletResponse response) {
+        datasetService.exportDatasetTemplate(datasetId, format, response);
     }
 
     @PostMapping("/Dataset/add-column")

@@ -11,6 +11,10 @@ public interface ModuleService {
 
     Result<List<ModuleListVO>> getModuleListByTag(String tag);
 
+    Result<List<TemplateTagVO>> getTemplateTags();
+
+    Result<List<TemplateOptionVO>> getTemplateOptions(Integer templateTagId, Integer scienceCategoryId);
+
     Result<List<ModuleListVO>> getPendingAuditList();
 
     Result<String> auditModule(AuditModuleDTO dto);
