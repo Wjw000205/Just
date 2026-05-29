@@ -42,5 +42,7 @@ public interface DatasetService {
 
     Result<AuditDatasetResultVO> auditDataset(AuditDatasetDTO dto);
 
+    Long getTotal();
+
     Result<Long> countDatasetsUnderMenu(Integer menuId);
 }

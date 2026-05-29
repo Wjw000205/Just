@@ -1,12 +1,12 @@
 <template>
   <template v-if="hasChildren">
-    <li class="tree-node group" :class="{ expanded: isOpen }" @click="toggle">
-      <span class="tree-chevron" :class="{ open: isOpen }" aria-hidden="true">
+    <li class="tree-node group" :class="{ expanded: isOpen, active: activeId === node.id }">
+      <span class="tree-chevron" :class="{ open: isOpen }" aria-hidden="true" @click.stop="toggle">
         <svg width="8" height="8" viewBox="0 0 10 10" fill="currentColor">
           <path d="M3 1L7 5L3 9V1Z" />
         </svg>
       </span>
-      <span class="tree-label">{{ node.label }}</span>
+      <span class="tree-label" @click="emit('select', node.id)">{{ node.label }}</span>
     </li>
     <li v-if="isOpen" class="tree-child-wrap">
       <ul class="tree-children">

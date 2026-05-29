@@ -12,8 +12,9 @@ function getAuthHeader() {
 }
 
 /**
- * 查询模板目录树（GET /Dataset/getManuList）
- * @returns {Promise<{ code: number, message: string, data: Array<Record<string, unknown>> }>}
+ * 查询科学分类树（POST /api/categories/science/tree）
+ * @param {{ keyword?: string, page?: number, pageSize?: number }} params
+ * @returns {Promise<{ code: number, message: string, data: Array<Record<string, unknown>>, total?: number }>}
  */
 /**
  * 创建模板目录（POST /Dataset/create-menu）
@@ -49,13 +50,18 @@ export async function createMenu(payload) {
   return json
 }
 
-export async function getManuList() {
-  const resp = await fetch(`${API_BASE_URL}/Dataset/getManuList`, {
-    method: 'GET',
+export async function getManuList(params = {}) {
+  const resp = await fetch('/api/categories/science/tree', {
+    method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...getAuthHeader(),
     },
+    body: JSON.stringify({
+      keyword: params.keyword ?? '',
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 50,
+    }),
   })
   const json = await resp.json().catch(() => null)
   if (resp.status === 401 || json?.code === 401) {

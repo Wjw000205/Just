@@ -73,17 +73,28 @@
       <!-- 产品分类 -->
       <div class="form-row">
         <label class="form-label required">产品分类</label>
-        <div class="form-field-with-btn">
-          <input
-            v-model="form.productCategory"
-            type="text"
-            class="form-input"
-            placeholder="请点击选择"
-            readonly
-          />
-          <button type="button" class="form-select-btn" @click="openProductCategory">
-            选择
-          </button>
+        <div class="form-field-wrap" ref="productCategoryDropRef">
+          <div
+            class="form-select form-select-custom"
+            :class="{ open: productCategoryDropOpen }"
+            @click="productCategoryDropOpen = !productCategoryDropOpen"
+          >
+            <span v-if="selectedProductCategoryOption">{{ selectedProductCategoryOption.label }}</span>
+            <span v-else class="form-select-placeholder">请选择产品分类</span>
+            <svg class="form-select-caret" width="10" height="6" viewBox="0 0 10 6">
+              <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <ul v-if="productCategoryDropOpen" class="form-select-dropdown" @click.stop>
+            <li
+              v-for="opt in productCategoryOptions"
+              :key="opt.value"
+              class="form-select-option"
+              @click="selectProductCategory(opt)"
+            >
+              {{ opt.label }}
+            </li>
+          </ul>
         </div>
       </div>
 
@@ -211,7 +222,9 @@
 
       <!-- 提交 -->
       <div class="form-actions">
-        <button type="submit" class="form-submit-btn">提交</button>
+        <button type="submit" class="form-submit-btn" :disabled="submitLoading">
+          {{ submitLoading ? '提交中...' : '提交' }}
+        </button>
       </div>
     </form>
 
@@ -434,6 +447,8 @@ const getAuthHeader = () => {
 
 const coverInputRef = ref(null)
 const coverPreview = ref('')
+const productCategoryDropRef = ref(null)
+const productCategoryDropOpen = ref(false)
 const dataLevelDropRef = ref(null)
 const dataLevelDropOpen = ref(false)
 const templateTagDropRef = ref(null)
@@ -441,6 +456,7 @@ const templateTagDropOpen = ref(false)
 const templateDropRef = ref(null)
 const templateDropOpen = ref(false)
 const templateLoading = ref(false)
+const submitLoading = ref(false)
 const templateTagOptions = ref([
   { value: '生物医用材料（科学）', label: '生物医用材料（科学）' },
   { value: '生物医用材料（产业）', label: '生物医用材料（产业）' },
@@ -467,8 +483,15 @@ const dataLevelOptions = [
   { value: 'highvalue', label: '高值', colorClass: 'data-level-highvalue' },
   { value: 'private', label: '私有', colorClass: 'data-level-private' },
 ]
+const productCategoryOptions = [
+  { value: 1, label: '产品分类1' },
+  { value: 2, label: '产品分类2' },
+]
 const dataLevelOption = computed(() =>
   dataLevelOptions.find((o) => o.value === form.dataLevel)
+)
+const selectedProductCategoryOption = computed(() =>
+  productCategoryOptions.find((o) => String(o.value) === String(form.productCategory))
 )
 const selectedTemplateTagOption = computed(() =>
   templateTagOptions.value.find((o) => o.value === form.templateTag)
@@ -516,6 +539,9 @@ function selectTemplate(opt) {
 }
 
 function onDocClickDataLevel(e) {
+  if (productCategoryDropRef.value && !productCategoryDropRef.value.contains(e.target)) {
+    productCategoryDropOpen.value = false
+  }
   if (dataLevelDropRef.value && !dataLevelDropRef.value.contains(e.target)) {
     dataLevelDropOpen.value = false
   }
@@ -525,6 +551,12 @@ function onDocClickDataLevel(e) {
   if (templateDropRef.value && !templateDropRef.value.contains(e.target)) {
     templateDropOpen.value = false
   }
+}
+
+function selectProductCategory(opt) {
+  form.productCategory = opt.value
+  productCategoryCheckedIds.value = new Set([opt.value])
+  productCategoryDropOpen.value = false
 }
 
 onMounted(() => {
@@ -564,11 +596,17 @@ function flattenScienceTree(nodes, level = 0, acc = []) {
 
 async function loadScienceCategory() {
   try {
-    const resp = await fetch('http://localhost:8083/Dataset/getManuList', {
-      method: 'GET',
+    const resp = await fetch('/api/categories/science/tree', {
+      method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         ...getAuthHeader(),
       },
+      body: JSON.stringify({
+        keyword: scienceCategoryKeyword.value || '',
+        page: scienceCategoryPage.value,
+        pageSize: scienceCategoryPageSize.value,
+      }),
     })
     const json = await resp.json().catch(() => null)
     if (resp.status === 401 || json?.code === 401) {
@@ -654,10 +692,7 @@ function resetScienceCategoryQuery() {
 }
 
 function toggleScienceCategoryRow(row) {
-  const set = new Set(scienceCategoryCheckedIds.value)
-  if (set.has(row.id)) set.delete(row.id)
-  else set.add(row.id)
-  scienceCategoryCheckedIds.value = set
+  scienceCategoryCheckedIds.value = new Set([row.id])
 }
 
 function toggleScienceCategoryAll() {
@@ -813,10 +848,7 @@ function resetProductCategoryQuery() {
 }
 
 function toggleProductCategoryRow(row) {
-  const set = new Set(productCategoryCheckedIds.value)
-  if (set.has(row.id)) set.delete(row.id)
-  else set.add(row.id)
-  productCategoryCheckedIds.value = set
+  productCategoryCheckedIds.value = new Set([row.id])
 }
 
 function toggleProductCategoryAll() {
@@ -858,9 +890,9 @@ function onCoverChange(e) {
 const datasetTagsModalVisible = ref(false)
 const datasetTagsSelectValue = ref('')
 const datasetTagOptions = ref([
-  { value: 'tag1', label: '标签一' },
-  { value: 'tag2', label: '标签二' },
-  { value: 'tag3', label: '标签三' },
+  { value: 1, label: '标签一' },
+  { value: 2, label: '标签二' },
+  { value: 3, label: '标签三' },
 ])
 
 function openDatasetTags() {
@@ -874,14 +906,108 @@ function closeDatasetTagsModal() {
 }
 
 function confirmDatasetTags() {
-  const opt = datasetTagOptions.value.find((o) => o.value === datasetTagsSelectValue.value)
+  const opt = datasetTagOptions.value.find((o) => String(o.value) === String(datasetTagsSelectValue.value))
   form.datasetTags = opt ? opt.label : datasetTagsSelectValue.value
   closeDatasetTagsModal()
 }
 
-function onSubmit() {
-  // TODO: 校验并提交
-  console.log('提交', form)
+function firstSelectedId(selectedIds) {
+  return Array.from(selectedIds || [])[0] ?? null
+}
+
+function toBackendId(value) {
+  if (value == null || value === '') return null
+  const normalized = String(value).replace(/^p/, '')
+  const id = Number(normalized)
+  return Number.isFinite(id) ? Math.trunc(id) : null
+}
+
+function getTemplateTagId() {
+  const index = templateTagOptions.value.findIndex((item) => item.value === form.templateTag)
+  return index >= 0 ? index + 1 : null
+}
+
+function getDatasetTagIds() {
+  const opt = datasetTagOptions.value.find((item) => item.label === form.datasetTags)
+  return opt ? [Number(opt.value)] : []
+}
+
+async function onSubmit() {
+  const scienceCategoryId = toBackendId(firstSelectedId(scienceCategoryCheckedIds.value))
+  const productCategoryId = toBackendId(firstSelectedId(productCategoryCheckedIds.value))
+  const templateId = toBackendId(form.template)
+  const templateTagId = getTemplateTagId()
+
+  if (!form.name.trim()) {
+    alert('请输入数据集名称')
+    return
+  }
+  if (!form.summary.trim()) {
+    alert('请输入数据集摘要')
+    return
+  }
+  if (!scienceCategoryId) {
+    alert('请选择科学分类')
+    return
+  }
+  if (!productCategoryId) {
+    alert('请选择产品分类')
+    return
+  }
+  if (!form.dataLevel) {
+    alert('请选择数据级别')
+    return
+  }
+  if (!templateTagId) {
+    alert('请选择模板标签')
+    return
+  }
+  if (!templateId) {
+    alert('请选择模板')
+    return
+  }
+
+  const payload = {
+    name: form.name.trim(),
+    summary: form.summary.trim(),
+    coverUrl: coverPreview.value.startsWith('http') ? coverPreview.value : null,
+    scienceCategoryId,
+    productCategoryId,
+    dataLevel: form.dataLevel,
+    dataCategory: 'dataset',
+    templateTagId,
+    templateId,
+    datasetTagIds: getDatasetTagIds(),
+  }
+
+  submitLoading.value = true
+  try {
+    const resp = await fetch('/api/datasets', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify(payload),
+    })
+    const json = await resp.json().catch(() => null)
+
+    if (resp.status === 401 || json?.code === 401) {
+      alert(json?.message || '未登录或无权限')
+      return
+    }
+    if (!resp.ok || !json || (json.code !== 0 && json.code !== 200)) {
+      alert(json?.message || '创建数据集失败')
+      return
+    }
+
+    alert(`创建成功，数据集ID：${json.data?.datasetId ?? '-'}`)
+  } catch (e) {
+    console.error('create dataset error', e)
+    alert(e?.message || '创建数据集失败')
+  } finally {
+    submitLoading.value = false
+  }
 }
 </script>
 
