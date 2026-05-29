@@ -9,6 +9,7 @@ import org.example.just.dto.categoryDto.ScienceCategoryTreeQueryDTO;
 import org.example.just.dto.categoryDto.ScienceCategoryTreeResult;
 import org.example.just.dto.datasetDto.*;
 import org.example.just.service.DatasetService;
+import org.example.just.service.SearchService;
 import org.example.just.utils.PageQuery;
 import org.example.just.utils.Result;
 import org.springframework.web.bind.annotation.*;
@@ -21,9 +22,11 @@ import java.util.List;
 public class ManuDatasetController {
 
     private final DatasetService datasetService;
+    private final SearchService searchService;
 
-    public ManuDatasetController(DatasetService datasetService) {
+    public ManuDatasetController(DatasetService datasetService, SearchService searchService) {
         this.datasetService = datasetService;
+        this.searchService = searchService;
     }
 
     @PostMapping("/Dataset/create-menu")
@@ -48,6 +51,18 @@ public class ManuDatasetController {
     @Operation(summary = "获取可用数据集列表", description = "上传数据页面中选择数据集下拉框数据源")
     public DatasetOptionsResult getDatasetOptions(@RequestBody(required = false) DatasetOptionsQueryDTO query) {
         return datasetService.getDatasetOptions(query);
+    }
+
+    @GetMapping("/api/search/categories")
+    @Operation(summary = "获取分类树", description = "用于获取左侧工业战略性新兴产业分类目录树形数据")
+    public Result<List<CategoryTreeNode>> getSearchCategories() {
+        return searchService.getCategories();
+    }
+
+    @PostMapping("/api/search/datasets")
+    @Operation(summary = "数据集检索", description = "对数据集进行全文检索，并支持按分类、结果类型、分页等过滤")
+    public Result<DatasetSearchResponse> searchDatasets(@RequestBody DatasetSearchRequest request) {
+        return searchService.searchDatasets(request);
     }
 
     @GetMapping("/api/dicts/dataset-tags")

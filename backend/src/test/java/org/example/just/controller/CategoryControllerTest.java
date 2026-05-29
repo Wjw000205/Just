@@ -8,6 +8,7 @@ import org.example.just.dto.categoryDto.ScienceCategoryTreeQueryDTO;
 import org.example.just.dto.categoryDto.ScienceCategoryTreeResult;
 import org.example.just.dto.categoryDto.ScienceCategoryTreeVO;
 import org.example.just.service.DatasetService;
+import org.example.just.service.SearchService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -37,7 +38,7 @@ class CategoryControllerTest {
                 .thenReturn(ScienceCategoryTreeResult.success(List.of(root), 1));
 
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new ManuDatasetController(datasetService))
+                .standaloneSetup(new ManuDatasetController(datasetService, mock(SearchService.class)))
                 .build();
 
         ScienceCategoryTreeQueryDTO query = new ScienceCategoryTreeQueryDTO();
@@ -68,7 +69,7 @@ class CategoryControllerTest {
                 .thenReturn(ProductCategoryTreeResult.success(List.of(root), 8));
 
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new ManuDatasetController(datasetService))
+                .standaloneSetup(new ManuDatasetController(datasetService, mock(SearchService.class)))
                 .build();
 
         ProductCategoryTreeQueryDTO query = new ProductCategoryTreeQueryDTO();

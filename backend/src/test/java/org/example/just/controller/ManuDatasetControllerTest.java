@@ -2,15 +2,19 @@ package org.example.just.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.just.dto.datasetDto.BatchUploadResultVO;
+import org.example.just.dto.datasetDto.CategoryTreeNode;
 import org.example.just.dto.datasetDto.DatasetTagVO;
 import org.example.just.dto.datasetDto.DatasetOptionsResult;
 import org.example.just.dto.datasetDto.DatasetOptionsVO;
 import org.example.just.dto.datasetDto.CreateDatasetResultVO;
+import org.example.just.dto.datasetDto.DatasetSearchRequest;
+import org.example.just.dto.datasetDto.DatasetSearchResponse;
 import org.example.just.dto.datasetDto.OnlineFormFieldVO;
 import org.example.just.dto.datasetDto.OnlineFormSchemaVO;
 import org.example.just.dto.datasetDto.OnlineFormSectionVO;
 import org.example.just.dto.datasetDto.OnlineFormSubmitResultVO;
 import org.example.just.service.DatasetService;
+import org.example.just.service.SearchService;
 import org.example.just.utils.Result;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -75,7 +79,7 @@ class ManuDatasetControllerTest {
                 .thenReturn(Result.success(0, "success", schema));
 
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new ManuDatasetController(datasetService))
+                .standaloneSetup(controller(datasetService))
                 .build();
 
         ApiOnlineFormSchemaBody body = new ApiOnlineFormSchemaBody();
@@ -109,7 +113,7 @@ class ManuDatasetControllerTest {
                 .thenReturn(DatasetOptionsResult.success(List.of(option), 1));
 
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new ManuDatasetController(datasetService))
+                .standaloneSetup(controller(datasetService))
                 .build();
 
         ApiDatasetOptionsBody body = new ApiDatasetOptionsBody();
@@ -143,7 +147,7 @@ class ManuDatasetControllerTest {
                 )));
 
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new ManuDatasetController(datasetService))
+                .standaloneSetup(controller(datasetService))
                 .build();
 
         mockMvc.perform(get("/api/dicts/dataset-tags"))
@@ -168,7 +172,7 @@ class ManuDatasetControllerTest {
         when(datasetService.createDatasetForApi(any())).thenReturn(result);
 
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new ManuDatasetController(datasetService))
+                .standaloneSetup(controller(datasetService))
                 .build();
 
         mockMvc.perform(post("/api/datasets")
@@ -192,7 +196,7 @@ class ManuDatasetControllerTest {
                 .thenReturn(Result.success(0, "success", resultVO));
 
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new ManuDatasetController(datasetService))
+                .standaloneSetup(controller(datasetService))
                 .build();
 
         ApiOnlineFormSubmitBody body = new ApiOnlineFormSubmitBody();
@@ -219,7 +223,7 @@ class ManuDatasetControllerTest {
     void exportDatasetTemplateUsesDocumentedPathAndQueryParams() throws Exception {
         DatasetService datasetService = mock(DatasetService.class);
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new ManuDatasetController(datasetService))
+                .standaloneSetup(controller(datasetService))
                 .build();
 
         mockMvc.perform(get("/api/data/batch/template")
@@ -242,7 +246,7 @@ class ManuDatasetControllerTest {
                 .thenReturn(Result.success(0, "success", resultVO));
 
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new ManuDatasetController(datasetService))
+                .standaloneSetup(controller(datasetService))
                 .build();
 
         MockMultipartFile file = new MockMultipartFile(
@@ -267,10 +271,71 @@ class ManuDatasetControllerTest {
     }
 
     @Test
+    void searchCategoriesUsesManuDatasetControllerAndSearchService() throws Exception {
+        DatasetService datasetService = mock(DatasetService.class);
+        SearchService searchService = mock(SearchService.class);
+        CategoryTreeNode node = new CategoryTreeNode();
+        node.setId("c1");
+        node.setName("新材料产业");
+        node.setChildren(List.of());
+        when(searchService.getCategories())
+                .thenReturn(Result.success("success", List.of(node)));
+
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(new ManuDatasetController(datasetService, searchService))
+                .build();
+
+        mockMvc.perform(get("/api/search/categories"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data[0].id").value("c1"))
+                .andExpect(jsonPath("$.data[0].name").value("新材料产业"));
+
+        verify(searchService).getCategories();
+    }
+
+    @Test
+    void searchDatasetsUsesManuDatasetControllerAndSearchService() throws Exception {
+        DatasetService datasetService = mock(DatasetService.class);
+        SearchService searchService = mock(SearchService.class);
+        DatasetSearchResponse response = new DatasetSearchResponse();
+        response.setPage(1);
+        response.setPageSize(10);
+        response.setTotal(1);
+        DatasetSearchResponse.DatasetItem item = new DatasetSearchResponse.DatasetItem();
+        item.setId("123");
+        item.setTitle("羟基磷灰石数据集");
+        response.setItems(List.of(item));
+        when(searchService.searchDatasets(any()))
+                .thenReturn(Result.success("success", response));
+
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(new ManuDatasetController(datasetService, searchService))
+                .build();
+
+        DatasetSearchRequest request = new DatasetSearchRequest();
+        request.setKeyword("羟基磷灰石");
+        request.setResultType("dataset");
+
+        mockMvc.perform(post("/api/search/datasets")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.pageSize").value(10))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.items[0].id").value("123"))
+                .andExpect(jsonPath("$.data.items[0].title").value("羟基磷灰石数据集"));
+
+        verify(searchService).searchDatasets(any());
+    }
+
+    @Test
     void legacyImportDataPathIsRemoved() throws Exception {
         DatasetService datasetService = mock(DatasetService.class);
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new ManuDatasetController(datasetService))
+                .standaloneSetup(controller(datasetService))
                 .build();
 
         MockMultipartFile file = new MockMultipartFile("file", "legacy.xlsx", "application/octet-stream", new byte[]{1});
@@ -286,7 +351,7 @@ class ManuDatasetControllerTest {
     void legacyExportTemplatePathIsRemoved() throws Exception {
         DatasetService datasetService = mock(DatasetService.class);
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new ManuDatasetController(datasetService))
+                .standaloneSetup(controller(datasetService))
                 .build();
 
         mockMvc.perform(get("/Dataset/export-template")
@@ -301,7 +366,7 @@ class ManuDatasetControllerTest {
         DatasetService datasetService = mock(DatasetService.class);
 
         MockMvc mockMvc = MockMvcBuilders
-                .standaloneSetup(new ManuDatasetController(datasetService))
+                .standaloneSetup(controller(datasetService))
                 .build();
 
         mockMvc.perform(post("/Dataset/create-template")
@@ -325,6 +390,10 @@ class ManuDatasetControllerTest {
         body.templateId = 5;
         body.datasetTagIds = new Integer[]{21, 22, 35};
         return body;
+    }
+
+    private ManuDatasetController controller(DatasetService datasetService) {
+        return new ManuDatasetController(datasetService, mock(SearchService.class));
     }
 
     private static class ApiCreateDatasetBody {
