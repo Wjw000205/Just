@@ -171,14 +171,17 @@ export function normalizeDatabaseRow(raw) {
   const sci = raw.scienceCategories ?? raw.sciCategories ?? raw.scienceCategory
   const ind = raw.industryCategories ?? raw.industryTags ?? raw.industryCategory
   const codes = raw.productCodes ?? raw.codes ?? raw.productCode
+  const datasetName =
+    raw.datasetName != null
+      ? String(raw.datasetName)
+      : raw.name != null
+        ? String(raw.name)
+        : ''
+  const dataCount = raw.dataCount ?? raw.dataQuantity ?? raw.data_num ?? raw.count ?? raw.recordCount ?? ''
   return {
     id: raw.id,
-    datasetName:
-      raw.datasetName != null
-        ? String(raw.datasetName)
-        : raw.name != null
-          ? String(raw.name)
-          : '',
+    name: datasetName,
+    datasetName,
     scienceCategories: parseStringArray(sci),
     industryCategories: parseStringArray(ind),
     productCodes: Array.isArray(codes)
@@ -187,8 +190,8 @@ export function normalizeDatabaseRow(raw) {
         ? [String(codes)]
         : [],
     dataLevel: normalizeDataLevel(raw.dataLevel ?? raw.level),
-    dataCount:
-      raw.dataCount ?? raw.dataQuantity ?? raw.data_num ?? raw.count ?? '',
+    dataCount,
+    recordCount: dataCount,
     templateName:
       raw.templateName != null ? String(raw.templateName) : '',
     dataCategory:

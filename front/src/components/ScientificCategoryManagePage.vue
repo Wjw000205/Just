@@ -83,13 +83,6 @@
           </svg>
           新增
         </button>
-        <button class="action-btn primary" @click="handleBatchAdd">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
-          </svg>
-          批量新增
-        </button>
         <button class="action-btn secondary" @click="handleFetchCatalog">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -227,7 +220,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { getManuList, createMenu } from '../api/category.js'
+import { getManuList, createMenu, countDatasetsUnderMenu } from '../api/category.js'
 
 const emit = defineEmits(['go-home', 'go-system-manage'])
 
@@ -302,6 +295,23 @@ function collectNamesForParentSelect(nodes, acc = new Set()) {
     if (n.children?.length) collectNamesForParentSelect(n.children, acc)
   }
   return [...acc].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+}
+
+async function fillDatasetCounts(nodes) {
+  await Promise.all(
+    nodes.map(async (node) => {
+      const fallbackCount = Number(node.dataCount ?? 0)
+      try {
+        node.dataCount = await countDatasetsUnderMenu(node.id)
+      } catch (e) {
+        console.warn('countDatasetsUnderMenu failed:', node.id, e)
+        node.dataCount = Number.isFinite(fallbackCount) ? fallbackCount : 0
+      }
+      if (node.children?.length) {
+        await fillDatasetCounts(node.children)
+      }
+    }),
+  )
 }
 
 /** 前序遍历树，生成带缩进标签的下拉项（展示层级关系） */
@@ -451,7 +461,9 @@ async function loadTree() {
   try {
     const res = await getManuList({ page: 1, pageSize: 500 })
     const list = Array.isArray(res.data) ? res.data : []
-    treeData.value = list.map((n) => mapApiToViewNode(n, 1, '-'))
+    const nextTree = list.map((n) => mapApiToViewNode(n, 1, '-'))
+    await fillDatasetCounts(nextTree)
+    treeData.value = nextTree
     parentOptions.value = collectNamesForParentSelect(treeData.value)
   } catch (e) {
     loadError.value = e?.message || '加载模板目录树失败'
@@ -589,10 +601,6 @@ async function confirmAdd() {
 // 操作按钮
 const handleAdd = () => {
   openAddModal()
-}
-
-const handleBatchAdd = () => {
-  console.log('批量新增')
 }
 
 const handleFetchCatalog = () => {

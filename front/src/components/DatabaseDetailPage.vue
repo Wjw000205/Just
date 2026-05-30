@@ -26,19 +26,10 @@
           </div>
         </div>
         <div class="meta-grid">
-          <div class="kv"><span class="k">科学分类：</span><span class="v">{{ headerSci }}</span></div>
-          <div class="kv"><span class="k">产业分类：</span><span class="v">{{ headerInd }}</span></div>
-          <div class="kv"><span class="k">产品代码：</span><span class="v">{{ headerCodes }}</span></div>
-          <div class="kv"><span class="k">数据类别：</span><span class="v">{{ headerDataCategory }}</span></div>
-
-          <div class="kv"><span class="k">数据量：</span><span class="v">{{ headerCount }}</span></div>
           <div class="kv"><span class="k">模板：</span><span class="v">{{ headerTemplate }}</span></div>
-          <div class="kv"><span class="k">数据来源：</span><span class="v">{{ headerDept }}</span></div>
-          <div class="kv"><span class="k">数据标识：</span><span class="v">-</span></div>
-
+          <div class="kv"><span class="k">所属部门：</span><span class="v">{{ headerDept }}</span></div>
           <div class="kv"><span class="k">创建人：</span><span class="v">{{ headerCreator }}</span></div>
           <div class="kv"><span class="k">创建时间：</span><span class="v">{{ headerCreateTime }}</span></div>
-          <div class="kv"><span class="k">审核时间：</span><span class="v">{{ headerAuditTime }}</span></div>
         </div>
       </div>
     </div>
@@ -82,23 +73,10 @@
           <table class="data-table">
             <thead>
               <tr>
-                <th v-if="colVisible('index')" class="col-index" rowspan="3">序号</th>
-                <th v-if="colVisible('materialCode')" class="col-code" rowspan="3">
-                  材料编号 <span class="sort-caret" aria-hidden="true">⇅</span>
+                <th class="col-index">序号</th>
+                <th v-for="column in visibleDataColumns" :key="column.key" class="col-dynamic">
+                  {{ column.label }}
                 </th>
-                <th class="group" :colspan="groupSpan('source')">数据来源</th>
-                <th class="col-action" rowspan="3">操作</th>
-              </tr>
-              <tr>
-                <th class="subgroup" :colspan="groupSpan('paper')">文献</th>
-                <th class="subgroup" :colspan="groupSpan('experiment')">实验</th>
-              </tr>
-              <tr>
-                <th v-if="colVisible('collector')" class="col-small">采集人员 <span class="sort-caret" aria-hidden="true">⇅</span></th>
-                <th v-if="colVisible('collectorOrg')" class="col-mid">采集单位 <span class="sort-caret" aria-hidden="true">⇅</span></th>
-                <th v-if="colVisible('collectDate')" class="col-mid">采集日期 <span class="sort-caret" aria-hidden="true">⇅</span></th>
-                <th v-if="colVisible('doi')" class="col-mid">文献DOI <span class="sort-caret" aria-hidden="true">⇅</span></th>
-                <th v-if="colVisible('experimenter')" class="col-small">实验人员 <span class="sort-caret" aria-hidden="true">⇅</span></th>
               </tr>
             </thead>
 
@@ -110,31 +88,21 @@
             </tbody>
             <tbody v-else>
               <tr v-for="(r, idx) in rows" :key="r.id ?? idx">
-                <td v-if="colVisible('index')" class="col-index">{{ idx + 1 }}</td>
-                <td v-if="colVisible('materialCode')" class="col-code">{{ r.materialCode }}</td>
-                <td v-if="colVisible('collector')" class="col-small">{{ r.collector || '-' }}</td>
-                <td v-if="colVisible('collectorOrg')" class="col-mid">{{ r.collectorOrg || '-' }}</td>
-                <td v-if="colVisible('collectDate')" class="col-mid">{{ r.collectDate || '-' }}</td>
-                <td v-if="colVisible('doi')" class="col-mid">{{ r.doi || '-' }}</td>
-                <td v-if="colVisible('experimenter')" class="col-small">{{ r.experimenter || '-' }}</td>
-                <td class="col-action">
-                  <div class="action-btns">
-                    <button type="button" class="action-btn" data-tip="查看" @click="onRowView(r)">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1a5ce6" stroke-width="2">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
-                    </button>
-                    <button type="button" class="action-btn favorite" :class="{ active: r.favorited }" :data-tip="r.favorited ? '取消收藏' : '收藏'" @click="r.favorited = !r.favorited">
-                      <svg width="16" height="16" viewBox="0 0 24 24" :fill="r.favorited ? 'currentColor' : 'none'" stroke="#1a5ce6" stroke-width="2">
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                      </svg>
-                    </button>
-                  </div>
+                <td class="col-index">{{ (pageNum - 1) * pageSize + idx + 1 }}</td>
+                <td v-for="column in visibleDataColumns" :key="column.key" class="col-dynamic">
+                  {{ cellValue(r, column) }}
                 </td>
               </tr>
             </tbody>
           </table>
+        </div>
+        <div class="pagination">
+          <span class="pagination-total">共 {{ total }} 条</span>
+          <div class="pagination-nav">
+            <button type="button" class="pagination-btn" :disabled="pageNum <= 1" @click="goToPage(pageNum - 1)">上一页</button>
+            <span class="page-number active">{{ pageNum }}</span>
+            <button type="button" class="pagination-btn" :disabled="pageNum >= totalPages" @click="goToPage(pageNum + 1)">下一页</button>
+          </div>
         </div>
       </section>
     </div>
@@ -142,7 +110,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
   dataset: { type: Object, default: null },
@@ -152,49 +120,18 @@ const emit = defineEmits(['go-home', 'back'])
 const collapsed = ref(false)
 const loading = ref(false)
 const rows = ref([])
+const columns = ref([])
+const total = ref(0)
+const pageNum = ref(1)
+const pageSize = ref(10)
 
-function makeFieldTree() {
-  // 左侧树与表格列共用同一份 key（叶子节点）
-  return [
-    { id: 'materialCode', label: '材料编号', key: 'materialCode', group: 'base', visible: true },
-    { id: 'materialCnName', label: '材料中文名称', visible: true },
-    { id: 'materialCnAlias', label: '材料中文名称简称', visible: true },
-    { id: 'materialEnName', label: '材料英文名称', visible: true },
-    { id: 'materialEnAlias', label: '材料英文名称简称', visible: true },
-    { id: 'materialCategory', label: '材料类别', visible: true },
-    { id: 'materialUsage', label: '材料用途', visible: true },
-    {
-      id: 'source',
-      label: '数据来源',
-      expanded: true,
-      children: [
-        {
-          id: 'paper',
-          label: '文献',
-          expanded: true,
-          children: [
-            { id: 'collector', label: '采集人员', key: 'collector', group: 'paper', visible: true },
-            { id: 'collectorOrg', label: '采集单位', key: 'collectorOrg', group: 'paper', visible: true },
-            { id: 'collectDate', label: '采集日期', key: 'collectDate', group: 'paper', visible: true },
-            { id: 'doi', label: '文献DOI', key: 'doi', group: 'paper', visible: true },
-          ],
-        },
-        {
-          id: 'experiment',
-          label: '实验',
-          expanded: true,
-          children: [
-            { id: 'experimenter', label: '实验人员', key: 'experimenter', group: 'experiment', visible: true },
-            { id: 'calc', label: '计算', visible: true },
-            { id: 'rd', label: '研发', visible: true },
-            { id: 'manufacturing', label: '生产', visible: true },
-            { id: 'clinical', label: '临床', visible: true },
-          ],
-        },
-      ],
-    },
-    { id: 'sampleInfo', label: '样品信息', visible: true },
-  ]
+function makeFieldTree(nextColumns = []) {
+  return nextColumns.map((column, index) => ({
+    id: column.key || `column-${index}`,
+    label: column.label || column.key || `字段${index + 1}`,
+    key: column.key || column.label || `column-${index}`,
+    visible: true,
+  }))
 }
 
 const fieldTree = ref(makeFieldTree())
@@ -224,6 +161,10 @@ const leafColumns = computed(() => {
   })
   return leaves
 })
+
+const visibleDataColumns = computed(() =>
+  leafColumns.value.filter((column) => column.visible !== false),
+)
 
 const visibleTreeNodes = computed(() => {
   const result = []
@@ -272,52 +213,119 @@ function groupSpan(group) {
 }
 
 const tableColspan = computed(() => {
-  // base 两列（index/materialCode）按可见计算 + paper/experiment 可见列 + 操作列
-  const base = ['index', 'materialCode'].filter((k) => colVisible(k)).length
-  const rest = leafColumns.value.filter((c) => c.group !== 'base' && c.visible).length
-  return base + rest + 1
+  return visibleDataColumns.value.length + 1
 })
 
-const headerTitle = computed(() => props.dataset?.datasetName || '数据集详情')
-const headerSci = computed(() => (props.dataset?.scienceCategories || []).join('、') || '-')
-const headerInd = computed(() => (props.dataset?.industryCategories || []).join('、') || '-')
-const headerCodes = computed(() => (props.dataset?.productCodes || []).join('、') || '-')
-const headerDataCategory = computed(() => props.dataset?.dataCategory || '-')
-const headerCount = computed(() => (props.dataset?.dataCount != null ? `${props.dataset.dataCount}条` : '-'))
-const headerTemplate = computed(() => props.dataset?.templateName || '-')
-const headerDept = computed(() => props.dataset?.department || '-')
-const headerCreator = computed(() => props.dataset?.creator || '-')
-const headerCreateTime = computed(() => props.dataset?.createTime || '-')
-const headerAuditTime = computed(() => props.dataset?.updateTime || '-')
-const headerLevel = computed(() => props.dataset?.dataLevel?.text || '公益')
+const headerTitle = computed(() => props.dataset?.datasetName || props.dataset?.name || '数据集详情')
+const headerTemplate = computed(() => props.dataset?.templateName || props.dataset?.template || '-')
+const headerDept = computed(() => props.dataset?.department || props.dataset?.deptName || '-')
+const headerCreator = computed(() => props.dataset?.creator || props.dataset?.createdBy || '-')
+const headerCreateTime = computed(() => props.dataset?.createTime || props.dataset?.createdAt || '-')
+const headerLevel = computed(() => {
+  const level = props.dataset?.dataLevel
+  const map = { public: '公益', highvalue: '高值', private: '私有' }
+  if (level && typeof level === 'object') {
+    return map[level.value] || map[level.text] || level.text || '公益'
+  }
+  return map[level] || level || '公益'
+})
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
 function handleSearch() {
+  pageNum.value = 1
   loadRows()
 }
 function handleReset() {
-  fieldTree.value = makeFieldTree()
+  fieldTree.value = makeFieldTree(columns.value)
+  pageNum.value = 1
   loadRows()
 }
 
-function onRowView(r) {
-  console.log('查看行：', r)
+function cellValue(row, column) {
+  const data = row?.data || {}
+  const value = data[column.label] ?? data[column.key] ?? data[column.id]
+  return value == null || value === '' ? '-' : value
+}
+
+function getDatasetName() {
+  return props.dataset?.datasetName || props.dataset?.name || ''
+}
+
+function normalizeColumns(rawColumns) {
+  return Array.isArray(rawColumns)
+    ? rawColumns.map((column, index) => ({
+        id: column.id ?? index,
+        key: column.columnName || `column-${index + 1}`,
+        label: column.columnName || `字段${index + 1}`,
+        type: column.columnType || '',
+      }))
+    : []
+}
+
+function normalizeRows(records) {
+  return Array.isArray(records)
+    ? records.map((record, index) => ({
+        id: record.rowId ?? index,
+        rowId: record.rowId,
+        data: record.data || {},
+      }))
+    : []
+}
+
+async function fetchDatasetDataPage() {
+  const datasetName = getDatasetName()
+  if (!datasetName) {
+    throw new Error('缺少数据集名称')
+  }
+
+  const params = new URLSearchParams({
+    DatasetName: datasetName,
+    pageNum: String(pageNum.value),
+    pageSize: String(pageSize.value),
+  })
+  const resp = await fetch(`/Dataset/data-page?${params.toString()}`, {
+    method: 'GET',
+    headers: getAuthHeader(),
+  })
+  const json = await resp.json().catch(() => null)
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!json || (json.code !== 0 && json.code !== 200)) {
+    throw new Error(json?.message || '查询数据失败')
+  }
+  return json.data || {}
+}
+
+function getAuthHeader() {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+function goToPage(nextPage) {
+  if (nextPage < 1 || nextPage > totalPages.value) return
+  pageNum.value = nextPage
+  loadRows()
 }
 
 async function loadRows() {
   loading.value = true
   try {
-    // 先用 mock，后续接后端详情列表接口时替换
-    const base = String(props.dataset?.id ?? '1')
-    rows.value = Array.from({ length: 9 }).map((_, i) => ({
-      id: `${base}-${i + 1}`,
-      materialCode: `nHAp - ${String(i + 1).padStart(3, '0')}`,
-      collector: '-',
-      collectorOrg: '-',
-      collectDate: '-',
-      doi: '-',
-      experimenter: i % 2 === 0 ? '史浩' : '史浩',
-      favorited: false,
-    }))
+    const data = await fetchDatasetDataPage()
+    const nextColumns = normalizeColumns(data.columns)
+    columns.value = nextColumns
+    fieldTree.value = makeFieldTree(nextColumns)
+    const pageData = data.pageData || {}
+    const records = pageData.records || pageData.list || pageData.rows || data.records || []
+    total.value = Number(pageData.total ?? data.total ?? records.length)
+    rows.value = normalizeRows(records)
+  } catch (e) {
+    console.error('loadRows', e)
+    columns.value = []
+    fieldTree.value = []
+    rows.value = []
+    total.value = 0
+    alert(e?.message || '查询数据失败')
   } finally {
     loading.value = false
   }
@@ -326,6 +334,14 @@ async function loadRows() {
 onMounted(() => {
   loadRows()
 })
+
+watch(
+  () => getDatasetName(),
+  () => {
+    pageNum.value = 1
+    loadRows()
+  },
+)
 </script>
 
 <style scoped>
@@ -578,6 +594,11 @@ onMounted(() => {
   width: 70px;
   text-align: center;
 }
+.col-dynamic {
+  min-width: 140px;
+  max-width: 260px;
+  word-break: break-word;
+}
 .col-code {
   min-width: 180px;
 }
@@ -660,6 +681,53 @@ onMounted(() => {
   border-top-color: rgba(33, 33, 33, 0.92);
   pointer-events: none;
   z-index: 20;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 2px 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.pagination-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-btn,
+.page-number {
+  min-width: 34px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d9e0ec;
+  border-radius: 4px;
+  background: #fff;
+  color: #4a5568;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.pagination-btn:hover:not(:disabled),
+.page-number:hover {
+  border-color: #1a5ce6;
+  color: #1a5ce6;
+}
+
+.pagination-btn:disabled {
+  color: #b8beca;
+  background: #f7f8fb;
+  cursor: not-allowed;
+}
+
+.page-number.active {
+  border-color: #1a5ce6;
+  background: #1a5ce6;
+  color: #fff;
 }
 
 @media (max-width: 1100px) {

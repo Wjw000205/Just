@@ -1791,37 +1791,47 @@ public class DatasetServiceImp implements DatasetService {
             return Result.fail("目录id不能为空");
         }
 
-        // menuId = 0 时，表示从根目录开始统计
+        // menuId = 0 时，统计所有数据集
         if (menuId != 0) {
             LambdaQueryWrapper<ManuDatasetEntity> menuWrapper = new LambdaQueryWrapper<>();
             menuWrapper.eq(ManuDatasetEntity::getId, menuId)
                     .eq(ManuDatasetEntity::getDeleted, 0)
+                    .eq(ManuDatasetEntity::getIsMenu, 1)
                     .last("limit 1");
 
             ManuDatasetEntity currentMenu = DatasetDao.selectOne(menuWrapper);
             if (currentMenu == null) {
                 return Result.fail("当前目录不存在");
             }
-            if (currentMenu.getIsMenu() == null || currentMenu.getIsMenu() != 1) {
-                return Result.fail("当前节点不是目录");
-            }
         }
 
-        // 一次性查出所有未删除的数据，内存递归统计
-        LambdaQueryWrapper<ManuDatasetEntity> allWrapper = new LambdaQueryWrapper<>();
-        allWrapper.eq(ManuDatasetEntity::getDeleted, 0);
+        if (menuId == 0) {
+            LambdaQueryWrapper<ManuDatasetEntity> datasetWrapper = new LambdaQueryWrapper<>();
+            datasetWrapper.eq(ManuDatasetEntity::getDeleted, 0)
+                    .eq(ManuDatasetEntity::getIsMenu, 0);
+            return Result.success(DatasetDao.selectCount(datasetWrapper));
+        }
 
-        List<ManuDatasetEntity> allList = DatasetDao.selectList(allWrapper);
+        LambdaQueryWrapper<ManuDatasetEntity> menuWrapper = new LambdaQueryWrapper<>();
+        menuWrapper.eq(ManuDatasetEntity::getDeleted, 0)
+                .eq(ManuDatasetEntity::getIsMenu, 1);
+        List<ManuDatasetEntity> menus = DatasetDao.selectList(menuWrapper);
 
-        Map<Integer, List<ManuDatasetEntity>> parentChildrenMap = new HashMap<>();
-        for (ManuDatasetEntity item : allList) {
+        Map<Integer, List<ManuDatasetEntity>> menuChildrenMap = new HashMap<>();
+        for (ManuDatasetEntity item : menus) {
             Integer parentId = item.getParent() == null ? 0 : item.getParent();
-            parentChildrenMap
-                    .computeIfAbsent(parentId, k -> new ArrayList<>())
-                    .add(item);
+            menuChildrenMap.computeIfAbsent(parentId, k -> new ArrayList<>()).add(item);
         }
 
-        long count = countDatasetRecursively(menuId, parentChildrenMap);
+        Set<Integer> menuIds = new LinkedHashSet<>();
+        collectMenuIdsRecursively(menuId, menuChildrenMap, menuIds);
+
+        LambdaQueryWrapper<ManuDatasetEntity> datasetWrapper = new LambdaQueryWrapper<>();
+        datasetWrapper.eq(ManuDatasetEntity::getDeleted, 0)
+                .eq(ManuDatasetEntity::getIsMenu, 0)
+                .in(ManuDatasetEntity::getScienceCategoryId, menuIds);
+
+        long count = DatasetDao.selectCount(datasetWrapper);
         return Result.success(count);
     }
 
@@ -1830,21 +1840,20 @@ public class DatasetServiceImp implements DatasetService {
         return DatasetDao.selectCount(null);
     }
 
-    private long countDatasetRecursively(Integer parentId, Map<Integer, List<ManuDatasetEntity>> parentChildrenMap) {
-        List<ManuDatasetEntity> children = parentChildrenMap.get(parentId);
-        if (children == null || children.isEmpty()) {
-            return 0L;
+    private void collectMenuIdsRecursively(Integer parentId,
+                                           Map<Integer, List<ManuDatasetEntity>> menuChildrenMap,
+                                           Set<Integer> menuIds) {
+        if (parentId == null || !menuIds.add(parentId)) {
+            return;
         }
 
-        long count = 0L;
-        for (ManuDatasetEntity child : children) {
-            if (child.getIsMenu() != null && child.getIsMenu() == 0) {
-                count++;
-            } else if (child.getIsMenu() != null && child.getIsMenu() == 1) {
-                count += countDatasetRecursively(child.getId(), parentChildrenMap);
-            }
+        List<ManuDatasetEntity> children = menuChildrenMap.get(parentId);
+        if (children == null || children.isEmpty()) {
+            return;
         }
-        return count;
+        for (ManuDatasetEntity child : children) {
+            collectMenuIdsRecursively(child.getId(), menuChildrenMap, menuIds);
+        }
     }
 
 }

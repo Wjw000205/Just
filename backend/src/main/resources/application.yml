@@ -1,6 +1,6 @@
 spring:
   profiles:
-    active: @activated.profile@
+    active: dev-wjw
 
 mybatis-plus:
   configuration:

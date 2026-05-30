@@ -151,7 +151,7 @@
                   <span class="ellipsis" :title="r.name">{{ r.name }}</span>
                 </td>
                 <td class="col-level">
-                  <span class="level-badge" :class="r.dataLevel === 'highvalue' ? 'high' : 'public'">{{ dataLevelText(r.dataLevel) }}</span>
+                  <span class="level-badge" :class="dataLevelClass(r.dataLevel)">{{ dataLevelText(r.dataLevel) }}</span>
                 </td>
                 <td class="col-count">{{ r.recordCount }}</td>
                 <td class="col-action">
@@ -272,6 +272,7 @@
         </button>
       </div>
     </div>
+
   </section>
 </template>
 
@@ -282,6 +283,7 @@ import {
   fetchDatasetOptions,
   fetchDatabaseDownloadFields,
   downloadDatabaseDatasetFile,
+  normalizeDatabaseRow,
 } from '../api/database.js'
 import DatabaseSidebarTreeRow from './DatabaseSidebarTreeRow.vue'
 
@@ -317,10 +319,24 @@ function findDefaultActiveId(tree) {
   return tree[0] ? String(tree[0].id) : 'all'
 }
 
-function selectNode(id) {
+function selectedScienceCategoryIds() {
+  const id = Number(activeNodeId.value)
+  return activeNodeId.value !== 'all' && Number.isFinite(id) ? [id] : []
+}
+
+async function loadCategories() {
+  sidebarTree.value = await fetchDatabaseScienceTree({
+    keyword: categoryKeyword.value,
+    page: 1,
+    pageSize: 500,
+  })
+  sidebarExpanded.value = collectExpandedDefaults(sidebarTree.value)
+}
+
+async function selectNode(id) {
   activeNodeId.value = id
   page.value = 1
-  loadRows()
+  await loadRows()
 }
 
 function onSidebarToggleExpand(id) {
@@ -333,20 +349,9 @@ function onSidebarToggleExpand(id) {
 
 async function handleCategorySearch() {
   page.value = 1
-  try {
-    sidebarTree.value = await fetchDatabaseScienceTree({
-      keyword: categoryKeyword.value,
-      page: 1,
-      pageSize: 500,
-    })
-    sidebarExpanded.value = collectExpandedDefaults(sidebarTree.value)
-    activeNodeId.value = findDefaultActiveId(sidebarTree.value)
-  } catch (e) {
-    console.error('handleCategorySearch', e)
-    const msg = e instanceof Error ? e.message : String(e)
-    if (msg.includes('未登录') || msg.includes('无权限')) alert(msg)
-  }
-  loadRows()
+  await loadCategories()
+  activeNodeId.value = 'all'
+  await loadRows()
 }
 
 const searchForm = ref({
@@ -413,7 +418,13 @@ function dataLevelText(level) {
     highvalue: '高值',
     private: '私有',
   }
+  if (level && typeof level === 'object') return map[level.value] || map[level.text] || level.text || ''
   return map[level] || level || ''
+}
+
+function dataLevelClass(level) {
+  if (level && typeof level === 'object') return level.kind === 'high' ? 'high' : 'public'
+  return level === 'highvalue' || level === '高值' ? 'high' : 'public'
 }
 
 const page = ref(1)
@@ -473,12 +484,12 @@ function handleSearch() {
   page.value = 1
   loadRows()
 }
-function handleReset() {
+async function handleReset() {
   searchForm.value = { datasetName: '', industryCategory: '', dataCategory: '', templateName: '', creator: '', department: '' }
   categoryKeyword.value = ''
   activeNodeId.value = 'all'
   page.value = 1
-  loadRows()
+  await loadRows()
 }
 function goToPage(p) {
   if (p < 1 || p > totalPages.value) return
@@ -486,12 +497,23 @@ function goToPage(p) {
   loadRows()
 }
 
-function handleView(row) {
-  emit('view-detail', {
-    ...row,
-    datasetName: row.name,
-    dataCount: row.recordCount,
-  })
+async function handleView(row) {
+  try {
+    const detailJson = await fetchDatasetDetail(row.id)
+    const detail = detailJson.data && typeof detailJson.data === 'object' ? detailJson.data : {}
+    const dataset = normalizeDatabaseRow({
+      ...row,
+      ...detail,
+      id: detail.id ?? row.id,
+      datasetName: detail.datasetName || detail.name || row.datasetName || row.name,
+      name: detail.datasetName || detail.name || row.datasetName || row.name,
+    })
+    emit('view-detail', dataset)
+  } catch (e) {
+    console.error('handleView', e)
+    const msg = e instanceof Error ? e.message : String(e)
+    alert(msg || '获取数据集详情失败')
+  }
 }
 function handleDownload(row) {
   downloadTarget.value = row
@@ -568,20 +590,20 @@ function handleClickOutside(e) {
 async function loadRows() {
   loading.value = true
   try {
-    const selectedId = Number(activeNodeId.value)
-    const scienceCategoryIds =
-      activeNodeId.value && activeNodeId.value !== 'all' && Number.isFinite(selectedId)
-        ? [selectedId]
-        : []
     const { total: t, list } = await fetchDatasetOptions({
-      scienceCategoryIds,
+      scienceCategoryIds: selectedScienceCategoryIds(),
       keyword: searchForm.value.datasetName,
       page: page.value,
       pageSize: pageSize.value,
     })
-    const approvedList = list.filter((item) => Number(item.auditStatus) === 1)
-    total.value = Math.min(t, approvedList.length)
-    rows.value = approvedList
+    const filteredList = list.filter((item) => {
+      if (searchForm.value.dataCategory) {
+        return String(item.dataCategory || 'dataset') === searchForm.value.dataCategory
+      }
+      return true
+    })
+    total.value = searchForm.value.dataCategory ? filteredList.length : t
+    rows.value = filteredList
   } catch (e) {
     console.error('loadRows', e)
     const msg = e instanceof Error ? e.message : String(e)
@@ -596,13 +618,7 @@ async function loadRows() {
 async function loadPageInit() {
   try {
     loadLocalFilterOptions()
-
-    sidebarTree.value = await fetchDatabaseScienceTree({
-      keyword: categoryKeyword.value,
-      page: 1,
-      pageSize: 500,
-    })
-    sidebarExpanded.value = collectExpandedDefaults(sidebarTree.value)
+    await loadCategories()
     activeNodeId.value = findDefaultActiveId(sidebarTree.value)
     await loadRows()
   } catch (e) {
@@ -610,6 +626,29 @@ async function loadPageInit() {
     const msg = e instanceof Error ? e.message : String(e)
     if (msg.includes('未登录') || msg.includes('无权限')) alert(msg)
   }
+}
+
+async function fetchDatasetDetail(id) {
+  const resp = await fetch(`/database/datasets/${encodeURIComponent(String(id))}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+  })
+  const json = await resp.json().catch(() => null)
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!json || (json.code !== 0 && json.code !== 200)) {
+    throw new Error(json?.message || '获取数据集详情失败')
+  }
+  return json
+}
+
+function getAuthHeader() {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 onMounted(async () => {

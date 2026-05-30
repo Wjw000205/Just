@@ -166,7 +166,9 @@
                 <path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" />
               </svg>
               <ul v-if="templateMenuVisible" class="download-menu">
-                <li class="download-menu-item" @click="downloadTemplate">下载EXCEL模板</li>
+                <li class="download-menu-item" @click.stop="downloadTemplate('excel')">
+                  {{ templateDownloadLoading ? '下载中…' : '下载EXCEL模板' }}
+                </li>
               </ul>
             </div>
           </div>
@@ -174,7 +176,20 @@
           <div class="upload-batch-card">
             <div class="upload-batch-card-title">上传写好的数据文件</div>
             <div class="upload-batch-upload-btn-wrap">
-              <button type="button" class="upload-btn primary">上传</button>
+              <input
+                ref="batchFileInput"
+                type="file"
+                class="batch-file-input"
+                accept=".xlsx,.xls,.csv,.zip,.rar"
+                @change="onBatchFileChange"
+              />
+              <button type="button" class="upload-btn primary" :disabled="submitLoading" @click="openBatchFilePicker">
+                上传
+              </button>
+            </div>
+            <div v-if="batchFileName" class="batch-file-name">
+              已选择：{{ batchFileName }}
+              <button type="button" class="batch-file-clear" @click="clearBatchFile">清除</button>
             </div>
             <ol class="upload-batch-tips">
               <li>批量上传方式：下载模板，将所上传数据填入模板中后上传。</li>
@@ -188,7 +203,14 @@
 
         <div class="upload-actions">
           <button type="button" class="upload-btn ghost">暂存</button>
-          <button type="button" class="upload-btn primary">提交</button>
+          <button
+            type="button"
+            class="upload-btn primary"
+            :disabled="submitLoading"
+            @click="submitUploadData"
+          >
+            {{ submitLoading ? '提交中…' : '提交' }}
+          </button>
         </div>
       </section>
     </div>
@@ -295,8 +317,12 @@ const datasetSchema = ref(null)
 const schemaLoading = ref(false)
 const schemaError = ref('')
 const onlineForm = reactive({})
+const submitLoading = ref(false)
 const templateMenuVisible = ref(false)
 const templateDownloadLoading = ref(false)
+const batchFileInput = ref(null)
+const batchFile = ref(null)
+const batchFileName = ref('')
 
 const scienceCategoryModalVisible = ref(false)
 const scienceCategoryKeyword = ref('')
@@ -562,6 +588,180 @@ function changeMode(mode) {
   }
 }
 
+function openBatchFilePicker() {
+  if (!form.datasetId) {
+    alert('请先选择数据集')
+    return
+  }
+  batchFileInput.value?.click()
+}
+
+function onBatchFileChange(event) {
+  const file = event.target.files?.[0] || null
+  batchFile.value = file
+  batchFileName.value = file?.name || ''
+}
+
+function clearBatchFile() {
+  batchFile.value = null
+  batchFileName.value = ''
+  if (batchFileInput.value) {
+    batchFileInput.value.value = ''
+  }
+}
+
+function getSchemaFields() {
+  const sections = Array.isArray(datasetSchema.value?.sections)
+    ? datasetSchema.value.sections
+    : []
+  return sections.flatMap((section) =>
+    Array.isArray(section.fields) ? section.fields : []
+  )
+}
+
+function validateOnlineForm() {
+  if (!form.datasetId) {
+    return '请先选择数据集'
+  }
+  if (!datasetSchema.value) {
+    return '请先加载在线填写表单'
+  }
+
+  const missing = getSchemaFields().find((field) => {
+    if (!field.required) return false
+    const value = onlineForm[field.id]
+    return value == null || String(value).trim() === ''
+  })
+  if (missing) {
+    return `请填写${missing.label || missing.id}`
+  }
+
+  return ''
+}
+
+function buildOnlineRecord() {
+  const record = {}
+  for (const field of getSchemaFields()) {
+    record[field.id] = onlineForm[field.id] ?? ''
+  }
+  return record
+}
+
+async function submitOnlineData() {
+  const error = validateOnlineForm()
+  if (error) {
+    alert(error)
+    return
+  }
+  if (submitLoading.value) return
+
+  submitLoading.value = true
+  try {
+    const resp = await fetch('/api/data/online/submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeader(),
+      },
+      body: JSON.stringify({
+        datasetId: Number(form.datasetId),
+        records: [buildOnlineRecord()],
+      }),
+    })
+    const json = await resp.json().catch(() => null)
+    if (resp.status === 401 || json?.code === 401) {
+      alert(json?.message || '未登录或无权限')
+      return
+    }
+    if (!json || (json.code !== 0 && json.code !== 200)) {
+      alert(json?.message || '在线填写提交失败')
+      return
+    }
+
+    const data = json.data || {}
+    const failedCount = Number(data.failedCount ?? 0)
+    if (failedCount > 0) {
+      const firstError = Array.isArray(data.errors) ? data.errors[0] : null
+      const detail = firstError?.message || firstError?.error || ''
+      alert(detail ? `提交失败：${detail}` : '在线填写提交失败')
+      return
+    }
+
+    alert('在线填写提交成功')
+    for (const field of getSchemaFields()) {
+      onlineForm[field.id] = field.defaultValue ?? ''
+    }
+  } catch (e) {
+    console.error('submitOnlineData error', e)
+    alert(e?.message || '在线填写提交失败')
+  } finally {
+    submitLoading.value = false
+  }
+}
+
+async function submitBatchData() {
+  if (!form.datasetId) {
+    alert('请先选择数据集')
+    return
+  }
+  if (!batchFile.value) {
+    alert('请先上传数据文件')
+    return
+  }
+  if (submitLoading.value) return
+
+  submitLoading.value = true
+  try {
+    const body = new FormData()
+    body.append('file', batchFile.value)
+
+    const params = new URLSearchParams({
+      datasetId: String(form.datasetId),
+    })
+    const resp = await fetch(`/api/data/batch/upload?${params.toString()}`, {
+      method: 'POST',
+      headers: getAuthHeader(),
+      body,
+    })
+    const json = await resp.json().catch(() => null)
+    if (resp.status === 401 || json?.code === 401) {
+      alert(json?.message || '未登录或无权限')
+      return
+    }
+    if (!json || (json.code !== 0 && json.code !== 200)) {
+      alert(json?.message || '批量上传失败')
+      return
+    }
+
+    const data = json.data || {}
+    const acceptedCount = Number(data.acceptedCount ?? 0)
+    const failedCount = Number(data.failedCount ?? 0)
+    if (failedCount > 0) {
+      const firstError = Array.isArray(data.errors) ? data.errors[0] : null
+      const rowText = firstError?.rowIndex ? `第${firstError.rowIndex}行：` : ''
+      const detail = firstError?.message || ''
+      alert(detail ? `批量上传完成，存在失败：${rowText}${detail}` : `批量上传完成，失败 ${failedCount} 条`)
+      return
+    }
+
+    alert(`批量上传成功，成功接收 ${acceptedCount} 条`)
+    clearBatchFile()
+  } catch (e) {
+    console.error('submitBatchData error', e)
+    alert(e?.message || '批量上传失败')
+  } finally {
+    submitLoading.value = false
+  }
+}
+
+function submitUploadData() {
+  if (form.mode === 'online') {
+    submitOnlineData()
+    return
+  }
+  submitBatchData()
+}
+
 function toggleTemplateMenu() {
   templateMenuVisible.value = !templateMenuVisible.value
 }
@@ -581,10 +781,14 @@ function getFilenameFromContentDisposition(cd) {
   return match && match[2] ? match[2] : ''
 }
 
-async function downloadTemplate(type) {
+async function downloadTemplate(format = 'excel') {
   templateMenuVisible.value = false
   const selectedDataset = datasetOptions.value.find((item) => String(item.value) === String(form.datasetId))
+<<<<<<< HEAD
   if (!selectedDataset?.name) {
+=======
+  if (!form.datasetId) {
+>>>>>>> 1774c57 (完成模板和数据集接口对接)
     alert('请先选择数据集')
     return
   }
@@ -592,7 +796,15 @@ async function downloadTemplate(type) {
 
   templateDownloadLoading.value = true
   try {
+<<<<<<< HEAD
     const url = `/Dataset/export-template?DatasetName=${encodeURIComponent(selectedDataset.name)}`
+=======
+    const params = new URLSearchParams({
+      datasetId: String(form.datasetId),
+      format,
+    })
+    const url = `/api/data/batch/template?${params.toString()}`
+>>>>>>> 1774c57 (完成模板和数据集接口对接)
 
     const resp = await fetch(url, {
       method: 'GET',
@@ -602,7 +814,12 @@ async function downloadTemplate(type) {
 
     const blob = await resp.blob()
     const cd = resp.headers.get('content-disposition') || ''
+<<<<<<< HEAD
     const fallbackName = `${selectedDataset.name}_template.xlsx`
+=======
+    const fallbackExt = format === 'csv' ? 'csv' : 'xlsx'
+    const fallbackName = `${selectedDataset?.name || 'dataset'}_template.${fallbackExt}`
+>>>>>>> 1774c57 (完成模板和数据集接口对接)
     const filename = getFilenameFromContentDisposition(cd) || fallbackName
 
     const blobUrl = URL.createObjectURL(blob)
@@ -615,6 +832,7 @@ async function downloadTemplate(type) {
     URL.revokeObjectURL(blobUrl)
   } catch (e) {
     console.error('downloadTemplate error', e)
+    alert(e?.message || '下载模板失败')
   } finally {
     templateDownloadLoading.value = false
   }
@@ -646,6 +864,7 @@ watch(
 watch(
   () => form.datasetId,
   () => {
+    clearBatchFile()
     if (form.mode === 'online') {
       loadDatasetSchema()
     }
@@ -983,6 +1202,29 @@ watch(
   display: flex;
   justify-content: center;
   margin-bottom: 16px;
+}
+
+.batch-file-input {
+  display: none;
+}
+
+.batch-file-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: -4px 0 14px;
+  font-size: 13px;
+  color: var(--text-gray);
+  word-break: break-all;
+}
+
+.batch-file-clear {
+  border: none;
+  background: transparent;
+  color: #1a5ce6;
+  cursor: pointer;
+  font-size: 13px;
 }
 
 .upload-batch-tips {

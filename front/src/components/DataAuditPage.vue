@@ -223,6 +223,168 @@
         </div>
       </main>
     </div>
+
+    <div v-if="detailVisible" class="detail-modal-mask" @click.self="closeDetailModal">
+      <div class="detail-modal">
+        <div class="detail-modal-header">
+          <div class="detail-modal-title">数据集详情</div>
+          <button type="button" class="detail-modal-close" @click="closeDetailModal">×</button>
+        </div>
+        <div class="detail-modal-body">
+          <div class="detail-tabs">
+            <button
+              type="button"
+              :class="['detail-tab', { active: detailTab === 'info' }]"
+              @click="detailTab = 'info'"
+            >
+              详细信息
+            </button>
+            <button
+              type="button"
+              :class="['detail-tab', { active: detailTab === 'fields' }]"
+              @click="detailTab = 'fields'"
+            >
+              字段信息
+            </button>
+          </div>
+          <div v-if="detailTab === 'info'" class="detail-grid">
+            <div class="detail-item">
+              <span class="detail-label">数据集名称</span>
+              <span class="detail-value">{{ detailValue('datasetName') }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">数据级别</span>
+              <span class="detail-value">{{ dataLevelText(detailValue('dataLevel')) }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">数据分类</span>
+              <span class="detail-value">{{ detailValue('dataCategory') }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">数据条数</span>
+              <span class="detail-value">{{ detailValue('dataCount') }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">模板名称</span>
+              <span class="detail-value">{{ detailValue('templateName') }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">所属部门</span>
+              <span class="detail-value">{{ detailValue('department') }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">创建人</span>
+              <span class="detail-value">{{ detailValue('creator') }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">创建时间</span>
+              <span class="detail-value">{{ detailValue('createTime') }}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">更新时间</span>
+              <span class="detail-value">{{ detailValue('updateTime') }}</span>
+            </div>
+            <div class="detail-item detail-item-wide">
+              <span class="detail-label">科学分类</span>
+              <span class="detail-value">{{ formatList(detailData.scienceCategories) }}</span>
+            </div>
+            <div class="detail-item detail-item-wide">
+              <span class="detail-label">产业分类</span>
+              <span class="detail-value">{{ formatList(detailData.industryCategories) }}</span>
+            </div>
+            <div class="detail-item detail-item-wide">
+              <span class="detail-label">产品代码</span>
+              <span class="detail-value">{{ formatList(detailData.productCodes) }}</span>
+            </div>
+          </div>
+          <div v-else class="field-sections">
+            <div v-if="!schemaSections.length" class="field-empty">暂无字段信息</div>
+            <div v-for="section in schemaSections" :key="section.id || section.title" class="field-section">
+              <div class="field-section-header">
+                <div class="field-section-title">{{ section.title || section.id || '未命名分区' }}</div>
+                <div v-if="section.subtitle" class="field-section-subtitle">{{ section.subtitle }}</div>
+              </div>
+              <table class="field-table">
+                <thead>
+                  <tr>
+                    <th>字段名称</th>
+                    <th>类型</th>
+                    <th>必填</th>
+                    <th>提示</th>
+                    <th>说明</th>
+                    <th>选项</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="field in normalizeFields(section.fields)" :key="field.id || field.label">
+                    <td>{{ field.label || field.id || '-' }}</td>
+                    <td>{{ field.type || '-' }}</td>
+                    <td>{{ field.required ? '是' : '否' }}</td>
+                    <td>{{ field.placeholder || '-' }}</td>
+                    <td>{{ field.description || '-' }}</td>
+                    <td>{{ formatOptions(field.options) }}</td>
+                  </tr>
+                  <tr v-if="!normalizeFields(section.fields).length">
+                    <td colspan="6" class="field-empty-cell">暂无字段</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="detail-modal-footer">
+          <button type="button" class="detail-modal-btn" @click="closeDetailModal">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="messageVisible" class="audit-dialog-mask" @click.self="closeMessage">
+      <div class="audit-dialog audit-message-dialog">
+        <div class="audit-dialog-header">
+          <div class="audit-dialog-title">{{ messageTitle }}</div>
+          <button type="button" class="audit-dialog-close" @click="closeMessage">×</button>
+        </div>
+        <div class="audit-dialog-body">
+          <div :class="['audit-dialog-icon', messageType]">
+            <svg v-if="messageType === 'success'" width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+              <line x1="12" y1="8" x2="12" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="12" cy="17" r="1" fill="currentColor"/>
+            </svg>
+          </div>
+          <div class="audit-dialog-text">{{ messageText }}</div>
+        </div>
+        <div class="audit-dialog-footer">
+          <button type="button" class="audit-dialog-btn primary" @click="closeMessage">确定</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="confirmVisible" class="audit-dialog-mask">
+      <div class="audit-dialog">
+        <div class="audit-dialog-header">
+          <div class="audit-dialog-title">{{ confirmTitle }}</div>
+          <button type="button" class="audit-dialog-close" @click="resolveConfirm(false)">×</button>
+        </div>
+        <div class="audit-dialog-body">
+          <div class="audit-dialog-icon warning">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M12 3L22 20H2L12 3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+              <line x1="12" y1="9" x2="12" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="12" cy="17" r="1" fill="currentColor"/>
+            </svg>
+          </div>
+          <div class="audit-dialog-text">{{ confirmText }}</div>
+        </div>
+        <div class="audit-dialog-footer">
+          <button type="button" class="audit-dialog-btn ghost" @click="resolveConfirm(false)">取消</button>
+          <button type="button" class="audit-dialog-btn primary" @click="resolveConfirm(true)">确定</button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -259,6 +421,18 @@ const dropdowns = ref({
 })
 
 const tableData = ref([])
+const detailVisible = ref(false)
+const detailData = ref({})
+const schemaData = ref({})
+const detailTab = ref('info')
+const messageVisible = ref(false)
+const messageTitle = ref('提示')
+const messageText = ref('')
+const messageType = ref('success')
+const confirmVisible = ref(false)
+const confirmTitle = ref('确认操作')
+const confirmText = ref('')
+let confirmResolver = null
 
 // 分页
 const currentPage = ref(1)
@@ -375,7 +549,7 @@ async function loadTableData() {
     total.value = 0
     tableData.value = []
     const msg = e instanceof Error ? e.message : String(e)
-    if (msg.includes('未登录') || msg.includes('无权限')) alert(msg)
+    if (msg.includes('未登录') || msg.includes('无权限')) showMessage(msg, 'error')
   } finally {
     loading.value = false
   }
@@ -447,23 +621,105 @@ const handleCancelSelect = () => {
 const handleBatchAudit = async () => {
   const selected = tableData.value.filter(item => item.selected)
   if (selected.length === 0) {
-    alert('请先选择要审核的数据')
+    showMessage('请先选择要审核的数据', 'error')
     return
   }
-  if (!confirm(`确定通过选中的 ${selected.length} 个数据集吗？`)) return
+  const confirmed = await askConfirm(`确定通过选中的 ${selected.length} 个数据集吗？`, '批量审核')
+  if (!confirmed) return
   try {
     await Promise.all(selected.map((item) => auditDataset(item, 1)))
-    alert(`已通过 ${selected.length} 个数据集`)
+    showMessage(`已通过 ${selected.length} 个数据集`, 'success')
     await loadTableData()
   } catch (e) {
     console.error('handleBatchAudit', e)
-    alert(e?.message || '批量审核失败')
+    showMessage(e?.message || '批量审核失败', 'error')
   }
 }
 
-const handleView = (item) => {
-  console.log('查看:', item)
-  alert(`查看: ${item.datasetName}`)
+const handleView = async (item) => {
+  try {
+    const [detailJson, schemaJson] = await Promise.all([
+      fetchDatasetDetail(item.id),
+      fetchDatasetSchema(item.id),
+    ])
+    console.log('数据集详情:', detailJson.data)
+    console.log('字段信息:', schemaJson.data)
+    detailData.value = detailJson.data || {}
+    schemaData.value = schemaJson.data || {}
+    detailTab.value = 'info'
+    detailVisible.value = true
+  } catch (e) {
+    console.error('handleView', e)
+    showMessage(e?.message || '获取数据集详情失败', 'error')
+  }
+}
+
+async function fetchDatasetDetail(id) {
+  const resp = await fetch(`/database/datasets/${encodeURIComponent(String(id))}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+  })
+  const json = await resp.json().catch(() => null)
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!json || (json.code !== 0 && json.code !== 200)) {
+    throw new Error(json?.message || '获取数据集详情失败')
+  }
+  return json
+}
+
+async function fetchDatasetSchema(id) {
+  const resp = await fetch('/api/data/online/schema', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+    body: JSON.stringify({ datasetId: Number(id) }),
+  })
+  const json = await resp.json().catch(() => null)
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!json || (json.code !== 0 && json.code !== 200)) {
+    throw new Error(json?.message || '获取字段信息失败')
+  }
+  return json
+}
+
+function closeDetailModal() {
+  detailVisible.value = false
+}
+
+const schemaSections = computed(() => {
+  const sections = schemaData.value?.sections
+  return Array.isArray(sections) ? sections : []
+})
+
+function detailValue(key) {
+  const value = detailData.value?.[key]
+  return value == null || value === '' ? '-' : value
+}
+
+function formatList(value) {
+  if (Array.isArray(value)) return value.length ? value.join(' / ') : '-'
+  return value == null || value === '' ? '-' : String(value)
+}
+
+function normalizeFields(fields) {
+  return Array.isArray(fields) ? fields : []
+}
+
+function formatOptions(options) {
+  if (!Array.isArray(options) || options.length === 0) return '-'
+  return options
+    .map((opt) => opt?.label || opt?.value || '')
+    .filter(Boolean)
+    .join(' / ') || '-'
 }
 
 async function auditDataset(item, status) {
@@ -492,13 +748,43 @@ async function auditDataset(item, status) {
 
 const handleAudit = async (item, status) => {
   const action = status === 1 ? '通过' : '驳回'
-  if (!confirm(`确定${action}「${item.datasetName}」吗？`)) return
+  const confirmed = await askConfirm(`确定${action}「${item.datasetName}」吗？`, `${action}数据集`)
+  if (!confirmed) return
   try {
     await auditDataset(item, status)
+    showMessage(`已${action}「${item.datasetName}」`, 'success')
     await loadTableData()
   } catch (e) {
     console.error('handleAudit', e)
-    alert(e?.message || '审核失败')
+    showMessage(e?.message || '审核失败', 'error')
+  }
+}
+
+function showMessage(text, type = 'success', title = '提示') {
+  messageText.value = text
+  messageType.value = type
+  messageTitle.value = title
+  messageVisible.value = true
+}
+
+function closeMessage() {
+  messageVisible.value = false
+}
+
+function askConfirm(text, title = '确认操作') {
+  confirmText.value = text
+  confirmTitle.value = title
+  confirmVisible.value = true
+  return new Promise((resolve) => {
+    confirmResolver = resolve
+  })
+}
+
+function resolveConfirm(value) {
+  confirmVisible.value = false
+  if (confirmResolver) {
+    confirmResolver(value)
+    confirmResolver = null
   }
 }
 
@@ -1075,5 +1361,320 @@ onBeforeUnmount(() => {
   border-radius: 4px;
   min-width: 32px;
   text-align: center;
+}
+
+.detail-modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.detail-modal {
+  width: 720px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.detail-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e8ecf4;
+}
+
+.detail-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.detail-modal-close {
+  border: none;
+  background: transparent;
+  font-size: 24px;
+  line-height: 1;
+  color: #666;
+  cursor: pointer;
+}
+
+.detail-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.detail-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid #e8ecf4;
+}
+
+.detail-tab {
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #666;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.detail-tab.active {
+  color: #1a5ce6;
+  border-bottom-color: #1a5ce6;
+  font-weight: 600;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+
+.detail-item {
+  display: flex;
+  min-width: 0;
+  gap: 10px;
+}
+
+.detail-item-wide {
+  grid-column: 1 / -1;
+}
+
+.detail-label {
+  flex: 0 0 86px;
+  color: #666;
+  font-size: 13px;
+}
+
+.detail-value {
+  min-width: 0;
+  color: #1f2d3d;
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.detail-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 20px;
+  border-top: 1px solid #e8ecf4;
+}
+
+.detail-modal-btn {
+  padding: 8px 20px;
+  border: 1px solid #1a5ce6;
+  border-radius: 4px;
+  background: #1a5ce6;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.field-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.field-empty {
+  padding: 36px 0;
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+}
+
+.field-section {
+  border: 1px solid #e8ecf4;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.field-section-header {
+  padding: 12px 14px;
+  background: #f8f9fc;
+  border-bottom: 1px solid #e8ecf4;
+}
+
+.field-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.field-section-subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #666;
+}
+
+.field-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.field-table th,
+.field-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #eef1f6;
+  text-align: left;
+  vertical-align: top;
+}
+
+.field-table th {
+  background: #fbfcff;
+  color: #333;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.field-table tr:last-child td {
+  border-bottom: none;
+}
+
+.field-empty-cell {
+  text-align: center;
+  color: #999;
+}
+
+.audit-dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.36);
+}
+
+.audit-dialog {
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+.audit-message-dialog {
+  width: 390px;
+}
+
+.audit-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 18px;
+  border-bottom: 1px solid #e8ecf4;
+}
+
+.audit-dialog-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.audit-dialog-close {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  color: #8c95a6;
+  cursor: pointer;
+}
+
+.audit-dialog-close:hover {
+  color: #1f2d3d;
+}
+
+.audit-dialog-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 22px 20px;
+}
+
+.audit-dialog-icon {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.audit-dialog-icon.success {
+  color: #2f9e44;
+  background: #edf9f0;
+}
+
+.audit-dialog-icon.error {
+  color: #d93025;
+  background: #fff1f0;
+}
+
+.audit-dialog-icon.warning {
+  color: #d48806;
+  background: #fff7e6;
+}
+
+.audit-dialog-text {
+  flex: 1;
+  min-width: 0;
+  padding-top: 5px;
+  color: #1f2d3d;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.audit-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px 18px;
+}
+
+.audit-dialog-btn {
+  min-width: 74px;
+  padding: 8px 18px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid #d4dae6;
+}
+
+.audit-dialog-btn.ghost {
+  background: #fff;
+  color: #333;
+}
+
+.audit-dialog-btn.ghost:hover {
+  border-color: #1a5ce6;
+  color: #1a5ce6;
+}
+
+.audit-dialog-btn.primary {
+  border-color: #1a5ce6;
+  background: #1a5ce6;
+  color: #fff;
+}
+
+.audit-dialog-btn.primary:hover {
+  background: #1246bb;
+  border-color: #1246bb;
 }
 </style>

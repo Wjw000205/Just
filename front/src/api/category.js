@@ -77,6 +77,33 @@ export async function getManuList(params = {}) {
 }
 
 /**
+ * 递归统计当前目录及子目录下的数据集数量（GET /Dataset/count-under-menu）
+ * @param {number|string} menuId
+ * @returns {Promise<number>}
+ */
+export async function countDatasetsUnderMenu(menuId) {
+  const id = Number(menuId)
+  if (!Number.isInteger(id) || id <= 0) {
+    return 0
+  }
+  const resp = await fetch(`/Dataset/count-under-menu?menuId=${encodeURIComponent(String(id))}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeader(),
+    },
+  })
+  const json = await resp.json().catch(() => null)
+  if (resp.status === 401 || json?.code === 401) {
+    throw new Error(json?.message || '未登录或无权限')
+  }
+  if (!resp.ok || !json || (json.code !== 200 && json.code !== 0)) {
+    throw new Error(json?.message || '获取目录数据集数失败')
+  }
+  return Number(json.data ?? 0)
+}
+
+/**
  * @deprecated 请使用 getManuList
  */
 export function getCategoryTree() {
