@@ -1,6 +1,9 @@
 package org.example.just.controller;
 
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import org.example.just.dto.categoryDto.ProductCategoryTreeQueryDTO;
@@ -12,6 +15,7 @@ import org.example.just.service.DatasetService;
 import org.example.just.service.SearchService;
 import org.example.just.utils.PageQuery;
 import org.example.just.utils.Result;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -51,6 +55,20 @@ public class ManuDatasetController {
     @Operation(summary = "获取可用数据集列表", description = "上传数据页面中选择数据集下拉框数据源")
     public DatasetOptionsResult getDatasetOptions(@RequestBody(required = false) DatasetOptionsQueryDTO query) {
         return datasetService.getDatasetOptions(query);
+    }
+
+    @GetMapping("/api/datasets/my")
+    @Operation(summary = "查询我创建的数据集", description = "从 token 获取当前用户，返回该用户创建的未删除数据集")
+    @ApiResponse(
+            responseCode = "200",
+            description = "OK",
+            content = @Content(
+                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = MyDatasetsResult.class)
+            )
+    )
+    public Result<List<ManuDatasetTreeVO>> getMyDatasets() {
+        return datasetService.getMyDatasets();
     }
 
     @GetMapping("/api/search/categories")

@@ -22,6 +22,7 @@ import org.example.just.dto.datasetDto.CreateDatasetResultVO;
 import org.example.just.dto.datasetDto.DatasetTagVO;
 import org.example.just.dto.datasetDto.DatasetOptionsQueryDTO;
 import org.example.just.dto.datasetDto.DatasetOptionsResult;
+import org.example.just.dto.datasetDto.ManuDatasetTreeVO;
 import org.example.just.dto.datasetDto.OnlineFormSchemaQueryDTO;
 import org.example.just.dto.datasetDto.OnlineFormSchemaVO;
 import org.example.just.dto.datasetDto.OnlineFormSubmitDTO;
@@ -215,6 +216,41 @@ class DatasetServiceImpTest {
         assertThat(result.getData().get(0).getName()).isEqualTo("羟基磷灰石粉末性能数据集");
         assertThat(result.getData().get(0).getDataLevel()).isEqualTo("public");
         assertThat(result.getData().get(0).getRecordCount()).isEqualTo(256L);
+    }
+
+    @Test
+    void getMyDatasetsUsesCurrentUserFromTokenContext() {
+        UserContext.setUserInfo(7, "alice", 1);
+        ManuDatasetEntity ownDataset = dataset(123, "alice dataset", 0);
+        ownDataset.setCreator("alice");
+        ManuDatasetEntity otherDataset = dataset(124, "bob dataset", 0);
+        otherDataset.setCreator("bob");
+        ManuDatasetEntity ownMenu = menu(125, "alice menu", 0);
+        ownMenu.setCreator("alice");
+        ManuDatasetEntity deleted = dataset(126, "deleted dataset", 0);
+        deleted.setCreator("alice");
+        deleted.setDeleted(1);
+        when(datasetDao.selectList(any())).thenReturn(List.of(ownDataset, otherDataset, ownMenu, deleted));
+
+        Result<List<ManuDatasetTreeVO>> result = datasetService.getMyDatasets();
+
+        assertThat(result.getCode()).isEqualTo(0);
+        assertThat(result.getMessage()).isEqualTo("success");
+        assertThat(result.getData()).hasSize(1);
+        assertThat(result.getData().get(0).getId()).isEqualTo(123);
+        assertThat(result.getData().get(0).getName()).isEqualTo("alice dataset");
+        assertThat(result.getData().get(0).getCreator()).isEqualTo("alice");
+        assertThat(result.getData().get(0).getIsMenu()).isEqualTo(0);
+    }
+
+    @Test
+    void getMyDatasetsRejectsMissingTokenUser() {
+        Result<List<ManuDatasetTreeVO>> result = datasetService.getMyDatasets();
+
+        assertThat(result.getCode()).isEqualTo(401);
+        assertThat(result.getMessage()).isEqualTo("未登录");
+        assertThat(result.getData()).isNull();
+        verify(datasetDao, never()).selectList(any());
     }
 
     @Test

@@ -181,6 +181,65 @@ public class DatasetServiceImp implements DatasetService {
     }
 
     @Override
+    public Result<List<ManuDatasetTreeVO>> getMyDatasets() {
+        List<String> creators = getCurrentCreatorKeys();
+        if (creators.isEmpty()) {
+            return Result.fail(401, "未登录");
+        }
+
+        LambdaQueryWrapper<ManuDatasetEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ManuDatasetEntity::getDeleted, 0)
+                .eq(ManuDatasetEntity::getIsMenu, 0)
+                .in(ManuDatasetEntity::getCreator, creators)
+                .orderByDesc(ManuDatasetEntity::getCreateTime)
+                .orderByDesc(ManuDatasetEntity::getId);
+
+        List<ManuDatasetEntity> datasetList = DatasetDao.selectList(wrapper);
+        if (datasetList == null || datasetList.isEmpty()) {
+            return Result.success(0, "success", new ArrayList<>());
+        }
+
+        List<ManuDatasetTreeVO> result = datasetList.stream()
+                .filter(Objects::nonNull)
+                .filter(dataset -> dataset.getDeleted() == null || dataset.getDeleted() == 0)
+                .filter(dataset -> dataset.getIsMenu() != null && dataset.getIsMenu() == 0)
+                .filter(dataset -> creators.contains(dataset.getCreator()))
+                .map(this::toManuDatasetTreeVO)
+                .collect(Collectors.toList());
+
+        return Result.success(0, "success", result);
+    }
+
+    private List<String> getCurrentCreatorKeys() {
+        List<String> creators = new ArrayList<>();
+        String userName = UserContext.getCurrentUserName();
+        if (StringUtils.hasText(userName)) {
+            creators.add(userName.trim());
+        }
+
+        Integer userId = UserContext.getCurrentUserId();
+        if (userId != null) {
+            String userIdKey = String.valueOf(userId);
+            if (!creators.contains(userIdKey)) {
+                creators.add(userIdKey);
+            }
+        }
+
+        return creators;
+    }
+
+    private ManuDatasetTreeVO toManuDatasetTreeVO(ManuDatasetEntity dataset) {
+        ManuDatasetTreeVO vo = new ManuDatasetTreeVO();
+        vo.setId(dataset.getId());
+        vo.setName(dataset.getName());
+        vo.setCreator(dataset.getCreator());
+        vo.setCreateTime(dataset.getCreateTime());
+        vo.setParent(dataset.getParent());
+        vo.setIsMenu(dataset.getIsMenu());
+        return vo;
+    }
+
+    @Override
     public ScienceCategoryTreeResult getScienceCategoryTree(ScienceCategoryTreeQueryDTO query) {
         String keyword = query != null && StringUtils.hasText(query.getKeyword())
                 ? query.getKeyword().trim()

@@ -9,6 +9,8 @@ import org.example.just.dto.datasetDto.DatasetOptionsVO;
 import org.example.just.dto.datasetDto.CreateDatasetResultVO;
 import org.example.just.dto.datasetDto.DatasetSearchRequest;
 import org.example.just.dto.datasetDto.DatasetSearchResponse;
+import org.example.just.dto.datasetDto.ManuDatasetTreeVO;
+import org.example.just.dto.datasetDto.MyDatasetsResult;
 import org.example.just.dto.datasetDto.OnlineFormFieldVO;
 import org.example.just.dto.datasetDto.OnlineFormSchemaVO;
 import org.example.just.dto.datasetDto.OnlineFormSectionVO;
@@ -16,6 +18,7 @@ import org.example.just.dto.datasetDto.OnlineFormSubmitResultVO;
 import org.example.just.service.DatasetService;
 import org.example.just.service.SearchService;
 import org.example.just.utils.Result;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
@@ -23,6 +26,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import jakarta.servlet.http.HttpServletResponse;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 
@@ -37,6 +42,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class ManuDatasetControllerTest {
 
@@ -160,6 +166,47 @@ class ManuDatasetControllerTest {
                 .andExpect(jsonPath("$.data[1].name").value("烧结温度"));
 
         verify(datasetService).getDatasetTags();
+    }
+
+    @Test
+    void getMyDatasetsUsesDocumentedPathAndResponseShape() throws Exception {
+        DatasetService datasetService = mock(DatasetService.class);
+        ManuDatasetTreeVO dataset = new ManuDatasetTreeVO();
+        dataset.setId(123);
+        dataset.setName("alice dataset");
+        dataset.setCreator("alice");
+        dataset.setParent(0);
+        dataset.setIsMenu(0);
+        when(datasetService.getMyDatasets())
+                .thenReturn(Result.success(0, "success", List.of(dataset)));
+
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(controller(datasetService))
+                .build();
+
+        mockMvc.perform(get("/api/datasets/my"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data[0].id").value(123))
+                .andExpect(jsonPath("$.data[0].name").value("alice dataset"))
+                .andExpect(jsonPath("$.data[0].creator").value("alice"))
+                .andExpect(jsonPath("$.data[0].isMenu").value(0));
+
+        verify(datasetService).getMyDatasets();
+    }
+
+    @Test
+    void getMyDatasetsDocumentsDataAsDatasetList() throws Exception {
+        Method method = ManuDatasetController.class.getMethod("getMyDatasets");
+        ApiResponse apiResponse = method.getAnnotation(ApiResponse.class);
+        Field dataField = MyDatasetsResult.class.getDeclaredField("data");
+
+        assertThat(apiResponse).isNotNull();
+        assertThat(apiResponse.content()[0].schema().implementation()).isEqualTo(MyDatasetsResult.class);
+        assertThat(dataField.getGenericType().getTypeName())
+                .contains("java.util.List")
+                .contains("ManuDatasetTreeVO");
     }
 
     @Test
