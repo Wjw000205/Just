@@ -42,6 +42,8 @@ public interface DatasetService {
 
     Result<String> addDatasetColumn(AddDatasetColumnDTO dto);
 
+    Result<DatasetColumnAuditVO> updateDatasetColumn(UpdateDatasetColumnDTO dto);
+
     Result<String> deleteDatasetColumn(DeleteDatabaseColumnDTO dto);
 
     Result<String> deleteDatasetRow(DeleteDatasetRowDTO dto);

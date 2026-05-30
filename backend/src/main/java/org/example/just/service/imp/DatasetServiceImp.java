@@ -1720,6 +1720,64 @@ public class DatasetServiceImp implements DatasetService {
 
     @Transactional
     @Override
+    public Result<DatasetColumnAuditVO> updateDatasetColumn(UpdateDatasetColumnDTO dto) {
+        if (dto == null) {
+            return Result.fail("请求参数不能为空");
+        }
+        if (dto.getColumnId() == null) {
+            return Result.fail("字段ID不能为空");
+        }
+        if (!StringUtils.hasText(dto.getColumnName())) {
+            return Result.fail("列名称不能为空");
+        }
+        if (!StringUtils.hasText(dto.getColumnType())) {
+            return Result.fail("列类型不能为空");
+        }
+
+        String columnName = dto.getColumnName().trim();
+        String columnType = dto.getColumnType().trim();
+
+        DatasetColumnEntity column = DatasetColumnDao.selectById(dto.getColumnId());
+        if (column == null || (column.getDeleted() != null && column.getDeleted() == 1)) {
+            return Result.fail("数据集字段不存在");
+        }
+        if (!StringUtils.hasText(column.getDatasetName())) {
+            return Result.fail("数据集字段所属数据集不能为空");
+        }
+
+        LambdaQueryWrapper<DatasetColumnEntity> duplicateWrapper = new LambdaQueryWrapper<>();
+        duplicateWrapper.eq(DatasetColumnEntity::getDatasetName, column.getDatasetName())
+                .eq(DatasetColumnEntity::getColumnName, columnName)
+                .eq(DatasetColumnEntity::getDeleted, 0)
+                .ne(DatasetColumnEntity::getId, dto.getColumnId())
+                .ne(DatasetColumnEntity::getState, DATASET_COLUMN_STATE_REJECTED)
+                .last("limit 1");
+
+        DatasetColumnEntity existedColumn = DatasetColumnDao.selectOne(duplicateWrapper);
+        if (existedColumn != null) {
+            return Result.fail("当前数据集下已存在同名字段");
+        }
+
+        UpdateWrapper<DatasetColumnEntity> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("id", dto.getColumnId())
+                .eq("deleted", 0)
+                .set("column_name", columnName)
+                .set("column_type", columnType)
+                .set("state", DATASET_COLUMN_STATE_PENDING);
+
+        int rows = DatasetColumnDao.update(null, updateWrapper);
+        if (rows <= 0) {
+            return Result.fail("修改数据集字段失败");
+        }
+
+        column.setColumnName(columnName);
+        column.setColumnType(columnType);
+        column.setState(DATASET_COLUMN_STATE_PENDING);
+        return Result.success(0, "success", toDatasetColumnAuditVO(column));
+    }
+
+    @Transactional
+    @Override
     public Result<String> deleteDatasetColumn(DeleteDatabaseColumnDTO dto) {
         if (dto == null) {
             return Result.fail("请求参数不能为空");

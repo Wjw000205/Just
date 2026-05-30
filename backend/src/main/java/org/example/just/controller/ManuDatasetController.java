@@ -147,6 +147,12 @@ public class ManuDatasetController {
         return datasetService.addDatasetColumn(dto);
     }
 
+    @PostMapping("/Dataset/update-column")
+    @Operation(summary = "修改数据集字段", description = "修改指定数据集字段，提交后字段状态置为待审核")
+    public Result<DatasetColumnAuditVO> updateDatasetColumn(@RequestBody UpdateDatasetColumnDTO dto) {
+        return datasetService.updateDatasetColumn(dto);
+    }
+
     @DeleteMapping("/Dataset/delete-column")
     @Operation(summary = "删除数据表列", description = "逻辑删除数据表列，并逻辑删除该列对应的数据表数据")
     public Result<String> deleteDatasetColumn(@RequestBody DeleteDatabaseColumnDTO dto) {

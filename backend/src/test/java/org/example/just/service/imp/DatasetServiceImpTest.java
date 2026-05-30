@@ -30,6 +30,7 @@ import org.example.just.dto.datasetDto.OnlineFormSchemaQueryDTO;
 import org.example.just.dto.datasetDto.OnlineFormSchemaVO;
 import org.example.just.dto.datasetDto.OnlineFormSubmitDTO;
 import org.example.just.dto.datasetDto.OnlineFormSubmitResultVO;
+import org.example.just.dto.datasetDto.UpdateDatasetColumnDTO;
 import org.example.just.entity.DatasetColumnEntity;
 import org.example.just.entity.DatasetDataEntity;
 import org.example.just.entity.ManuDatasetEntity;
@@ -393,6 +394,31 @@ class DatasetServiceImpTest {
         assertThat(columnCaptor.getValue().getColumnName()).isEqualTo("new-column");
         assertThat(columnCaptor.getValue().getColumnType()).isEqualTo("varchar");
         assertThat(columnCaptor.getValue().getState()).isEqualTo(0);
+    }
+
+    @Test
+    void updateDatasetColumnChangesNameAndTypeThenMarksPending() {
+        DatasetColumnEntity column = datasetColumn(22, "old-column", "varchar");
+        column.setDatasetName("dataset-a");
+        column.setState(1);
+        when(datasetColumnDao.selectById(22)).thenReturn(column);
+        when(datasetColumnDao.selectOne(any())).thenReturn(null);
+        when(datasetColumnDao.update(any(), any())).thenReturn(1);
+        UpdateDatasetColumnDTO dto = new UpdateDatasetColumnDTO();
+        dto.setColumnId(22);
+        dto.setColumnName("new-column");
+        dto.setColumnType("double");
+
+        Result<DatasetColumnAuditVO> result = datasetService.updateDatasetColumn(dto);
+
+        assertThat(result.getCode()).isEqualTo(0);
+        assertThat(result.getMessage()).isEqualTo("success");
+        assertThat(result.getData().getId()).isEqualTo(22);
+        assertThat(result.getData().getDatasetName()).isEqualTo("dataset-a");
+        assertThat(result.getData().getColumnName()).isEqualTo("new-column");
+        assertThat(result.getData().getColumnType()).isEqualTo("double");
+        assertThat(result.getData().getState()).isEqualTo(0);
+        verify(datasetColumnDao).update(any(), any());
     }
 
     @Test

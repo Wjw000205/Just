@@ -17,6 +17,7 @@ import org.example.just.dto.datasetDto.OnlineFormFieldVO;
 import org.example.just.dto.datasetDto.OnlineFormSchemaVO;
 import org.example.just.dto.datasetDto.OnlineFormSectionVO;
 import org.example.just.dto.datasetDto.OnlineFormSubmitResultVO;
+import org.example.just.dto.datasetDto.UpdateDatasetColumnDTO;
 import org.example.just.service.DatasetService;
 import org.example.just.service.SearchService;
 import org.example.just.utils.Result;
@@ -270,6 +271,41 @@ class ManuDatasetControllerTest {
                 .andExpect(jsonPath("$.data.state").value(1));
 
         verify(datasetService).auditDatasetColumn(any());
+    }
+
+    @Test
+    void updateDatasetColumnUsesDocumentedPathAndReturnsPendingColumn() throws Exception {
+        DatasetService datasetService = mock(DatasetService.class);
+        DatasetColumnAuditVO column = new DatasetColumnAuditVO();
+        column.setId(22);
+        column.setDatasetName("dataset-a");
+        column.setColumnName("烧结温度");
+        column.setColumnType("double");
+        column.setState(0);
+        when(datasetService.updateDatasetColumn(any()))
+                .thenReturn(Result.success(0, "success", column));
+
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(controller(datasetService))
+                .build();
+
+        UpdateDatasetColumnDTO body = new UpdateDatasetColumnDTO();
+        body.setColumnId(22);
+        body.setColumnName("烧结温度");
+        body.setColumnType("double");
+
+        mockMvc.perform(post("/Dataset/update-column")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.id").value(22))
+                .andExpect(jsonPath("$.data.columnName").value("烧结温度"))
+                .andExpect(jsonPath("$.data.columnType").value("double"))
+                .andExpect(jsonPath("$.data.state").value(0));
+
+        verify(datasetService).updateDatasetColumn(any());
     }
 
     @Test
