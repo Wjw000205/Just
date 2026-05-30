@@ -1,21 +1,27 @@
 package org.example.just.service.imp;
 
+import org.example.just.context.UserContext;
 import org.example.just.dao.ModuleColumnDao;
 import org.example.just.dao.ModuleDao;
 import org.example.just.dao.UserDao;
+import org.example.just.dto.moduleDto.CreateModuleDTO;
 import org.example.just.dto.moduleDto.ModuleBaseInfoVO;
 import org.example.just.dto.moduleDto.TemplateOptionVO;
 import org.example.just.dto.moduleDto.TemplateTagVO;
 import org.example.just.entity.ModuleEntity;
 import org.example.just.entity.UserEntity;
 import org.example.just.utils.Result;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ModuleServiceImpTest {
@@ -24,6 +30,36 @@ class ModuleServiceImpTest {
     private final ModuleColumnDao moduleColumnDao = mock(ModuleColumnDao.class);
     private final UserDao userDao = mock(UserDao.class);
     private final ModuleServiceImp service = new ModuleServiceImp(moduleDao, moduleColumnDao, userDao);
+
+    @AfterEach
+    void tearDown() {
+        UserContext.clear();
+    }
+
+    @Test
+    void createModuleUsesCurrentTokenUserAsCreator() {
+        UserContext.setUserInfo(7, "alice", 1);
+        CreateModuleDTO dto = new CreateModuleDTO();
+        dto.setModuleName("test module");
+        dto.setTag("test");
+        dto.setDescription("description");
+        dto.setVisibleArea(1);
+        dto.setAgree(1);
+        when(moduleDao.selectCount(any())).thenReturn(0L);
+        doAnswer(invocation -> {
+            ModuleEntity entity = invocation.getArgument(0);
+            entity.setId(123);
+            return 1;
+        }).when(moduleDao).insert(any(ModuleEntity.class));
+
+        Result<Integer> result = service.createModule(dto);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(result.getData()).isEqualTo(123);
+        ArgumentCaptor<ModuleEntity> moduleCaptor = ArgumentCaptor.forClass(ModuleEntity.class);
+        verify(moduleDao).insert(moduleCaptor.capture());
+        assertThat(moduleCaptor.getValue().getCreator()).isEqualTo(7);
+    }
 
     @Test
     void getModuleBaseInfoReturnsCreatorUsername() {

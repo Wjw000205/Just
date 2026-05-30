@@ -12,7 +12,6 @@ import org.example.just.dao.DatasetDataDao;
 import org.example.just.dao.ManuDatasetDao;
 import org.example.just.dao.ModuleColumnDao;
 import org.example.just.dao.ModuleDao;
-import org.example.just.dao.UserDao;
 import org.example.just.dto.categoryDto.ProductCategoryTreeQueryDTO;
 import org.example.just.dto.categoryDto.ProductCategoryTreeResult;
 import org.example.just.dto.categoryDto.ScienceCategoryTreeQueryDTO;
@@ -23,6 +22,7 @@ import org.example.just.dto.datasetDto.AuditDatasetResultVO;
 import org.example.just.dto.datasetDto.BatchUploadResultVO;
 import org.example.just.dto.datasetDto.CreateDatasetDTO;
 import org.example.just.dto.datasetDto.CreateDatasetResultVO;
+import org.example.just.dto.datasetDto.CreateMenuDatasetDTO;
 import org.example.just.dto.datasetDto.DatasetColumnAuditDTO;
 import org.example.just.dto.datasetDto.DatasetColumnAuditVO;
 import org.example.just.dto.datasetDto.DatasetTagVO;
@@ -40,7 +40,6 @@ import org.example.just.entity.DatasetDataEntity;
 import org.example.just.entity.ManuDatasetEntity;
 import org.example.just.entity.ModuleColumnEntity;
 import org.example.just.entity.ModuleEntity;
-import org.example.just.entity.UserEntity;
 import org.example.just.utils.Result;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -69,14 +68,12 @@ class DatasetServiceImpTest {
     private final DatasetDataDao datasetDataDao = mock(DatasetDataDao.class);
     private final ModuleDao moduleDao = mock(ModuleDao.class);
     private final ModuleColumnDao moduleColumnDao = mock(ModuleColumnDao.class);
-    private final UserDao userDao = mock(UserDao.class);
     private final DatasetServiceImp datasetService = new DatasetServiceImp(
             datasetDao,
             datasetColumnDao,
             datasetDataDao,
             moduleDao,
-            moduleColumnDao,
-            userDao
+            moduleColumnDao
     );
 
     @AfterEach
@@ -136,6 +133,23 @@ class DatasetServiceImpTest {
         assertThat(columnCaptor.getAllValues())
                 .extracting(DatasetColumnEntity::getColumnName)
                 .containsExactly("材料名称", "粒径");
+    }
+
+    @Test
+    void createMenuUsesCurrentTokenUserAsCreator() {
+        UserContext.setUserInfo(7, "alice", 1);
+        CreateMenuDatasetDTO dto = new CreateMenuDatasetDTO();
+        dto.setName("dataset-menu");
+        dto.setParent(0);
+        when(datasetDao.selectCount(any())).thenReturn(0L);
+        when(datasetDao.insert(any(ManuDatasetEntity.class))).thenReturn(1);
+
+        Result<String> result = datasetService.createMenu(dto);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        ArgumentCaptor<ManuDatasetEntity> datasetCaptor = ArgumentCaptor.forClass(ManuDatasetEntity.class);
+        verify(datasetDao).insert(datasetCaptor.capture());
+        assertThat(datasetCaptor.getValue().getCreator()).isEqualTo("alice");
     }
 
     @Test
@@ -258,19 +272,14 @@ class DatasetServiceImpTest {
     }
 
     @Test
-    void getMyDatasetsAlsoMatchesRealNameAndUserIdCreatorValues() {
+    void getMyDatasetsUsesTokenCreatorValueOnly() {
         UserContext.setUserInfo(7, "alice", 1);
-        UserEntity currentUser = new UserEntity();
-        currentUser.setId(7);
-        currentUser.setUsername("alice");
-        currentUser.setRealName("张三");
         ManuDatasetEntity usernameCreator = dataset(123, "username dataset", 0);
         usernameCreator.setCreator("alice");
         ManuDatasetEntity realNameCreator = dataset(124, "real-name dataset", 0);
-        realNameCreator.setCreator("张三");
+        realNameCreator.setCreator("real-name");
         ManuDatasetEntity userIdCreator = dataset(125, "id dataset", 0);
         userIdCreator.setCreator("7");
-        when(userDao.selectById(7)).thenReturn(currentUser);
         when(datasetDao.selectList(any())).thenReturn(List.of(usernameCreator, realNameCreator, userIdCreator));
 
         Result<List<ManuDatasetTreeVO>> result = datasetService.getMyDatasets();
@@ -278,7 +287,7 @@ class DatasetServiceImpTest {
         assertThat(result.getCode()).isEqualTo(0);
         assertThat(result.getData())
                 .extracting(ManuDatasetTreeVO::getName)
-                .containsExactly("username dataset", "real-name dataset", "id dataset");
+                .containsExactly("username dataset");
     }
 
     @Test
@@ -286,7 +295,7 @@ class DatasetServiceImpTest {
         Result<List<ManuDatasetTreeVO>> result = datasetService.getMyDatasets();
 
         assertThat(result.getCode()).isEqualTo(401);
-        assertThat(result.getMessage()).isEqualTo("未登录");
+        assertThat(result.getMessage()).isEqualTo("unauthorized");
         assertThat(result.getData()).isNull();
         verify(datasetDao, never()).selectList(any());
     }
@@ -465,12 +474,14 @@ class DatasetServiceImpTest {
 
     @Test
     void updateDatasetColumnChangesNameAndTypeThenMarksPending() {
+        UserContext.setUserInfo(7, "alice", 1);
         DatasetColumnEntity column = datasetColumn(22, "old-column", "varchar");
         column.setDatasetName("dataset-a");
         column.setState(1);
         when(datasetColumnDao.selectById(22)).thenReturn(column);
         when(datasetColumnDao.selectOne(any())).thenReturn(null);
         when(datasetColumnDao.update(any(), any())).thenReturn(1);
+        when(datasetDao.update(any(), any())).thenReturn(1);
         UpdateDatasetColumnDTO dto = new UpdateDatasetColumnDTO();
         dto.setColumnId(22);
         dto.setColumnName("new-column");
@@ -486,6 +497,7 @@ class DatasetServiceImpTest {
         assertThat(result.getData().getColumnType()).isEqualTo("double");
         assertThat(result.getData().getState()).isEqualTo(0);
         verify(datasetColumnDao).update(any(), any());
+        verify(datasetDao).update(any(), any());
     }
 
     @Test

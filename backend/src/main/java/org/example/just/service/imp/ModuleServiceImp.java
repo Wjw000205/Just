@@ -2,6 +2,7 @@ package org.example.just.service.imp;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import org.example.just.context.UserContext;
 import org.example.just.dao.ModuleColumnDao;
 import org.example.just.dao.UserDao;
 import org.example.just.dto.moduleDto.*;
@@ -58,9 +59,6 @@ public class ModuleServiceImp implements ModuleService {
             return Result.fail("tag不能为空");
         }
 
-        if (dto.getCreator() == null) {
-            return Result.fail("creator不能为空");
-        }
 
         if (dto.getVisibleArea() == null) {
             return Result.fail("visibleArea不能为空");
@@ -72,6 +70,10 @@ public class ModuleServiceImp implements ModuleService {
 
         String moduleName = dto.getModuleName().trim();
         String tag = dto.getTag().trim();
+        Integer creator = UserContext.getCurrentUserId();
+        if (creator == null) {
+            return Result.fail(401, "unauthorized");
+        }
 
         // 同一标签下不能存在相同模板
         LambdaQueryWrapper<ModuleEntity> queryWrapper = new LambdaQueryWrapper<>();
@@ -88,6 +90,7 @@ public class ModuleServiceImp implements ModuleService {
         BeanUtils.copyProperties(dto, entity);
         entity.setModuleName(moduleName);
         entity.setTag(tag);
+        entity.setCreator(creator);
         entity.setDeleted(0);
         entity.setCreateTime(LocalDateTime.now());
 

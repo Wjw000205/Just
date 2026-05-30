@@ -13,7 +13,6 @@ import org.example.just.dao.ManuDatasetDao;
 import org.example.just.dao.DatasetDataDao;
 import org.example.just.dao.ModuleColumnDao;
 import org.example.just.dao.ModuleDao;
-import org.example.just.dao.UserDao;
 import org.example.just.context.UserContext;
 import org.example.just.dto.categoryDto.ProductCategoryTreeQueryDTO;
 import org.example.just.dto.categoryDto.ProductCategoryTreeResult;
@@ -27,7 +26,6 @@ import org.example.just.entity.DatasetDataEntity;
 import org.example.just.entity.ManuDatasetEntity;
 import org.example.just.entity.ModuleColumnEntity;
 import org.example.just.entity.ModuleEntity;
-import org.example.just.entity.UserEntity;
 import org.example.just.service.DatasetService;
 import org.example.just.utils.PageQuery;
 import org.example.just.utils.PageResult;
@@ -59,20 +57,17 @@ public class DatasetServiceImp implements DatasetService {
     private final DatasetDataDao DatasetDataDao;
     private final ModuleDao moduleDao;
     private final ModuleColumnDao moduleColumnDao;
-    private final UserDao userDao;
 
     public DatasetServiceImp(ManuDatasetDao DatasetDao,
                             DatasetColumnDao DatasetColumnDao,
                             DatasetDataDao DatasetDataDao,
                              ModuleDao moduleDao,
-                             ModuleColumnDao moduleColumnDao,
-                             UserDao userDao) {
+                             ModuleColumnDao moduleColumnDao) {
         this.DatasetDao = DatasetDao;
         this.DatasetColumnDao = DatasetColumnDao;
         this.DatasetDataDao = DatasetDataDao;
         this.moduleDao = moduleDao;
         this.moduleColumnDao = moduleColumnDao;
-        this.userDao = userDao;
     }
 
     @Transactional
@@ -84,12 +79,12 @@ public class DatasetServiceImp implements DatasetService {
         if (!StringUtils.hasText(dto.getName())) {
             return Result.fail("目录名称不能为空");
         }
-        if (!StringUtils.hasText(dto.getCreator())) {
-            return Result.fail("创建人不能为空");
-        }
 
         String name = dto.getName().trim();
-        String creator = dto.getCreator().trim();
+        String creator = getCurrentDatasetCreator();
+        if (!StringUtils.hasText(creator)) {
+            return Result.fail(401, "unauthorized");
+        }
         Integer parentId = dto.getParent();
 
         // 根目录统一按0处理
@@ -193,7 +188,7 @@ public class DatasetServiceImp implements DatasetService {
     public Result<List<ManuDatasetTreeVO>> getMyDatasets() {
         List<String> creators = getCurrentCreatorKeys();
         if (creators.isEmpty()) {
-            return Result.fail(401, "未登录");
+            return Result.fail(401, "unauthorized");
         }
 
         LambdaQueryWrapper<ManuDatasetEntity> wrapper = new LambdaQueryWrapper<>();
@@ -295,19 +290,19 @@ public class DatasetServiceImp implements DatasetService {
 
     private List<String> getCurrentCreatorKeys() {
         List<String> creators = new ArrayList<>();
-        addCreatorKey(creators, UserContext.getCurrentUserName());
-
-        Integer userId = UserContext.getCurrentUserId();
-        if (userId != null) {
-            addCreatorKey(creators, String.valueOf(userId));
-            UserEntity user = userDao.selectById(userId);
-            if (user != null) {
-                addCreatorKey(creators, user.getUsername());
-                addCreatorKey(creators, user.getRealName());
-            }
-        }
+        addCreatorKey(creators, getCurrentDatasetCreator());
 
         return creators;
+    }
+
+    private String getCurrentDatasetCreator() {
+        String userName = UserContext.getCurrentUserName();
+        if (StringUtils.hasText(userName)) {
+            return userName.trim();
+        }
+
+        Integer userId = UserContext.getCurrentUserId();
+        return userId != null ? String.valueOf(userId) : null;
     }
 
     private void addCreatorKey(List<String> creators, String creator) {
@@ -1112,11 +1107,11 @@ public class DatasetServiceImp implements DatasetService {
         String dataLevel = dto.getDataLevel().trim();
         String dataCategory = dto.getDataCategory().trim();
         Integer templateId = dto.getTemplateId();
-        String creator = UserContext.getCurrentUserName();
+        String creator = getCurrentDatasetCreator();
         if (!StringUtils.hasText(creator)) {
             Integer currentUserId = UserContext.getCurrentUserId();
             if (currentUserId == null) {
-                return Result.fail(401, "未登录");
+                return Result.fail(401, "unauthorized");
             }
             creator = String.valueOf(currentUserId);
         }
@@ -1833,6 +1828,11 @@ public class DatasetServiceImp implements DatasetService {
             return Result.fail("数据集字段所属数据集不能为空");
         }
 
+        String creator = getCurrentDatasetCreator();
+        if (!StringUtils.hasText(creator)) {
+            return Result.fail(401, "unauthorized");
+        }
+
         LambdaQueryWrapper<DatasetColumnEntity> duplicateWrapper = new LambdaQueryWrapper<>();
         duplicateWrapper.eq(DatasetColumnEntity::getDatasetName, column.getDatasetName())
                 .eq(DatasetColumnEntity::getColumnName, columnName)
@@ -1845,6 +1845,14 @@ public class DatasetServiceImp implements DatasetService {
         if (existedColumn != null) {
             return Result.fail("当前数据集下已存在同名字段");
         }
+
+        UpdateWrapper<ManuDatasetEntity> datasetUpdateWrapper = new UpdateWrapper<>();
+        datasetUpdateWrapper.eq("name", column.getDatasetName())
+                .eq("deleted", 0)
+                .eq("is_menu", 0)
+                .set("creator", creator)
+                .set("audit_status", 0);
+        DatasetDao.update(null, datasetUpdateWrapper);
 
         UpdateWrapper<DatasetColumnEntity> updateWrapper = new UpdateWrapper<>();
         updateWrapper.eq("id", dto.getColumnId())
