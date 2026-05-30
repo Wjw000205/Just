@@ -13,6 +13,7 @@ import org.example.just.dao.ManuDatasetDao;
 import org.example.just.dao.DatasetDataDao;
 import org.example.just.dao.ModuleColumnDao;
 import org.example.just.dao.ModuleDao;
+import org.example.just.dao.UserDao;
 import org.example.just.context.UserContext;
 import org.example.just.dto.categoryDto.ProductCategoryTreeQueryDTO;
 import org.example.just.dto.categoryDto.ProductCategoryTreeResult;
@@ -26,6 +27,7 @@ import org.example.just.entity.DatasetDataEntity;
 import org.example.just.entity.ManuDatasetEntity;
 import org.example.just.entity.ModuleColumnEntity;
 import org.example.just.entity.ModuleEntity;
+import org.example.just.entity.UserEntity;
 import org.example.just.service.DatasetService;
 import org.example.just.utils.PageQuery;
 import org.example.just.utils.PageResult;
@@ -57,17 +59,20 @@ public class DatasetServiceImp implements DatasetService {
     private final DatasetDataDao DatasetDataDao;
     private final ModuleDao moduleDao;
     private final ModuleColumnDao moduleColumnDao;
+    private final UserDao userDao;
 
     public DatasetServiceImp(ManuDatasetDao DatasetDao,
                             DatasetColumnDao DatasetColumnDao,
                             DatasetDataDao DatasetDataDao,
                              ModuleDao moduleDao,
-                             ModuleColumnDao moduleColumnDao) {
+                             ModuleColumnDao moduleColumnDao,
+                             UserDao userDao) {
         this.DatasetDao = DatasetDao;
         this.DatasetColumnDao = DatasetColumnDao;
         this.DatasetDataDao = DatasetDataDao;
         this.moduleDao = moduleDao;
         this.moduleColumnDao = moduleColumnDao;
+        this.userDao = userDao;
     }
 
     @Transactional
@@ -214,22 +219,105 @@ public class DatasetServiceImp implements DatasetService {
         return Result.success(0, "success", result);
     }
 
+    @Override
+    public Result<List<PendingAuditDatasetVO>> getPendingAuditDatasets() {
+        LambdaQueryWrapper<ManuDatasetEntity> datasetWrapper = new LambdaQueryWrapper<>();
+        datasetWrapper.eq(ManuDatasetEntity::getDeleted, 0)
+                .eq(ManuDatasetEntity::getIsMenu, 0)
+                .eq(ManuDatasetEntity::getAuditStatus, 0)
+                .orderByDesc(ManuDatasetEntity::getCreateTime)
+                .orderByDesc(ManuDatasetEntity::getId);
+
+        List<ManuDatasetEntity> datasets = DatasetDao.selectList(datasetWrapper);
+        if (datasets == null || datasets.isEmpty()) {
+            return Result.success(0, "success", new ArrayList<>());
+        }
+
+        List<ManuDatasetEntity> pendingDatasets = datasets.stream()
+                .filter(dataset -> dataset != null
+                        && (dataset.getDeleted() == null || dataset.getDeleted() == 0)
+                        && Objects.equals(dataset.getIsMenu(), 0)
+                        && Objects.equals(dataset.getAuditStatus(), 0)
+                        && StringUtils.hasText(dataset.getName()))
+                .collect(Collectors.toList());
+        if (pendingDatasets.isEmpty()) {
+            return Result.success(0, "success", new ArrayList<>());
+        }
+
+        List<String> datasetNames = pendingDatasets.stream()
+                .map(ManuDatasetEntity::getName)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<String, List<DatasetColumnAuditVO>> columnsByDatasetName = new LinkedHashMap<>();
+        if (!datasetNames.isEmpty()) {
+            LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
+            columnWrapper.in(DatasetColumnEntity::getDatasetName, datasetNames)
+                    .eq(DatasetColumnEntity::getDeleted, 0)
+                    .orderByAsc(DatasetColumnEntity::getDatasetName)
+                    .orderByAsc(DatasetColumnEntity::getId);
+
+            List<DatasetColumnEntity> columns = DatasetColumnDao.selectList(columnWrapper);
+            if (columns != null) {
+                columnsByDatasetName = columns.stream()
+                        .filter(column -> column != null
+                                && (column.getDeleted() == null || column.getDeleted() == 0)
+                                && StringUtils.hasText(column.getDatasetName()))
+                        .collect(Collectors.groupingBy(
+                                DatasetColumnEntity::getDatasetName,
+                                LinkedHashMap::new,
+                                Collectors.mapping(this::toDatasetColumnAuditVO, Collectors.toList())
+                        ));
+            }
+        }
+
+        Map<String, List<DatasetColumnAuditVO>> finalColumnsByDatasetName = columnsByDatasetName;
+        List<PendingAuditDatasetVO> result = pendingDatasets.stream()
+                .map(dataset -> toPendingAuditDatasetVO(dataset, finalColumnsByDatasetName.get(dataset.getName())))
+                .collect(Collectors.toList());
+
+        return Result.success(0, "success", result);
+    }
+
+    private PendingAuditDatasetVO toPendingAuditDatasetVO(ManuDatasetEntity dataset,
+                                                         List<DatasetColumnAuditVO> columns) {
+        PendingAuditDatasetVO vo = new PendingAuditDatasetVO();
+        vo.setId(dataset.getId());
+        vo.setName(dataset.getName());
+        vo.setCreator(dataset.getCreator());
+        vo.setCreateTime(dataset.getCreateTime());
+        vo.setAuditStatus(dataset.getAuditStatus());
+        vo.setDataLevel(dataset.getDataLevel());
+        vo.setColumns(columns != null ? columns : new ArrayList<>());
+        return vo;
+    }
+
     private List<String> getCurrentCreatorKeys() {
         List<String> creators = new ArrayList<>();
-        String userName = UserContext.getCurrentUserName();
-        if (StringUtils.hasText(userName)) {
-            creators.add(userName.trim());
-        }
+        addCreatorKey(creators, UserContext.getCurrentUserName());
 
         Integer userId = UserContext.getCurrentUserId();
         if (userId != null) {
-            String userIdKey = String.valueOf(userId);
-            if (!creators.contains(userIdKey)) {
-                creators.add(userIdKey);
+            addCreatorKey(creators, String.valueOf(userId));
+            UserEntity user = userDao.selectById(userId);
+            if (user != null) {
+                addCreatorKey(creators, user.getUsername());
+                addCreatorKey(creators, user.getRealName());
             }
         }
 
         return creators;
+    }
+
+    private void addCreatorKey(List<String> creators, String creator) {
+        if (!StringUtils.hasText(creator)) {
+            return;
+        }
+        String normalizedCreator = creator.trim();
+        if (!creators.contains(normalizedCreator)) {
+            creators.add(normalizedCreator);
+        }
     }
 
     private ManuDatasetTreeVO toManuDatasetTreeVO(ManuDatasetEntity dataset) {
@@ -1990,12 +2078,20 @@ public class DatasetServiceImp implements DatasetService {
         // 3. 更新审核信息
         LocalDateTime auditTime = LocalDateTime.now();
 
-        LambdaUpdateWrapper<ManuDatasetEntity> updateWrapper = new LambdaUpdateWrapper<>();
-        updateWrapper.eq(ManuDatasetEntity::getName, DatasetName)
-                .set(ManuDatasetEntity::getAuditStatus, status == 0 ? 2 : status); // 0 转为 2（驳回），1 保持（通过）
+        UpdateWrapper<ManuDatasetEntity> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("name", DatasetName)
+                .set("audit_status", status == 0 ? 2 : status); // 0 转为 2（驳回），1 保持（通过）
         int rows = DatasetDao.update(null, updateWrapper);
         if (rows <= 0) {
             return Result.fail("更新审核信息失败");
+        }
+
+        if (status == 1) {
+            UpdateWrapper<DatasetColumnEntity> columnUpdateWrapper = new UpdateWrapper<>();
+            columnUpdateWrapper.eq("dataset_name", DatasetName)
+                    .eq("deleted", 0)
+                    .set("state", DATASET_COLUMN_STATE_APPROVED);
+            DatasetColumnDao.update(null, columnUpdateWrapper);
         }
 
         // 4. 返回审核结果

@@ -17,6 +17,7 @@ import org.example.just.dto.datasetDto.OnlineFormFieldVO;
 import org.example.just.dto.datasetDto.OnlineFormSchemaVO;
 import org.example.just.dto.datasetDto.OnlineFormSectionVO;
 import org.example.just.dto.datasetDto.OnlineFormSubmitResultVO;
+import org.example.just.dto.datasetDto.PendingAuditDatasetVO;
 import org.example.just.dto.datasetDto.UpdateDatasetColumnDTO;
 import org.example.just.service.DatasetService;
 import org.example.just.service.SearchService;
@@ -210,6 +211,42 @@ class ManuDatasetControllerTest {
         assertThat(dataField.getGenericType().getTypeName())
                 .contains("java.util.List")
                 .contains("ManuDatasetTreeVO");
+    }
+
+    @Test
+    void getPendingAuditDatasetsReturnsDatasetsWithColumns() throws Exception {
+        DatasetService datasetService = mock(DatasetService.class);
+        DatasetColumnAuditVO column = new DatasetColumnAuditVO();
+        column.setId(22);
+        column.setDatasetName("dataset-a");
+        column.setColumnName("烧结温度");
+        column.setColumnType("double");
+        column.setState(0);
+        PendingAuditDatasetVO dataset = new PendingAuditDatasetVO();
+        dataset.setId(123);
+        dataset.setName("dataset-a");
+        dataset.setCreator("alice");
+        dataset.setAuditStatus(0);
+        dataset.setColumns(List.of(column));
+        when(datasetService.getPendingAuditDatasets())
+                .thenReturn(Result.success(0, "success", List.of(dataset)));
+
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(controller(datasetService))
+                .build();
+
+        mockMvc.perform(get("/api/datasets/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data[0].id").value(123))
+                .andExpect(jsonPath("$.data[0].name").value("dataset-a"))
+                .andExpect(jsonPath("$.data[0].auditStatus").value(0))
+                .andExpect(jsonPath("$.data[0].columns[0].id").value(22))
+                .andExpect(jsonPath("$.data[0].columns[0].columnName").value("烧结温度"))
+                .andExpect(jsonPath("$.data[0].columns[0].state").value(0));
+
+        verify(datasetService).getPendingAuditDatasets();
     }
 
     @Test

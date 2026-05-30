@@ -71,6 +71,12 @@ public class ManuDatasetController {
         return datasetService.getMyDatasets();
     }
 
+    @GetMapping("/api/datasets/pending")
+    @Operation(summary = "获取待审核数据集", description = "返回 audit_status 为 0 的数据集及其所有未删除字段")
+    public Result<List<PendingAuditDatasetVO>> getPendingAuditDatasets() {
+        return datasetService.getPendingAuditDatasets();
+    }
+
     @GetMapping("/api/search/categories")
     @Operation(summary = "获取分类树", description = "用于获取左侧工业战略性新兴产业分类目录树形数据")
     public Result<List<CategoryTreeNode>> getSearchCategories() {

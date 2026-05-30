@@ -20,6 +20,8 @@ public interface DatasetService {
 
     Result<List<ManuDatasetTreeVO>> getMyDatasets();
 
+    Result<List<PendingAuditDatasetVO>> getPendingAuditDatasets();
+
     ScienceCategoryTreeResult getScienceCategoryTree(ScienceCategoryTreeQueryDTO query);
 
     ProductCategoryTreeResult getProductCategoryTree(ProductCategoryTreeQueryDTO query);

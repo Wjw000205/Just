@@ -12,11 +12,14 @@ import org.example.just.dao.DatasetDataDao;
 import org.example.just.dao.ManuDatasetDao;
 import org.example.just.dao.ModuleColumnDao;
 import org.example.just.dao.ModuleDao;
+import org.example.just.dao.UserDao;
 import org.example.just.dto.categoryDto.ProductCategoryTreeQueryDTO;
 import org.example.just.dto.categoryDto.ProductCategoryTreeResult;
 import org.example.just.dto.categoryDto.ScienceCategoryTreeQueryDTO;
 import org.example.just.dto.categoryDto.ScienceCategoryTreeResult;
 import org.example.just.dto.datasetDto.AddDatasetColumnDTO;
+import org.example.just.dto.datasetDto.AuditDatasetDTO;
+import org.example.just.dto.datasetDto.AuditDatasetResultVO;
 import org.example.just.dto.datasetDto.BatchUploadResultVO;
 import org.example.just.dto.datasetDto.CreateDatasetDTO;
 import org.example.just.dto.datasetDto.CreateDatasetResultVO;
@@ -30,12 +33,14 @@ import org.example.just.dto.datasetDto.OnlineFormSchemaQueryDTO;
 import org.example.just.dto.datasetDto.OnlineFormSchemaVO;
 import org.example.just.dto.datasetDto.OnlineFormSubmitDTO;
 import org.example.just.dto.datasetDto.OnlineFormSubmitResultVO;
+import org.example.just.dto.datasetDto.PendingAuditDatasetVO;
 import org.example.just.dto.datasetDto.UpdateDatasetColumnDTO;
 import org.example.just.entity.DatasetColumnEntity;
 import org.example.just.entity.DatasetDataEntity;
 import org.example.just.entity.ManuDatasetEntity;
 import org.example.just.entity.ModuleColumnEntity;
 import org.example.just.entity.ModuleEntity;
+import org.example.just.entity.UserEntity;
 import org.example.just.utils.Result;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -64,12 +69,14 @@ class DatasetServiceImpTest {
     private final DatasetDataDao datasetDataDao = mock(DatasetDataDao.class);
     private final ModuleDao moduleDao = mock(ModuleDao.class);
     private final ModuleColumnDao moduleColumnDao = mock(ModuleColumnDao.class);
+    private final UserDao userDao = mock(UserDao.class);
     private final DatasetServiceImp datasetService = new DatasetServiceImp(
             datasetDao,
             datasetColumnDao,
             datasetDataDao,
             moduleDao,
-            moduleColumnDao
+            moduleColumnDao,
+            userDao
     );
 
     @AfterEach
@@ -251,6 +258,30 @@ class DatasetServiceImpTest {
     }
 
     @Test
+    void getMyDatasetsAlsoMatchesRealNameAndUserIdCreatorValues() {
+        UserContext.setUserInfo(7, "alice", 1);
+        UserEntity currentUser = new UserEntity();
+        currentUser.setId(7);
+        currentUser.setUsername("alice");
+        currentUser.setRealName("张三");
+        ManuDatasetEntity usernameCreator = dataset(123, "username dataset", 0);
+        usernameCreator.setCreator("alice");
+        ManuDatasetEntity realNameCreator = dataset(124, "real-name dataset", 0);
+        realNameCreator.setCreator("张三");
+        ManuDatasetEntity userIdCreator = dataset(125, "id dataset", 0);
+        userIdCreator.setCreator("7");
+        when(userDao.selectById(7)).thenReturn(currentUser);
+        when(datasetDao.selectList(any())).thenReturn(List.of(usernameCreator, realNameCreator, userIdCreator));
+
+        Result<List<ManuDatasetTreeVO>> result = datasetService.getMyDatasets();
+
+        assertThat(result.getCode()).isEqualTo(0);
+        assertThat(result.getData())
+                .extracting(ManuDatasetTreeVO::getName)
+                .containsExactly("username dataset", "real-name dataset", "id dataset");
+    }
+
+    @Test
     void getMyDatasetsRejectsMissingTokenUser() {
         Result<List<ManuDatasetTreeVO>> result = datasetService.getMyDatasets();
 
@@ -258,6 +289,42 @@ class DatasetServiceImpTest {
         assertThat(result.getMessage()).isEqualTo("未登录");
         assertThat(result.getData()).isNull();
         verify(datasetDao, never()).selectList(any());
+    }
+
+    @Test
+    void getPendingAuditDatasetsReturnsPendingDatasetsWithAllNonDeletedColumns() {
+        ManuDatasetEntity pending = dataset(123, "dataset-a", 0);
+        pending.setCreator("alice");
+        pending.setAuditStatus(0);
+        ManuDatasetEntity approved = dataset(124, "dataset-b", 0);
+        approved.setAuditStatus(1);
+        DatasetColumnEntity pendingColumn = datasetColumn(21, "pending-column", "varchar");
+        pendingColumn.setDatasetName("dataset-a");
+        pendingColumn.setState(0);
+        DatasetColumnEntity approvedColumn = datasetColumn(22, "approved-column", "double");
+        approvedColumn.setDatasetName("dataset-a");
+        approvedColumn.setState(1);
+        DatasetColumnEntity deletedColumn = datasetColumn(23, "deleted-column", "int");
+        deletedColumn.setDatasetName("dataset-a");
+        deletedColumn.setDeleted(1);
+        when(datasetDao.selectList(any())).thenReturn(List.of(pending, approved));
+        when(datasetColumnDao.selectList(any())).thenReturn(List.of(pendingColumn, approvedColumn, deletedColumn));
+
+        Result<List<PendingAuditDatasetVO>> result = datasetService.getPendingAuditDatasets();
+
+        assertThat(result.getCode()).isEqualTo(0);
+        assertThat(result.getMessage()).isEqualTo("success");
+        assertThat(result.getData()).hasSize(1);
+        assertThat(result.getData().get(0).getId()).isEqualTo(123);
+        assertThat(result.getData().get(0).getName()).isEqualTo("dataset-a");
+        assertThat(result.getData().get(0).getCreator()).isEqualTo("alice");
+        assertThat(result.getData().get(0).getAuditStatus()).isEqualTo(0);
+        assertThat(result.getData().get(0).getColumns())
+                .extracting(DatasetColumnAuditVO::getColumnName)
+                .containsExactly("pending-column", "approved-column");
+        assertThat(result.getData().get(0).getColumns())
+                .extracting(DatasetColumnAuditVO::getState)
+                .containsExactly(0, 1);
     }
 
     @Test
@@ -418,6 +485,25 @@ class DatasetServiceImpTest {
         assertThat(result.getData().getColumnName()).isEqualTo("new-column");
         assertThat(result.getData().getColumnType()).isEqualTo("double");
         assertThat(result.getData().getState()).isEqualTo(0);
+        verify(datasetColumnDao).update(any(), any());
+    }
+
+    @Test
+    void auditDatasetApprovesAllColumnsWhenDatasetApproved() {
+        ManuDatasetEntity dataset = dataset(123, "dataset-a", 0);
+        when(datasetDao.selectOne(any())).thenReturn(dataset);
+        when(datasetDao.update(any(), any())).thenReturn(1);
+        when(datasetColumnDao.update(any(), any())).thenReturn(2);
+        AuditDatasetDTO dto = new AuditDatasetDTO();
+        dto.setDatasetName("dataset-a");
+        dto.setStatus(1);
+        dto.setAuditor("admin");
+        dto.setRemark("审核通过");
+
+        Result<AuditDatasetResultVO> result = datasetService.auditDataset(dto);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        assertThat(result.getData().getStatus()).isEqualTo(1);
         verify(datasetColumnDao).update(any(), any());
     }
 
