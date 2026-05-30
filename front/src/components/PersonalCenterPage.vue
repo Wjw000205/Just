@@ -192,7 +192,6 @@
                   </td>
                   <td class="col-action">
                     <div class="action-icons">
-                      <button class="icon-btn view" @click="handleViewDataset(item)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
                       <button class="icon-btn edit" @click="handleEditDataset(item)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
                       <button class="icon-btn download" @click="handleDownloadDataset(item)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
                       <button class="icon-btn delete" @click="handleDeleteDataset(item)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
@@ -884,6 +883,75 @@
       </main>
     </div>
 
+    <!-- ==================== 数据集编辑弹窗 ==================== -->
+    <div v-if="datasetEditDialogVisible" class="detail-mask" @click.self="closeDatasetEditDialog">
+      <div class="detail-dialog dataset-edit-dialog">
+        <div class="detail-dialog-header">
+          <h2 class="detail-dialog-title">编辑数据集：{{ datasetEditName }}</h2>
+          <button type="button" class="detail-close-btn" @click="closeDatasetEditDialog">×</button>
+        </div>
+
+        <!-- 新增列表单 -->
+        <div class="dataset-edit-toolbar">
+          <span class="toolbar-label">新增列：</span>
+          <input v-model="newColumnName" class="toolbar-input" placeholder="列名" />
+          <select v-model="newColumnType" class="toolbar-select">
+            <option value="varchar">varchar</option>
+            <option value="int">int</option>
+            <option value="float">float</option>
+            <option value="text">text</option>
+            <option value="date">date</option>
+          </select>
+          <button class="toolbar-btn primary" :disabled="datasetEditLoading" @click="handleAddColumn">确认新增</button>
+        </div>
+
+        <div v-if="datasetEditLoading" class="detail-loading">加载中...</div>
+        <template v-else>
+          <div class="dataset-edit-table-wrap">
+            <table class="data-table dataset-edit-table">
+              <thead>
+                <tr>
+                  <th class="col-index">序号</th>
+                  <th v-for="col in datasetEditColumns" :key="col.id" class="col-dynamic">
+                    <div class="edit-col-header">
+                      <span>{{ col.label }}</span>
+                      <button class="col-del-btn" title="删除该列" @click="handleDeleteColumn(col)">×</button>
+                    </div>
+                  </th>
+                  <th class="col-action">操作</th>
+                </tr>
+              </thead>
+              <tbody v-if="datasetEditRows.length === 0">
+                <tr><td :colspan="datasetEditColumns.length + 2" class="table-hint muted">暂无数据</td></tr>
+              </tbody>
+              <tbody v-else>
+                <tr v-for="(row, idx) in datasetEditRows" :key="row.rowId ?? idx">
+                  <td class="col-index">{{ (datasetEditPage - 1) * datasetEditPageSize + idx + 1 }}</td>
+                  <td v-for="col in datasetEditColumns" :key="col.id" class="col-dynamic">
+                    {{ row.data[col.label] ?? row.data[col.key] ?? '-' }}
+                  </td>
+                  <td class="col-action">
+                    <button class="icon-btn delete" title="删除该行" @click="handleDeleteRow(row)">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- 分页 -->
+          <div class="pagination" style="padding: 10px 0 0;">
+            <span class="total">共 {{ datasetEditTotal }} 条</span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="page-btn" :disabled="datasetEditPage <= 1" @click="datasetEditGoPage(datasetEditPage - 1)">上一页</button>
+              <span class="page-current">{{ datasetEditPage }}</span>
+              <button class="page-btn" :disabled="datasetEditPage >= datasetEditTotalPages" @click="datasetEditGoPage(datasetEditPage + 1)">下一页</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <div v-if="templateDetailDialogVisible" class="detail-mask" @click.self="closeTemplateDetailDialog">
       <div class="detail-dialog">
         <div class="detail-dialog-header">
@@ -987,6 +1055,7 @@
 import { onMounted, ref, computed, watch } from 'vue'
 import { getModuleBaseInfo, getModuleDetailInfo, getMyModules } from '../api/module.js'
 import { fetchMyProfile, updateMyProfile, updatePassword, updateSecondPassword } from '../api/user.js'
+import { fetchMyDatasets } from '../api/dataset.js'
 
 const emit = defineEmits(['go-home'])
 
@@ -1043,14 +1112,52 @@ const dropdowns = ref({
 
 // 数据集
 const datasetSearchForm = ref({ name: '', scientific: '', industry: '', auditStatus: '', field: '', department: '', dataLevel: '' })
-const datasetList = ref([
-  { id: 1, name: '123123', level: '公开', dataCount: 0, rowCount: 0, auditStatus: '已完成', selected: false },
-  { id: 2, name: '纳米羟基磷灰石/聚乳酸复合支架的制备与性能研究数据集', level: '公开', dataCount: 872, rowCount: 146, auditStatus: '已完成', selected: false },
-  { id: 3, name: '高通量计算材料科学数据集', level: '公开', dataCount: 5184, rowCount: 324, auditStatus: '已完成', selected: false },
-  { id: 4, name: '纳米羟基磷灰石生物材料性能数据集', level: '公开', dataCount: 30, rowCount: 3, auditStatus: '待提交审核', selected: false },
-  { id: 5, name: 'DLP3D打印颅骨修复体数据集', level: '内部', dataCount: 7462, rowCount: 574, auditStatus: '已完成', selected: false },
-])
-const datasetTotal = ref(5)
+const datasetList = ref([])
+const datasetLoading = ref(false)
+const datasetTotal = ref(0)
+
+function formatDatasetAuditStatus(val) {
+  const n = Number(val)
+  if (n === 0) return '未审核'
+  if (n === 1) return '审核通过'
+  if (n === 2) return '审核未通过'
+  return '-'
+}
+
+function formatDataLevel(val) {
+  if (val === 'public') return '公开'
+  if (val === 'highvalue') return '高值'
+  if (val === 'private') return '内部'
+  return val || '-'
+}
+
+function normalizeDataset(raw) {
+  return {
+    id: raw.id,
+    name: raw.name != null ? String(raw.name) : '',
+    level: formatDataLevel(raw.dataLevel ?? raw.level),
+    dataCount: raw.dataCount != null ? Number(raw.dataCount) : 0,
+    rowCount: raw.rowCount != null ? Number(raw.rowCount) : 0,
+    auditStatus: raw.auditStatus != null ? formatDatasetAuditStatus(raw.auditStatus) : '-',
+    selected: false,
+  }
+}
+
+async function loadMyDatasets() {
+  datasetLoading.value = true
+  try {
+    const list = await fetchMyDatasets()
+    datasetList.value = list.map(normalizeDataset)
+    datasetTotal.value = datasetList.value.length
+  } catch (e) {
+    datasetList.value = []
+    datasetTotal.value = 0
+    console.error('loadMyDatasets', e)
+    alert(e?.message || '获取我的数据集失败')
+  } finally {
+    datasetLoading.value = false
+  }
+}
 const datasetCurrentPage = ref(1)
 const datasetTotalPages = computed(() => Math.ceil(datasetTotal.value / 10))
 const selectAll = computed({ get: () => datasetList.value.length > 0 && datasetList.value.every(i => i.selected), set: (v) => datasetList.value.forEach(i => i.selected = v) })
@@ -1214,16 +1321,153 @@ const selectFavOption = (name, value) => { favoriteSearchForm.value[name] = valu
 const selectRecordOption = (name, value) => { recordSearchForm.value[name] = value; dropdowns.value[`record${name.charAt(0).toUpperCase() + name.slice(1)}`] = false }
 
 // 数据集操作
-const handleDatasetSearch = () => console.log('搜索数据集:', datasetSearchForm.value)
-const handleDatasetReset = () => { datasetSearchForm.value = { name: '', scientific: '', industry: '', auditStatus: '', field: '', department: '', dataLevel: '' } }
+const handleDatasetSearch = () => {
+  datasetCurrentPage.value = 1
+  loadMyDatasets()
+}
+const handleDatasetReset = () => {
+  datasetSearchForm.value = { name: '', scientific: '', industry: '', auditStatus: '', field: '', department: '', dataLevel: '' }
+  datasetCurrentPage.value = 1
+  loadMyDatasets()
+}
 const handleBatchDownload = () => alert('批量下载')
 const handleCustomColumns = () => alert('自定义列')
 const handleAddDataset = () => alert('新增数据集')
 const handleSelectAll = () => { const v = !selectAll.value; datasetList.value.forEach(i => i.selected = v) }
 const handleViewDataset = (item) => alert(`查看: ${item.name}`)
-const handleEditDataset = (item) => alert(`编辑: ${item.name}`)
 const handleDownloadDataset = (item) => alert(`下载: ${item.name}`)
 const handleDeleteDataset = (item) => { if (confirm(`删除 ${item.name}?`)) datasetList.value = datasetList.value.filter(d => d.id !== item.id) }
+
+// ========== 数据集编辑弹窗 ==========
+const datasetEditDialogVisible = ref(false)
+const datasetEditLoading = ref(false)
+const datasetEditName = ref('')
+const datasetEditColumns = ref([])
+const datasetEditRows = ref([])
+const datasetEditTotal = ref(0)
+const datasetEditPage = ref(1)
+const datasetEditPageSize = ref(10)
+const datasetEditTotalPages = computed(() => Math.max(1, Math.ceil(datasetEditTotal.value / datasetEditPageSize.value)))
+
+// 新增列表单
+const newColumnName = ref('')
+const newColumnType = ref('varchar')
+
+function getDatasetAuthHeader() {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+async function loadDatasetEditRows() {
+  datasetEditLoading.value = true
+  try {
+    const params = new URLSearchParams({
+      DatasetName: datasetEditName.value,
+      pageNum: String(datasetEditPage.value),
+      pageSize: String(datasetEditPageSize.value),
+    })
+    const resp = await fetch(`/Dataset/data-page?${params.toString()}`, {
+      method: 'GET',
+      headers: getDatasetAuthHeader(),
+    })
+    const json = await resp.json().catch(() => null)
+    if (!json || (json.code !== 0 && json.code !== 200)) throw new Error(json?.message || '查询数据失败')
+    const data = json.data || {}
+    const rawColumns = Array.isArray(data.columns) ? data.columns : []
+    datasetEditColumns.value = rawColumns.map((c, i) => ({
+      id: c.id ?? i,
+      key: c.columnName || `column-${i}`,
+      label: c.columnName || `字段${i + 1}`,
+    }))
+    const pageData = data.pageData || {}
+    const records = pageData.records || pageData.list || pageData.rows || data.records || []
+    datasetEditTotal.value = Number(pageData.total ?? data.total ?? records.length)
+    datasetEditRows.value = records.map((r, i) => ({ rowId: r.rowId ?? i, data: r.data || {} }))
+  } catch (e) {
+    alert(e?.message || '加载数据失败')
+    datasetEditColumns.value = []
+    datasetEditRows.value = []
+  } finally {
+    datasetEditLoading.value = false
+  }
+}
+
+function datasetEditGoPage(page) {
+  if (page < 1 || page > datasetEditTotalPages.value) return
+  datasetEditPage.value = page
+  loadDatasetEditRows()
+}
+
+async function handleEditDataset(item) {
+  datasetEditName.value = item.name
+  datasetEditPage.value = 1
+  datasetEditDialogVisible.value = true
+  await loadDatasetEditRows()
+}
+
+function closeDatasetEditDialog() {
+  datasetEditDialogVisible.value = false
+  datasetEditName.value = ''
+  datasetEditColumns.value = []
+  datasetEditRows.value = []
+}
+
+async function handleDeleteRow(row) {
+  if (!confirm(`确认删除该行数据（rowId: ${row.rowId}）？`)) return
+  try {
+    const resp = await fetch('/Dataset/delete-row', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', ...getDatasetAuthHeader() },
+      body: JSON.stringify({ datasetName: datasetEditName.value, rowId: row.rowId }),
+    })
+    const json = await resp.json().catch(() => null)
+    if (!json || (json.code !== 0 && json.code !== 200)) throw new Error(json?.message || '删除行失败')
+    await loadDatasetEditRows()
+  } catch (e) {
+    alert(e?.message || '删除行失败')
+  }
+}
+
+async function handleDeleteColumn(col) {
+  if (!confirm(`确认删除列「${col.label}」？删除后该列所有数据将一并删除。`)) return
+  try {
+    const resp = await fetch('/Dataset/delete-column', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', ...getDatasetAuthHeader() },
+      body: JSON.stringify({ columnId: col.id }),
+    })
+    const json = await resp.json().catch(() => null)
+    if (!json || (json.code !== 0 && json.code !== 200)) throw new Error(json?.message || '删除列失败')
+    await loadDatasetEditRows()
+  } catch (e) {
+    alert(e?.message || '删除列失败')
+  }
+}
+
+async function handleAddColumn() {
+  if (!newColumnName.value.trim()) {
+    alert('请输入列名')
+    return
+  }
+  try {
+    const resp = await fetch('/Dataset/add-column', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getDatasetAuthHeader() },
+      body: JSON.stringify({
+        datasetName: datasetEditName.value,
+        columnName: newColumnName.value.trim(),
+        columnType: newColumnType.value,
+      }),
+    })
+    const json = await resp.json().catch(() => null)
+    if (!json || (json.code !== 0 && json.code !== 200)) throw new Error(json?.message || '新增列失败')
+    newColumnName.value = ''
+    newColumnType.value = 'varchar'
+    await loadDatasetEditRows()
+  } catch (e) {
+    alert(e?.message || '新增列失败')
+  }
+}
 
 // 模板操作
 const handleTemplateSearch = () => {
@@ -1465,6 +1709,9 @@ async function loadMyProfileFromServer() {
 }
 
 watch(currentMenu, (menu) => {
+  if (menu === 'datasets') {
+    loadMyDatasets()
+  }
   if (menu === 'templates') {
     loadMyTemplates()
   }
@@ -1474,6 +1721,9 @@ onMounted(async () => {
   syncUserFromToken()
   checkSessionMenu()
   await loadMyProfileFromServer()
+  if (currentMenu.value === 'datasets') {
+    await loadMyDatasets()
+  }
   if (currentMenu.value === 'templates') {
     await loadMyTemplates()
   }
@@ -2313,5 +2563,115 @@ onMounted(async () => {
   text-align: center;
   color: #999;
   padding: 40px;
+}
+
+/* 数据集编辑弹窗 */
+.dataset-edit-dialog {
+  width: 90vw;
+  max-width: 1100px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dataset-edit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #edf0f5;
+  flex-shrink: 0;
+}
+
+.toolbar-label {
+  font-size: 13px;
+  color: #555;
+  white-space: nowrap;
+}
+
+.toolbar-input {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #d4dae6;
+  border-radius: 4px;
+  font-size: 13px;
+  width: 140px;
+}
+
+.toolbar-select {
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid #d4dae6;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.toolbar-btn {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 4px;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+}
+.toolbar-btn.primary {
+  background: #1a5ce6;
+  color: #fff;
+}
+.toolbar-btn.primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dataset-edit-table-wrap {
+  overflow: auto;
+  flex: 1;
+  padding: 0 16px;
+}
+
+.dataset-edit-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dataset-edit-table th,
+.dataset-edit-table td {
+  padding: 8px 10px;
+  border: 1px solid #edf0f5;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dataset-edit-table th {
+  background: #f7f9fc;
+  font-weight: 500;
+}
+
+.edit-col-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.col-del-btn {
+  background: transparent;
+  border: none;
+  color: #f56c6c;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.col-del-btn:hover {
+  color: #c0392b;
+}
+
+.table-hint.muted {
+  text-align: center;
+  color: #999;
+  padding: 32px;
 }
 </style>

@@ -31,4 +31,10 @@ public class ManuDatasetTreeVO {
 
     @Schema(description = "子目录")
     private List<ManuDatasetTreeVO> children = new ArrayList<>();
+
+    @Schema(description = "审核状态：0未审核，1审核通过，2审核未通过")
+    private Integer auditStatus;
+
+    @Schema(description = "数据级别：highvalue/public/private")
+    private String dataLevel;
 }

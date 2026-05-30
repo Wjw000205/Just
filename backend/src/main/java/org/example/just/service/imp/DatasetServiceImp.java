@@ -236,6 +236,8 @@ public class DatasetServiceImp implements DatasetService {
         vo.setCreateTime(dataset.getCreateTime());
         vo.setParent(dataset.getParent());
         vo.setIsMenu(dataset.getIsMenu());
+        vo.setAuditStatus(dataset.getAuditStatus());
+        vo.setDataLevel(dataset.getDataLevel());
         return vo;
     }
 

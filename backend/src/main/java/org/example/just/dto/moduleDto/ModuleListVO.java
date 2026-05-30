@@ -32,4 +32,7 @@ public class ModuleListVO {
 
     @Schema(description = "创建时间")
     private LocalDateTime createTime;
+
+    @Schema(description = "审核状态：0待审核，1驳回，2已通过")
+    private Integer auditState;
 }

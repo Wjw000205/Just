@@ -596,13 +596,15 @@ async function loadRows() {
       page: page.value,
       pageSize: pageSize.value,
     })
-    const filteredList = list.filter((item) => {
+    // 只展示审核通过（auditStatus === 1）的数据集
+    const approvedList = list.filter((item) => Number(item.auditStatus) === 1)
+    const filteredList = approvedList.filter((item) => {
       if (searchForm.value.dataCategory) {
         return String(item.dataCategory || 'dataset') === searchForm.value.dataCategory
       }
       return true
     })
-    total.value = searchForm.value.dataCategory ? filteredList.length : t
+    total.value = filteredList.length
     rows.value = filteredList
   } catch (e) {
     console.error('loadRows', e)
