@@ -784,11 +784,7 @@ function getFilenameFromContentDisposition(cd) {
 async function downloadTemplate(format = 'excel') {
   templateMenuVisible.value = false
   const selectedDataset = datasetOptions.value.find((item) => String(item.value) === String(form.datasetId))
-<<<<<<< HEAD
-  if (!selectedDataset?.name) {
-=======
   if (!form.datasetId) {
->>>>>>> 1774c57 (完成模板和数据集接口对接)
     alert('请先选择数据集')
     return
   }
@@ -796,15 +792,11 @@ async function downloadTemplate(format = 'excel') {
 
   templateDownloadLoading.value = true
   try {
-<<<<<<< HEAD
-    const url = `/Dataset/export-template?DatasetName=${encodeURIComponent(selectedDataset.name)}`
-=======
     const params = new URLSearchParams({
       datasetId: String(form.datasetId),
       format,
     })
     const url = `/api/data/batch/template?${params.toString()}`
->>>>>>> 1774c57 (完成模板和数据集接口对接)
 
     const resp = await fetch(url, {
       method: 'GET',
@@ -814,12 +806,8 @@ async function downloadTemplate(format = 'excel') {
 
     const blob = await resp.blob()
     const cd = resp.headers.get('content-disposition') || ''
-<<<<<<< HEAD
-    const fallbackName = `${selectedDataset.name}_template.xlsx`
-=======
     const fallbackExt = format === 'csv' ? 'csv' : 'xlsx'
     const fallbackName = `${selectedDataset?.name || 'dataset'}_template.${fallbackExt}`
->>>>>>> 1774c57 (完成模板和数据集接口对接)
     const filename = getFilenameFromContentDisposition(cd) || fallbackName
 
     const blobUrl = URL.createObjectURL(blob)
