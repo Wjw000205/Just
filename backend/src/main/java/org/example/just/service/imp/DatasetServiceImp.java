@@ -2,6 +2,7 @@ package org.example.just.service.imp;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.poi.ss.usermodel.*;
@@ -47,6 +48,9 @@ import java.util.stream.Collectors;
 public class DatasetServiceImp implements DatasetService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final int DATASET_COLUMN_STATE_REJECTED = -1;
+    private static final int DATASET_COLUMN_STATE_PENDING = 0;
+    private static final int DATASET_COLUMN_STATE_APPROVED = 1;
 
     private final ManuDatasetDao DatasetDao;
     private final DatasetColumnDao DatasetColumnDao;
@@ -538,6 +542,7 @@ public class DatasetServiceImp implements DatasetService {
     public Result<List<DatasetTagVO>> getDatasetTags() {
         LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
         columnWrapper.eq(DatasetColumnEntity::getDeleted, 0)
+                .eq(DatasetColumnEntity::getState, DATASET_COLUMN_STATE_APPROVED)
                 .orderByAsc(DatasetColumnEntity::getId);
         List<DatasetColumnEntity> columns = DatasetColumnDao.selectList(columnWrapper);
         if (columns == null || columns.isEmpty()) {
@@ -548,6 +553,7 @@ public class DatasetServiceImp implements DatasetService {
         for (DatasetColumnEntity column : columns) {
             if (column == null
                     || (column.getDeleted() != null && column.getDeleted() == 1)
+                    || !isApprovedDatasetColumn(column)
                     || !StringUtils.hasText(column.getColumnName())) {
                 continue;
             }
@@ -572,6 +578,7 @@ public class DatasetServiceImp implements DatasetService {
         LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
         columnWrapper.eq(DatasetColumnEntity::getDatasetName, datasetName)
                 .eq(DatasetColumnEntity::getDeleted, 0)
+                .eq(DatasetColumnEntity::getState, DATASET_COLUMN_STATE_APPROVED)
                 .orderByAsc(DatasetColumnEntity::getId);
         List<DatasetColumnEntity> columns = DatasetColumnDao.selectList(columnWrapper);
         if (columns == null || columns.isEmpty()) {
@@ -579,6 +586,7 @@ public class DatasetServiceImp implements DatasetService {
         }
 
         List<Integer> columnIds = columns.stream()
+                .filter(this::isApprovedDatasetColumn)
                 .map(DatasetColumnEntity::getId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
@@ -710,12 +718,22 @@ public class DatasetServiceImp implements DatasetService {
         LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
         columnWrapper.eq(DatasetColumnEntity::getDatasetName, datasetName)
                 .eq(DatasetColumnEntity::getDeleted, 0)
+                .eq(DatasetColumnEntity::getState, DATASET_COLUMN_STATE_APPROVED)
                 .orderByAsc(DatasetColumnEntity::getId);
         List<DatasetColumnEntity> columns = DatasetColumnDao.selectList(columnWrapper);
         if (columns == null) {
             return new ArrayList<>();
         }
-        return columns;
+        return columns.stream()
+                .filter(this::isApprovedDatasetColumn)
+                .collect(Collectors.toList());
+    }
+
+    private boolean isApprovedDatasetColumn(DatasetColumnEntity column) {
+        return column != null
+                && (column.getDeleted() == null || column.getDeleted() == 0)
+                && column.getState() != null
+                && column.getState() == DATASET_COLUMN_STATE_APPROVED;
     }
 
     @Transactional
@@ -1087,6 +1105,7 @@ public class DatasetServiceImp implements DatasetService {
             datasetColumn.setColumnType(templateColumn.getType().trim());
             datasetColumn.setDatasetName(datasetName);
             datasetColumn.setDeleted(0);
+            datasetColumn.setState(DATASET_COLUMN_STATE_PENDING);
 
             int columnRows = DatasetColumnDao.insert(datasetColumn);
             if (columnRows <= 0) {
@@ -1345,9 +1364,16 @@ public class DatasetServiceImp implements DatasetService {
         // 2. 查模板列
         LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
         columnWrapper.eq(DatasetColumnEntity::getDatasetName, DatasetName.trim())
+                .eq(DatasetColumnEntity::getDeleted, 0)
+                .eq(DatasetColumnEntity::getState, DATASET_COLUMN_STATE_APPROVED)
                 .orderByAsc(DatasetColumnEntity::getId);
 
         List<DatasetColumnEntity> columnList = DatasetColumnDao.selectList(columnWrapper);
+        if (columnList != null) {
+            columnList = columnList.stream()
+                    .filter(this::isApprovedDatasetColumn)
+                    .collect(Collectors.toList());
+        }
         if (columnList == null || columnList.isEmpty()) {
             return Result.fail("当前模板未定义列");
         }
@@ -1667,6 +1693,8 @@ public class DatasetServiceImp implements DatasetService {
         LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
         columnWrapper.eq(DatasetColumnEntity::getDatasetName, DatasetName)
                 .eq(DatasetColumnEntity::getColumnName, columnName)
+                .eq(DatasetColumnEntity::getDeleted, 0)
+                .ne(DatasetColumnEntity::getState, DATASET_COLUMN_STATE_REJECTED)
                 .last("limit 1");
 
         DatasetColumnEntity existedColumn = DatasetColumnDao.selectOne(columnWrapper);
@@ -1680,6 +1708,7 @@ public class DatasetServiceImp implements DatasetService {
         DatasetColumn.setColumnName(columnName);
         DatasetColumn.setColumnType(columnType);
         DatasetColumn.setDeleted(0);
+        DatasetColumn.setState(DATASET_COLUMN_STATE_PENDING);
 
         int rows = DatasetColumnDao.insert(DatasetColumn);
         if (rows <= 0) {
@@ -1750,9 +1779,16 @@ public class DatasetServiceImp implements DatasetService {
 
         // 2. 查模板下所有列
         LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
-        columnWrapper.eq(DatasetColumnEntity::getDatasetName, DatasetName);
+        columnWrapper.eq(DatasetColumnEntity::getDatasetName, DatasetName)
+                .eq(DatasetColumnEntity::getDeleted, 0)
+                .eq(DatasetColumnEntity::getState, DATASET_COLUMN_STATE_APPROVED);
 
         List<DatasetColumnEntity> columnList = DatasetColumnDao.selectList(columnWrapper);
+        if (columnList != null) {
+            columnList = columnList.stream()
+                    .filter(this::isApprovedDatasetColumn)
+                    .collect(Collectors.toList());
+        }
         if (columnList == null || columnList.isEmpty()) {
             return Result.fail("当前模板未定义列");
         }
@@ -1785,6 +1821,76 @@ public class DatasetServiceImp implements DatasetService {
         return Result.success("删除行数据成功");
     }
 
+
+    @Override
+    public Result<List<DatasetColumnAuditVO>> getPendingDatasetColumns() {
+        LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
+        columnWrapper.eq(DatasetColumnEntity::getDeleted, 0)
+                .eq(DatasetColumnEntity::getState, DATASET_COLUMN_STATE_PENDING)
+                .orderByAsc(DatasetColumnEntity::getDatasetName)
+                .orderByAsc(DatasetColumnEntity::getId);
+
+        List<DatasetColumnEntity> columns = DatasetColumnDao.selectList(columnWrapper);
+        if (columns == null || columns.isEmpty()) {
+            return Result.success(0, "success", new ArrayList<>());
+        }
+
+        List<DatasetColumnAuditVO> result = columns.stream()
+                .filter(column -> column != null
+                        && (column.getDeleted() == null || column.getDeleted() == 0)
+                        && column.getState() != null
+                        && column.getState() == DATASET_COLUMN_STATE_PENDING)
+                .map(this::toDatasetColumnAuditVO)
+                .collect(Collectors.toList());
+
+        return Result.success(0, "success", result);
+    }
+
+    @Transactional
+    @Override
+    public Result<DatasetColumnAuditVO> auditDatasetColumn(DatasetColumnAuditDTO dto) {
+        if (dto == null) {
+            return Result.fail("请求参数不能为空");
+        }
+        if (dto.getColumnId() == null) {
+            return Result.fail("字段ID不能为空");
+        }
+        if (dto.getState() == null) {
+            return Result.fail("审核状态不能为空");
+        }
+        if (dto.getState() != DATASET_COLUMN_STATE_APPROVED
+                && dto.getState() != DATASET_COLUMN_STATE_REJECTED) {
+            return Result.fail("审核状态必须为 1（通过）或 -1（不通过）");
+        }
+
+        DatasetColumnEntity column = DatasetColumnDao.selectById(dto.getColumnId());
+        if (column == null || (column.getDeleted() != null && column.getDeleted() == 1)) {
+            return Result.fail("数据集字段不存在");
+        }
+
+        UpdateWrapper<DatasetColumnEntity> updateWrapper = new UpdateWrapper<>();
+        updateWrapper.eq("id", dto.getColumnId())
+                .eq("deleted", 0)
+                .set("state", dto.getState());
+
+        int rows = DatasetColumnDao.update(null, updateWrapper);
+        if (rows <= 0) {
+            return Result.fail("更新字段审核状态失败");
+        }
+
+        column.setState(dto.getState());
+        return Result.success(0, "success", toDatasetColumnAuditVO(column));
+    }
+
+    private DatasetColumnAuditVO toDatasetColumnAuditVO(DatasetColumnEntity column) {
+        DatasetColumnAuditVO vo = new DatasetColumnAuditVO();
+        vo.setId(column.getId());
+        vo.setDatasetName(column.getDatasetName());
+        vo.setColumnName(column.getColumnName());
+        vo.setColumnType(column.getColumnType());
+        vo.setState(column.getState());
+        return vo;
+    }
 
     @Transactional
     @Override

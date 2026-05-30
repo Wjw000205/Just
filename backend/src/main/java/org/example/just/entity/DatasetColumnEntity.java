@@ -33,4 +33,8 @@ public class DatasetColumnEntity {
     @TableField("deleted")
     @Schema(description = "逻辑删除")
     private Integer deleted;
+
+    @TableField("state")
+    @Schema(description = "审核状态：1-审核通过，0-待审核，-1-审核不通过")
+    private Integer state;
 }

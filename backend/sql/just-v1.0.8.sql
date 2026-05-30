@@ -28,7 +28,7 @@ CREATE TABLE `dataset_column` (
   `column_type` varchar(255) NOT NULL COMMENT '列类型',
   `dataset_name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL COMMENT '所属的模板名',
   `deleted` int NOT NULL DEFAULT '0' COMMENT '是否被删除',
-  `state` int NOT NULL DEFAULT '1' COMMENT '审核状态：1-已审核通过，0-待审核，-1-审核不通过',
+  `state` int NOT NULL DEFAULT '1' COMMENT '?????1-??????0-????-1-?????',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -39,7 +39,7 @@ CREATE TABLE `dataset_column` (
 
 LOCK TABLES `dataset_column` WRITE;
 /*!40000 ALTER TABLE `dataset_column` DISABLE KEYS */;
-INSERT INTO `dataset_column` (`id`, `column_name`, `column_type`, `dataset_name`, `deleted`, `state`) VALUES (1,'角色名称','varchar','人物细节模板',0,1),(2,'职业','varchar','人物细节模板',0,1),(3,'等级','int','人物细节模板',0,1),(4,'武器名称','varchar','武器具体模板',0,1),(5,'攻击力','varchar','武器具体模板',0,1),(6,'生命值','int','人物细节模板',0,1);
+INSERT INTO `dataset_column` VALUES (1,'角色名称','varchar','人物细节模板',0,1),(2,'职业','varchar','人物细节模板',0,1),(3,'等级','int','人物细节模板',0,1),(4,'武器名称','varchar','武器具体模板',0,1),(5,'攻击力','varchar','武器具体模板',0,1),(6,'生命值','int','人物细节模板',0,1);
 /*!40000 ALTER TABLE `dataset_column` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -263,4 +263,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-05-28 22:15:09
+-- Dump completed on 2026-05-30 13:41:49

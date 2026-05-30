@@ -454,7 +454,8 @@ public class DataBaseServiceImpl implements DataBaseService {
             // 查询该数据集的所有列
             LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
             columnWrapper.eq(DatasetColumnEntity::getDatasetName, dataset.getName())
-                        .eq(DatasetColumnEntity::getDeleted, 0);
+                        .eq(DatasetColumnEntity::getDeleted, 0)
+                        .eq(DatasetColumnEntity::getState, 1);
             List<DatasetColumnEntity> columns = datasetColumnDao.selectList(columnWrapper);
             
             if (columns.isEmpty()) {
@@ -646,6 +647,7 @@ public class DataBaseServiceImpl implements DataBaseService {
             LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
             columnWrapper.eq(DatasetColumnEntity::getDatasetName, dataset.getName())
                         .eq(DatasetColumnEntity::getDeleted, 0)
+                        .eq(DatasetColumnEntity::getState, 1)
                         .orderByAsc(DatasetColumnEntity::getId);
             List<DatasetColumnEntity> columns = datasetColumnDao.selectList(columnWrapper);
                 

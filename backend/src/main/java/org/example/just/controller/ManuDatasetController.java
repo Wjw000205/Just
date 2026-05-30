@@ -129,6 +129,18 @@ public class ManuDatasetController {
         datasetService.exportDatasetTemplate(datasetId, format, response);
     }
 
+    @GetMapping("/api/data/columns/pending")
+    @Operation(summary = "获取未审核字段列表", description = "获取数据集字段修改后待审核的字段列表")
+    public Result<List<DatasetColumnAuditVO>> getPendingDatasetColumns() {
+        return datasetService.getPendingDatasetColumns();
+    }
+
+    @PostMapping("/api/data/columns/audit")
+    @Operation(summary = "审核数据集字段", description = "审核通过置为1，审核不通过置为-1")
+    public Result<DatasetColumnAuditVO> auditDatasetColumn(@RequestBody DatasetColumnAuditDTO dto) {
+        return datasetService.auditDatasetColumn(dto);
+    }
+
     @PostMapping("/Dataset/add-column")
     @Operation(summary = "新增数据表列", description = "向指定数据表新增一列，写入Dataset_column表")
     public Result<String> addDatasetColumn(@RequestBody AddDatasetColumnDTO dto) {

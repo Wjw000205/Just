@@ -16,9 +16,12 @@ import org.example.just.dto.categoryDto.ProductCategoryTreeQueryDTO;
 import org.example.just.dto.categoryDto.ProductCategoryTreeResult;
 import org.example.just.dto.categoryDto.ScienceCategoryTreeQueryDTO;
 import org.example.just.dto.categoryDto.ScienceCategoryTreeResult;
+import org.example.just.dto.datasetDto.AddDatasetColumnDTO;
 import org.example.just.dto.datasetDto.BatchUploadResultVO;
 import org.example.just.dto.datasetDto.CreateDatasetDTO;
 import org.example.just.dto.datasetDto.CreateDatasetResultVO;
+import org.example.just.dto.datasetDto.DatasetColumnAuditDTO;
+import org.example.just.dto.datasetDto.DatasetColumnAuditVO;
 import org.example.just.dto.datasetDto.DatasetTagVO;
 import org.example.just.dto.datasetDto.DatasetOptionsQueryDTO;
 import org.example.just.dto.datasetDto.DatasetOptionsResult;
@@ -119,6 +122,9 @@ class DatasetServiceImpTest {
 
         ArgumentCaptor<DatasetColumnEntity> columnCaptor = ArgumentCaptor.forClass(DatasetColumnEntity.class);
         verify(datasetColumnDao, org.mockito.Mockito.times(2)).insert(columnCaptor.capture());
+        assertThat(columnCaptor.getAllValues())
+                .extracting(DatasetColumnEntity::getState)
+                .containsExactly(0, 0);
         assertThat(columnCaptor.getAllValues())
                 .extracting(DatasetColumnEntity::getColumnName)
                 .containsExactly("材料名称", "粒径");
@@ -257,11 +263,17 @@ class DatasetServiceImpTest {
     void getDatasetTagsBuildsDistinctTagsFromDatasetColumns() {
         DatasetColumnEntity deleted = datasetColumn(24, "已删除字段", "varchar");
         deleted.setDeleted(1);
+        DatasetColumnEntity pending = datasetColumn(25, "pending", "varchar");
+        pending.setState(0);
+        DatasetColumnEntity rejected = datasetColumn(26, "rejected", "varchar");
+        rejected.setState(-1);
         when(datasetColumnDao.selectList(any())).thenReturn(List.of(
                 datasetColumn(21, "粉末", "varchar"),
                 datasetColumn(22, "烧结温度", "varchar"),
                 datasetColumn(23, "粉末", "varchar"),
-                deleted
+                deleted,
+                pending,
+                rejected
         ));
 
         Result<List<DatasetTagVO>> result = datasetService.getDatasetTags();
@@ -281,11 +293,14 @@ class DatasetServiceImpTest {
     void getOnlineFormSchemaBuildsSectionsFromTemplateColumnBelong() {
         ManuDatasetEntity dataset = dataset(123, "羟基磷灰石粉末性能数据集", 0);
         dataset.setModule(5);
+        DatasetColumnEntity pending = datasetColumn(24, "pending", "varchar");
+        pending.setState(0);
         when(datasetDao.selectOne(any())).thenReturn(dataset);
         when(datasetColumnDao.selectList(any())).thenReturn(List.of(
                 datasetColumn(21, "材料编号", "varchar"),
                 datasetColumn(22, "工艺参数", "text"),
                 datasetColumn(23, "性能结果", "varchar")
+                , pending
         ));
         when(moduleColumnDao.selectList(any())).thenReturn(List.of(
                 moduleColumn(11, "材料编号", "varchar", "Object"),
@@ -313,6 +328,71 @@ class DatasetServiceImpTest {
         assertThat(result.getData().getSections().get(2).getId()).isEqualTo("result");
         assertThat(result.getData().getSections().get(2).getTitle()).isEqualTo("结果区域");
         assertThat(result.getData().getSections().get(2).getFields().get(0).getLabel()).isEqualTo("性能结果");
+    }
+
+    @Test
+    void getPendingDatasetColumnsReturnsOnlyUnauditedColumns() {
+        DatasetColumnEntity approved = datasetColumn(21, "approved", "varchar");
+        DatasetColumnEntity pending = datasetColumn(22, "pending", "varchar");
+        pending.setDatasetName("dataset-a");
+        pending.setState(0);
+        DatasetColumnEntity rejected = datasetColumn(23, "rejected", "varchar");
+        rejected.setState(-1);
+        DatasetColumnEntity deleted = datasetColumn(24, "deleted", "varchar");
+        deleted.setState(0);
+        deleted.setDeleted(1);
+        when(datasetColumnDao.selectList(any())).thenReturn(List.of(approved, pending, rejected, deleted));
+
+        Result<List<DatasetColumnAuditVO>> result = datasetService.getPendingDatasetColumns();
+
+        assertThat(result.getCode()).isEqualTo(0);
+        assertThat(result.getMessage()).isEqualTo("success");
+        assertThat(result.getData()).hasSize(1);
+        assertThat(result.getData().get(0).getId()).isEqualTo(22);
+        assertThat(result.getData().get(0).getColumnName()).isEqualTo("pending");
+        assertThat(result.getData().get(0).getDatasetName()).isEqualTo("dataset-a");
+        assertThat(result.getData().get(0).getState()).isEqualTo(0);
+    }
+
+    @Test
+    void auditDatasetColumnUpdatesApprovedOrRejectedState() {
+        DatasetColumnEntity column = datasetColumn(22, "pending", "varchar");
+        column.setDatasetName("dataset-a");
+        column.setState(0);
+        when(datasetColumnDao.selectById(22)).thenReturn(column);
+        when(datasetColumnDao.update(any(), any())).thenReturn(1);
+        DatasetColumnAuditDTO dto = new DatasetColumnAuditDTO();
+        dto.setColumnId(22);
+        dto.setState(1);
+
+        Result<DatasetColumnAuditVO> result = datasetService.auditDatasetColumn(dto);
+
+        assertThat(result.getCode()).isEqualTo(0);
+        assertThat(result.getMessage()).isEqualTo("success");
+        assertThat(result.getData().getId()).isEqualTo(22);
+        assertThat(result.getData().getState()).isEqualTo(1);
+        verify(datasetColumnDao).update(any(), any());
+    }
+
+    @Test
+    void addDatasetColumnCreatesPendingColumn() {
+        when(datasetDao.selectOne(any())).thenReturn(dataset(123, "dataset-a", 0));
+        when(datasetColumnDao.selectOne(any())).thenReturn(null);
+        when(datasetColumnDao.insert(any(DatasetColumnEntity.class))).thenReturn(1);
+        AddDatasetColumnDTO dto = new AddDatasetColumnDTO();
+        dto.setDatasetName("dataset-a");
+        dto.setColumnName("new-column");
+        dto.setColumnType("varchar");
+
+        Result<String> result = datasetService.addDatasetColumn(dto);
+
+        assertThat(result.getCode()).isEqualTo(200);
+        ArgumentCaptor<DatasetColumnEntity> columnCaptor = ArgumentCaptor.forClass(DatasetColumnEntity.class);
+        verify(datasetColumnDao).insert(columnCaptor.capture());
+        assertThat(columnCaptor.getValue().getDatasetName()).isEqualTo("dataset-a");
+        assertThat(columnCaptor.getValue().getColumnName()).isEqualTo("new-column");
+        assertThat(columnCaptor.getValue().getColumnType()).isEqualTo("varchar");
+        assertThat(columnCaptor.getValue().getState()).isEqualTo(0);
     }
 
     @Test
@@ -526,6 +606,7 @@ class DatasetServiceImpTest {
         DatasetColumnEntity entity = new DatasetColumnEntity();
         entity.setId(id);
         entity.setDeleted(0);
+        entity.setState(1);
         return entity;
     }
 

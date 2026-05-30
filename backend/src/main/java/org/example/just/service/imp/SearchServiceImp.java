@@ -208,6 +208,7 @@ public class SearchServiceImp implements SearchService {
         LambdaQueryWrapper<DatasetColumnEntity> columnWrapper = new LambdaQueryWrapper<>();
         columnWrapper.eq(DatasetColumnEntity::getDatasetName, dataset.getName())
                 .eq(DatasetColumnEntity::getDeleted, 0)
+                .eq(DatasetColumnEntity::getState, 1)
                 .orderByAsc(DatasetColumnEntity::getId);
 
         List<DatasetColumnEntity> columns = DatasetColumnDao.selectList(columnWrapper);

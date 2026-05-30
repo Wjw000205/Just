@@ -6,6 +6,8 @@ import org.example.just.dto.datasetDto.CategoryTreeNode;
 import org.example.just.dto.datasetDto.DatasetTagVO;
 import org.example.just.dto.datasetDto.DatasetOptionsResult;
 import org.example.just.dto.datasetDto.DatasetOptionsVO;
+import org.example.just.dto.datasetDto.DatasetColumnAuditDTO;
+import org.example.just.dto.datasetDto.DatasetColumnAuditVO;
 import org.example.just.dto.datasetDto.CreateDatasetResultVO;
 import org.example.just.dto.datasetDto.DatasetSearchRequest;
 import org.example.just.dto.datasetDto.DatasetSearchResponse;
@@ -207,6 +209,67 @@ class ManuDatasetControllerTest {
         assertThat(dataField.getGenericType().getTypeName())
                 .contains("java.util.List")
                 .contains("ManuDatasetTreeVO");
+    }
+
+    @Test
+    void getPendingDatasetColumnsUsesDocumentedPathAndResponseShape() throws Exception {
+        DatasetService datasetService = mock(DatasetService.class);
+        DatasetColumnAuditVO column = new DatasetColumnAuditVO();
+        column.setId(22);
+        column.setDatasetName("dataset-a");
+        column.setColumnName("pending");
+        column.setColumnType("varchar");
+        column.setState(0);
+        when(datasetService.getPendingDatasetColumns())
+                .thenReturn(Result.success(0, "success", List.of(column)));
+
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(controller(datasetService))
+                .build();
+
+        mockMvc.perform(get("/api/data/columns/pending"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data[0].id").value(22))
+                .andExpect(jsonPath("$.data[0].datasetName").value("dataset-a"))
+                .andExpect(jsonPath("$.data[0].columnName").value("pending"))
+                .andExpect(jsonPath("$.data[0].state").value(0));
+
+        verify(datasetService).getPendingDatasetColumns();
+    }
+
+    @Test
+    void auditDatasetColumnUsesDocumentedPathAndResponseShape() throws Exception {
+        DatasetService datasetService = mock(DatasetService.class);
+        DatasetColumnAuditVO column = new DatasetColumnAuditVO();
+        column.setId(22);
+        column.setDatasetName("dataset-a");
+        column.setColumnName("pending");
+        column.setColumnType("varchar");
+        column.setState(1);
+        when(datasetService.auditDatasetColumn(any()))
+                .thenReturn(Result.success(0, "success", column));
+
+        MockMvc mockMvc = MockMvcBuilders
+                .standaloneSetup(controller(datasetService))
+                .build();
+
+        DatasetColumnAuditDTO body = new DatasetColumnAuditDTO();
+        body.setColumnId(22);
+        body.setState(1);
+
+        mockMvc.perform(post("/api/data/columns/audit")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.id").value(22))
+                .andExpect(jsonPath("$.data.datasetName").value("dataset-a"))
+                .andExpect(jsonPath("$.data.state").value(1));
+
+        verify(datasetService).auditDatasetColumn(any());
     }
 
     @Test
