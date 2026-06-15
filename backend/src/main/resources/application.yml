@@ -20,3 +20,14 @@ server:
 jwt:
   secret: ijxKF0pZmlRqYzcFZbffUIHP0Vn3HNOiWtBVzPCsxww=
   expiration: ${JWT_EXPIRATION:86400000}
+
+oa:
+  auth:
+    enabled: ${OA_AUTH_ENABLED:false}
+    base-url: ${OA_AUTH_BASE_URL:}
+    client-id: ${OA_AUTH_CLIENT_ID:}
+    client-secret: ${OA_AUTH_CLIENT_SECRET:}
+    redirect-uri: ${OA_AUTH_REDIRECT_URI:http://localhost:8083/oa/callback}
+    front-success-uri: ${OA_FRONT_SUCCESS_URI:http://localhost:5173/}
+    state-ttl-seconds: ${OA_AUTH_STATE_TTL_SECONDS:120}
+    state-transport: ${OA_AUTH_STATE_TRANSPORT:redirect-uri}

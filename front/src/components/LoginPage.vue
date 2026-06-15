@@ -55,6 +55,16 @@
             {{ submitting ? '登录中…' : '登录' }}
           </button>
 
+          <div class="login-divider"><span>OA</span></div>
+
+          <button
+            type="button"
+            class="oa-login-btn"
+            @click="handleOaLogin"
+          >
+            OA统一认证登录
+          </button>
+
           <div class="login-extra">
             <button
               type="button"
@@ -110,6 +120,10 @@ function refreshCaptcha() {
 onMounted(() => {
   generateCaptcha()
 })
+
+function handleOaLogin() {
+  window.location.href = '/oa/login'
+}
 
 async function handleLogin() {
   if (!username.value.trim() || !password.value.trim()) {
@@ -328,6 +342,38 @@ async function handleLogin() {
   color: #fff;
   font-size: 15px;
   font-weight: 500;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #9aa7bf;
+  font-size: 12px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: #e3e8f1;
+}
+
+.oa-login-btn {
+  width: 100%;
+  border-radius: 4px;
+  border: 1px solid #1a5ce6;
+  padding: 9px 0;
+  background: #fff;
+  color: #1a5ce6;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.oa-login-btn:hover {
+  background: #f0f6ff;
 }
 
 .login-extra {

@@ -34,6 +34,8 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns(     // 排除不需要拦截的路径
                         "/user/register",  // 用户注册
                         "/user/login",     // 用户登录
+                        "/oa/login",       // OA 统一认证登录入口
+                        "/oa/callback",    // OA 统一认证回调
                         "/swagger-ui/**",  // Swagger UI
                         "/swagger-ui.html",// Swagger 页面
                         "/v3/api-docs/**", // OpenAPI 文档

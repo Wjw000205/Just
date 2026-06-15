@@ -662,12 +662,11 @@ const sysMenuItems = [
 ]
 const systemMgmtPageIds = new Set(sysMenuItems.map((r) => r.page))
 const currentUserName = ref('')
+const authToken = ref(localStorage.getItem('token') || sessionStorage.getItem('token') || '')
 const databaseDetailDataset = ref(null)
 
 const isLoggedIn = computed(() => {
-  const token =
-    localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-  return Boolean(token)
+  return Boolean(authToken.value)
 })
 
 // 判断当前是否在审核管理相关页面
@@ -699,6 +698,8 @@ function openDatabaseDetail(row) {
 }
 
 async function onLoginSuccess(payload) {
+  authToken.value =
+    payload?.token || localStorage.getItem('token') || sessionStorage.getItem('token') || ''
   // 登录表单里的用户名先贴上，避免 JWT 解析/auth 接口稍慢时右上角仍显示「已登录」
   const loginName = payload?.username != null ? String(payload.username).trim() : ''
   if (loginName) {
@@ -728,6 +729,7 @@ function base64UrlDecode(input) {
 function syncUserFromToken() {
   const token =
     localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  authToken.value = token
   if (!token || token.split('.').length !== 3) {
     currentUserName.value = ''
     return
@@ -777,6 +779,7 @@ function handleLogout() {
 
   localStorage.removeItem('token')
   sessionStorage.removeItem('token')
+  authToken.value = ''
   currentUserName.value = ''
   userDropdownOpen.value = false
   goPage('login')
@@ -876,8 +879,35 @@ function onDocClick(e) {
   }
 }
 
+function clearOaQueryParams() {
+  const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`
+  window.history.replaceState({}, document.title, cleanUrl)
+}
+
+function consumeOaLoginResult() {
+  const params = new URLSearchParams(window.location.search)
+  const token = params.get('oaToken') || ''
+  const error = params.get('oaError') || ''
+
+  if (token && token.split('.').length === 3) {
+    localStorage.setItem('token', token)
+    sessionStorage.removeItem('token')
+    authToken.value = token
+    currentPage.value = 'home'
+    clearOaQueryParams()
+    return
+  }
+
+  if (error) {
+    clearOaQueryParams()
+    currentPage.value = 'login'
+    alert(error)
+  }
+}
+
 onMounted(() => {
   document.addEventListener('click', onDocClick)
+  consumeOaLoginResult()
   refreshAuthUser()
 })
 onBeforeUnmount(() => {

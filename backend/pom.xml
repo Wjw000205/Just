@@ -24,6 +24,8 @@
         <minio.version>8.6.0</minio.version>
         <okhttp.version>4.12.0</okhttp.version>
         <jjwt.version>0.13.0</jjwt.version>
+        <hutool.version>5.8.36</hutool.version>
+        <bcprov.version>1.78.1</bcprov.version>
     </properties>
 
     <dependencies>
@@ -129,6 +131,19 @@
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
             <version>5.2.5</version>
+        </dependency>
+
+        <!-- OA 统一认证 PKCE code_challenge 按规范使用 SM4 加密 -->
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-crypto</artifactId>
+            <version>${hutool.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>${bcprov.version}</version>
         </dependency>
     </dependencies>
 
