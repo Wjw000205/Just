@@ -1,0 +1,11 @@
+.DS_Store
+.idea/
+.vscode/
+.tmp/
+node_modules/
+dist/
+target/
+*.iml
+.env
+data/
+

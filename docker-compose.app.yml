@@ -1,0 +1,63 @@
+services:
+  backend:
+    profiles: ["app"]
+    build:
+      context: ./backend
+    environment:
+      RDP_POSTGRES_URL: jdbc:postgresql://postgres:5432/rdp_platform
+      RDP_POSTGRES_USER: rdp
+      RDP_POSTGRES_PASSWORD: ${RDP_STORAGE_PASSWORD:?请在.env中设置RDP_STORAGE_PASSWORD}
+      RDP_MONGODB_URI: mongodb://rdp:${RDP_STORAGE_PASSWORD:?请设置RDP_STORAGE_PASSWORD}@mongodb:27017/rdp_platform?authSource=admin
+      RDP_REDIS_HOST: redis
+      RDP_REDIS_PORT: 6379
+      RDP_REDIS_PASSWORD: ${RDP_STORAGE_PASSWORD:?请设置RDP_STORAGE_PASSWORD}
+      RDP_BOOTSTRAP_ADMIN_PASSWORD: ${RDP_BOOTSTRAP_ADMIN_PASSWORD:?请设置首次管理员密码}
+      RDP_JWT_SECRET: ${RDP_JWT_SECRET:?请设置JWT密钥}
+      RDP_AUDIT_SECRET: ${RDP_AUDIT_SECRET:?请设置审计链密钥}
+      RDP_AUDIT_KEY_ID: ${RDP_AUDIT_KEY_ID:-prod-v1}
+      RDP_AUDIT_PREVIOUS_KEYS: ${RDP_AUDIT_PREVIOUS_KEYS:-}
+      RDP_DATA_ENCRYPTION_KEY: ${RDP_DATA_ENCRYPTION_KEY:?请设置数据加密密钥}
+      RDP_ALLOWED_ORIGINS: http://localhost:${RDP_WEB_PORT:-8088},http://127.0.0.1:${RDP_WEB_PORT:-8088}
+      RDP_SECURE_COOKIES: ${RDP_SECURE_COOKIES:-false}
+      # backend 未暴露宿主端口，入口 Nginx 会覆盖 X-Real-IP，因此可安全采信该头。
+      RDP_TRUST_PROXY_HEADERS: "true"
+      RDP_AUTH_RATE_WINDOW_SECONDS: ${RDP_AUTH_RATE_WINDOW_SECONDS:-600}
+      RDP_CAPTCHA_IP_RATE_LIMIT: ${RDP_CAPTCHA_IP_RATE_LIMIT:-300}
+      RDP_CAPTCHA_GLOBAL_RATE_LIMIT: ${RDP_CAPTCHA_GLOBAL_RATE_LIMIT:-5000}
+      RDP_LOGIN_IP_RATE_LIMIT: ${RDP_LOGIN_IP_RATE_LIMIT:-100}
+      RDP_LOGIN_GLOBAL_RATE_LIMIT: ${RDP_LOGIN_GLOBAL_RATE_LIMIT:-5000}
+      # 自助注册默认关闭；只有接入真实邮件/短信通知适配器后才应在生产开启。
+      RDP_REGISTRATION_ENABLED: ${RDP_REGISTRATION_ENABLED:-false}
+      RDP_REGISTRATION_CHANNELS: ${RDP_REGISTRATION_CHANNELS:-EMAIL,PHONE}
+      RDP_REGISTRATION_NOTIFICATION_ADAPTER: ${RDP_REGISTRATION_NOTIFICATION_ADAPTER:-SIMULATED}
+      RDP_REQUIRE_VIRUS_SCAN: ${RDP_REQUIRE_VIRUS_SCAN:-false}
+      RDP_ARCHIVE_ROOT: /var/lib/rdp/archive
+      RDP_INTEGRATION_DELIVERY_ALLOWED_HOSTS: ${RDP_INTEGRATION_DELIVERY_ALLOWED_HOSTS:-}
+      RDP_INTEGRATION_ALLOW_PRIVATE_DELIVERY_HOSTS: ${RDP_INTEGRATION_ALLOW_PRIVATE_DELIVERY_HOSTS:-false}
+      RDP_INTEGRATION_OAUTH_INTROSPECTION_ALLOWED_HOSTS: ${RDP_INTEGRATION_OAUTH_INTROSPECTION_ALLOWED_HOSTS:-}
+      RDP_INTEGRATION_ALLOW_PRIVATE_OAUTH_HOSTS: ${RDP_INTEGRATION_ALLOW_PRIVATE_OAUTH_HOSTS:-false}
+      RDP_SCHEDULING_POOL_SIZE: ${RDP_SCHEDULING_POOL_SIZE:-6}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=75}
+    volumes:
+      - ${RDP_ARCHIVE_HOST_PATH:-rdp_archive_data}:/var/lib/rdp/archive
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    profiles: ["app"]
+    build:
+      context: ./frontend
+    ports:
+      - "${RDP_WEB_PORT:-8088}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  rdp_archive_data:

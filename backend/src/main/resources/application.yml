@@ -1,0 +1,104 @@
+spring:
+  application:
+    name: rdp-platform
+  datasource:
+    url: ${RDP_POSTGRES_URL:jdbc:postgresql://localhost:5432/rdp_platform}
+    username: ${RDP_POSTGRES_USER:rdp}
+    password: ${RDP_POSTGRES_PASSWORD:rdp_dev_password}
+    hikari:
+      maximum-pool-size: ${RDP_DB_POOL_SIZE:20}
+      minimum-idle: 3
+  flyway:
+    enabled: true
+  data:
+    mongodb:
+      uri: ${RDP_MONGODB_URI:mongodb://rdp:rdp_dev_password@localhost:27017/rdp_platform?authSource=admin}
+    redis:
+      host: ${RDP_REDIS_HOST:localhost}
+      port: ${RDP_REDIS_PORT:6379}
+      password: ${RDP_REDIS_PASSWORD:rdp_dev_password}
+      timeout: 2s
+  servlet:
+    multipart:
+      max-file-size: ${RDP_MAX_FILE_SIZE:512MB}
+      max-request-size: ${RDP_MAX_FILE_SIZE:512MB}
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: Asia/Shanghai
+  task:
+    scheduling:
+      # 慢外部适配器不得独占全平台唯一调度线程，避免拖住设备心跳、生命周期和存储巡检。
+      pool:
+        size: ${RDP_SCHEDULING_POOL_SIZE:6}
+
+server:
+  port: ${RDP_SERVER_PORT:8080}
+  # 仅在受信反向代理会清洗转发头时改为 native/framework，并配置容器可信代理范围。
+  forward-headers-strategy: none
+  error:
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+
+rdp:
+  security:
+    jwt-secret: ${RDP_JWT_SECRET:dev-only-change-this-32-byte-secret-123456}
+    audit-secret: ${RDP_AUDIT_SECRET:dev-only-audit-chain-secret-change-me-123456}
+    audit-key-id: ${RDP_AUDIT_KEY_ID:dev-v1}
+    audit-previous-keys: ${RDP_AUDIT_PREVIOUS_KEYS:}
+    data-encryption-key: ${RDP_DATA_ENCRYPTION_KEY:dev-only-data-encryption-key-change-me-123456}
+    access-token-seconds: ${RDP_ACCESS_TOKEN_SECONDS:7200}
+    refresh-token-seconds: ${RDP_REFRESH_TOKEN_SECONDS:604800}
+    secure-cookies: ${RDP_SECURE_COOKIES:false}
+    # 仅当后端只接受会覆盖 X-Real-IP 的受信代理流量时启用。
+    trust-proxy-headers: ${RDP_TRUST_PROXY_HEADERS:false}
+    # 匿名认证入口采用Redis Lua固定窗口限流；Redis异常时失败关闭。
+    auth-rate-window-seconds: ${RDP_AUTH_RATE_WINDOW_SECONDS:600}
+    captcha-ip-rate-limit: ${RDP_CAPTCHA_IP_RATE_LIMIT:300}
+    captcha-global-rate-limit: ${RDP_CAPTCHA_GLOBAL_RATE_LIMIT:5000}
+    login-ip-rate-limit: ${RDP_LOGIN_IP_RATE_LIMIT:100}
+    login-global-rate-limit: ${RDP_LOGIN_GLOBAL_RATE_LIMIT:5000}
+  cors:
+    allowed-origins: ${RDP_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  registration:
+    # 自助注册为实施方案新增项；甲方未书面确认前默认关闭，避免产生外部通知费用。
+    enabled: ${RDP_REGISTRATION_ENABLED:false}
+    channels: ${RDP_REGISTRATION_CHANNELS:EMAIL,PHONE}
+    # 当前交付内置不泄漏验证码的 SIMULATED 适配器；生产邮件/短信供应商需另行配置实现。
+    notification-adapter: ${RDP_REGISTRATION_NOTIFICATION_ADAPTER:SIMULATED}
+    code-ttl-seconds: ${RDP_REGISTRATION_CODE_TTL_SECONDS:300}
+    resend-seconds: ${RDP_REGISTRATION_RESEND_SECONDS:60}
+    rate-window-seconds: ${RDP_REGISTRATION_RATE_WINDOW_SECONDS:600}
+    target-rate-limit: ${RDP_REGISTRATION_TARGET_RATE_LIMIT:3}
+    ip-rate-limit: ${RDP_REGISTRATION_IP_RATE_LIMIT:10}
+    global-rate-limit: ${RDP_REGISTRATION_GLOBAL_RATE_LIMIT:100}
+  file:
+    require-virus-scan: ${RDP_REQUIRE_VIRUS_SCAN:false}
+    max-size-bytes: ${RDP_MAX_RESUMABLE_FILE_SIZE_BYTES:21474836480}
+    chunk-size-bytes: ${RDP_UPLOAD_CHUNK_SIZE_BYTES:4194304}
+    upload-session-seconds: ${RDP_UPLOAD_SESSION_SECONDS:86400}
+    max-active-sessions-per-user: ${RDP_UPLOAD_MAX_ACTIVE_SESSIONS_PER_USER:8}
+    max-pending-bytes-per-user: ${RDP_UPLOAD_MAX_PENDING_BYTES_PER_USER:42949672960}
+  export:
+    # 附件包先在0700临时目录内完整验真，再开始响应；定时清理崩溃遗留文件。
+    temp-root: ${RDP_EXPORT_TEMP_ROOT:./data/export-temp}
+    max-package-bytes: ${RDP_EXPORT_MAX_PACKAGE_BYTES:5368709120}
+    max-attachments: ${RDP_EXPORT_MAX_ATTACHMENTS:5000}
+    max-concurrent-packages: ${RDP_EXPORT_MAX_CONCURRENT_PACKAGES:2}
+  lifecycle:
+    # 生产环境应挂载到独立备份服务器/NAS；归档清单和SHA-256用于恢复前校验。
+    archive-root: ${RDP_ARCHIVE_ROOT:./data/archive}
+  integration:
+    # HTTP交付默认禁止；必须由部署方明确列出目标主机。生产环境默认拒绝回环、链路本地和RFC1918地址。
+    delivery-allowed-hosts: ${RDP_INTEGRATION_DELIVERY_ALLOWED_HOSTS:}
+    allow-private-delivery-hosts: ${RDP_INTEGRATION_ALLOW_PRIVATE_DELIVERY_HOSTS:false}
+    # OAuth2令牌自省同样使用精确主机白名单；生产默认仅允许HTTPS公网端点。
+    oauth-introspection-allowed-hosts: ${RDP_INTEGRATION_OAUTH_INTROSPECTION_ALLOWED_HOSTS:}
+    allow-private-oauth-hosts: ${RDP_INTEGRATION_ALLOW_PRIVATE_OAUTH_HOSTS:false}

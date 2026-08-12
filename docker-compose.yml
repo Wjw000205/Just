@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: ${RDP_POSTGRES_IMAGE:-m.daocloud.io/docker.io/library/postgres:17-alpine}
+    environment:
+      POSTGRES_DB: rdp_platform
+      POSTGRES_USER: rdp
+      POSTGRES_PASSWORD: ${RDP_STORAGE_PASSWORD:-rdp_dev_password}
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rdp -d rdp_platform"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mongodb:
+    image: ${RDP_MONGO_IMAGE:-m.daocloud.io/docker.io/library/mongo:8.0}
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: rdp
+      MONGO_INITDB_ROOT_PASSWORD: ${RDP_STORAGE_PASSWORD:-rdp_dev_password}
+      MONGO_INITDB_DATABASE: rdp_platform
+      TZ: Asia/Shanghai
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: ${RDP_REDIS_IMAGE:-m.daocloud.io/docker.io/library/redis:8.2-alpine}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${RDP_STORAGE_PASSWORD:-rdp_dev_password}"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${RDP_STORAGE_PASSWORD:-rdp_dev_password}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  redis_data:
