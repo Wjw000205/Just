@@ -16,7 +16,7 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
         if(bootstrapPassword==null||bootstrapPassword.isBlank())return;
         if(!bootstrapPassword.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{12,72}$"))
             throw new IllegalStateException("RDP_BOOTSTRAP_ADMIN_PASSWORD须至少12位并包含大小写字母、数字和特殊字符");
-        jdbc.sql("UPDATE sys_user SET password=:password,status=1,must_change_password=TRUE,bootstrap_pending=FALSE,password_changed_time=now() WHERE username='admin' AND deleted=0 AND status=0 AND must_change_password=TRUE AND bootstrap_pending=TRUE")
+        jdbc.sql("UPDATE sys_user SET password=:password,status=1,must_change_password=FALSE,bootstrap_pending=FALSE,password_changed_time=now() WHERE username='admin' AND deleted=0 AND status=0 AND must_change_password=TRUE AND bootstrap_pending=TRUE")
                 .param("password",passwords.encode(bootstrapPassword)).update();
     }
 }

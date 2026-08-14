@@ -34,7 +34,7 @@ npm ci
 npm run dev
 ```
 
-访问 <http://localhost:5173>。全新数据库首次启动时使用 `admin` 和 `RDP_BOOTSTRAP_ADMIN_PASSWORD` 登录，系统会强制立即修改密码。若数据库已经初始化，重复设置该变量不会重置管理员密码。
+访问 <http://localhost:5173>。全新数据库首次启动时使用 `admin` 和 `RDP_BOOTSTRAP_ADMIN_PASSWORD` 登录；引导管理员可直接进入系统。若数据库已经初始化，重复设置该变量不会重置管理员密码。
 
 ## 容器化启动应用
 
