@@ -34,7 +34,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
-                        .requestMatchers("/api/auth/**", "/actuator/health", "/error").permitAll()
+                        .requestMatchers("/api/auth/**", "/actuator/health", "/error",
+                                "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers(HttpMethod.GET,"/api/datasets/export-download/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/integrations/webhook/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/device-ingest/**").permitAll()
