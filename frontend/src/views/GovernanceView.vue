@@ -85,4 +85,31 @@ watch(()=>route.path,syncRouteTab);onMounted(()=>{syncRouteTab();load()})
  </el-dialog>
 </div></template>
 
-<style scoped>.toolbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px}.tree-box{padding:14px}.tree-row{width:100%;display:flex;align-items:center;justify-content:space-between;padding:8px 4px}.tree-row b,.tree-row small{display:block}.tree-row small{font-size:11px;color:#8190a3;margin-top:3px}.dict-grid{display:grid;grid-template-columns:1fr 1.25fr;gap:14px}.dict-grid .surface{padding:12px}.settings{max-width:760px;padding:24px}.preview{border:1px solid currentColor;margin:12px 0 20px;background:#f6fbfd}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.el-select{width:100%}@media(max-width:800px){.dict-grid,.form-grid{grid-template-columns:1fr}}</style>
+<style scoped>
+.toolbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:12px}
+.tree-box{padding:14px}
+.tree-box :deep(.el-tree){background:transparent;color:var(--tech-text)}
+.tree-box :deep(.el-tree-node__content){height:auto;min-height:58px;padding:0 12px;border-bottom:1px solid rgba(91,184,255,.1)}
+.tree-box :deep(.el-tree-node__content:hover){background:rgba(24,73,99,.28)}
+.tree-box :deep(.el-tree-node:focus>.el-tree-node__content){background:rgba(24,73,99,.34)}
+.tree-box :deep(.el-tree-node__expand-icon){flex:0 0 auto;color:#4d819e}
+.tree-row{width:100%;min-width:0;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:10px 4px}
+.tree-row>span:first-child{min-width:0}
+.tree-row>span:last-child{flex:0 0 auto;display:flex;align-items:center;gap:4px}
+.tree-row b,.tree-row small{display:block}
+.tree-row b{color:#c7ddeb;line-height:1.4}
+.tree-row small{font-size:11px;line-height:1.45;color:#8190a3;margin-top:3px;overflow-wrap:anywhere}
+.dict-grid{display:grid;grid-template-columns:1fr 1.25fr;gap:14px}
+.dict-grid .surface{padding:12px}
+.settings{max-width:760px;padding:24px}
+.preview{border:1px solid currentColor;margin:12px 0 20px;background:#f6fbfd}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.el-select{width:100%}
+@media(max-width:800px){
+  .dict-grid,.form-grid{grid-template-columns:1fr}
+  .tree-box{padding:8px}
+  .tree-box :deep(.el-tree-node__content){padding-right:6px}
+  .tree-row{align-items:flex-start;gap:8px}
+  .tree-row>span:last-child{gap:0}
+}
+</style>

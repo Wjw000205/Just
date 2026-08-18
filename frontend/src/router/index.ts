@@ -8,7 +8,7 @@ const prototype=(path:string,key:string,title:string,group:string):RouteRecordRa
 const children:RouteRecordRaw[]=[
   {path:'',redirect:'/dashboard'},
   {path:'dashboard',component:()=>import('../views/DashboardView.vue'),meta:{title:'数据驾驶舱',group:'01 数据驾驶舱',permission:'dashboard:read'}},
-  {path:'search',component:()=>import('../views/SearchView.vue'),meta:{title:'高级检索'}},
+  {path:'search',component:()=>import('../views/SearchView.vue'),meta:{title:'高级检索',group:'01 数据驾驶舱'}},
 
   prototype('assets/overview','assets-overview','资产总览','02 数据资产中心'),
   prototype('assets/materials','materials','材料库','02 数据资产中心'),
@@ -25,13 +25,14 @@ const children:RouteRecordRaw[]=[
   prototype('research/projects','rnd-projects','研发项目','04 研发数据中心'),
   prototype('research/experiments','experiments','实验管理','04 研发数据中心'),
   prototype('research/process-experiments','process-experiments','工艺实验','04 研发数据中心'),
+  {path:'research/machine-learning',component:()=>import('../views/MachineLearningView.vue'),meta:{title:'机器学习','group':'04 研发数据中心'}},
   prototype('research/simulations','simulations','仿真管理','04 研发数据中心'),
 
   prototype('production/overview','production-overview','生产总览','05 生产数据中心'),
   prototype('production/work-orders','work-orders','工单','05 生产数据中心'),
   prototype('production/operations','operations','工序','05 生产数据中心'),
   prototype('production/batches','production-batches','生产批次','05 生产数据中心'),
-  {path:'production/devices',component:()=>import('../views/DevicesView.vue'),meta:{title:'设备运行',group:'05 生产数据中心',permission:'device:read'}},
+  {path:'production/devices',redirect:'/assets/devices'},
   prototype('production/realtime','realtime','实时数据','05 生产数据中心'),
 
   prototype('quality/inspections','inspections','检验记录','06 质量数据中心'),

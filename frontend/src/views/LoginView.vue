@@ -2,7 +2,7 @@
 import {onMounted,reactive,ref} from 'vue';import {useRouter} from 'vue-router';import {useAuthStore} from '../stores/auth';import {http,dataOf} from '../api/http'
 const router=useRouter(),auth=useAuthStore(),loading=ref(false),captcha=ref(''),registrationEnabled=ref(false);const form=reactive({username:'',password:'',captchaKey:'',captchaCode:''})
 async function loadCaptcha(){const data=dataOf<any>(await http.get('/auth/captcha'));form.captchaKey=data.captchaKey;captcha.value=data.image;form.captchaCode=''}
-async function submit(){loading.value=true;try{await auth.login(form);router.push(auth.user?.mustChangePassword?'/change-password':'/dashboard')}catch{loadCaptcha()}finally{loading.value=false}}
+async function submit(){loading.value=true;try{await auth.login(form);await router.replace(auth.user?.mustChangePassword?'/change-password':'/dashboard')}catch{await loadCaptcha()}finally{loading.value=false}}
 onMounted(async()=>{await loadCaptcha();try{registrationEnabled.value=dataOf<any>(await http.get('/auth/registration-settings')).enabled===true}catch{registrationEnabled.value=false}})
 </script>
 <template><div class="login"><section class="story"><div class="story-inner"><div class="logo">J</div><p class="eyebrow">JUSTEAM DATA FABRIC</p><h1>让研发证据与生产事实<br/>在一条可信链路上汇合</h1><p class="lead">统一管理材料、工艺、设备、产品和质量数据，构建面向医疗器械制造的可追溯数字底座。</p><div class="feature-grid"><div><b>全域数据治理</b><span>模板、数据集与数据域统一控制</span></div><div><b>材料到产品追溯</b><span>正向与反向证据链清晰可查</span></div><div><b>ALCOA+ 审计</b><span>追加写入、签名链与受控更正</span></div><div><b>多源实时采集</b><span>PostgreSQL · MongoDB · Redis</span></div></div></div><div class="orb one"></div><div class="orb two"></div></section>

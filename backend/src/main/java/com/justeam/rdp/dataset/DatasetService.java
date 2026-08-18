@@ -80,14 +80,25 @@ public class DatasetService {
                 """ + " AND " + scopeClause;
         JdbcClient.StatementSpec count = params(jdbc.sql("SELECT count(*) " + where), keyword, category, status, user,sharedIds);
         long total = count.query(Long.class).single();
-        JdbcClient.StatementSpec query = params(jdbc.sql("SELECT d.*,EXISTS(SELECT 1 FROM user_favorite f WHERE f.user_id=:userId AND f.target_type='dataset' AND f.target_id=d.id) AS favorited " + where + " ORDER BY d.updated_time DESC NULLS LAST,d.created_time DESC LIMIT :limit OFFSET :offset"),
+        JdbcClient.StatementSpec query = params(jdbc.sql("""
+                SELECT d.*,
+                EXISTS(SELECT 1 FROM user_favorite f WHERE f.user_id=:userId AND f.target_type='dataset' AND f.target_id=d.id) AS favorited,
+                EXISTS(SELECT 1 FROM file_asset fa WHERE fa.business_type='DATASET' AND fa.business_ref=CAST(d.id AS text) AND fa.status='AVAILABLE') AS has_attachments,
+                EXISTS(SELECT 1 FROM lifecycle_archive_item ai WHERE ai.dataset_id=d.id AND (ai.state IN ('ARCHIVING','ARCHIVED','RESTORING') OR (ai.state='FAILED' AND ai.archive_path IS NOT NULL))) AS has_recoverable_archive
+                """ + where + " ORDER BY d.updated_time DESC NULLS LAST,d.created_time DESC LIMIT :limit OFFSET :offset"),
                 keyword, category, status, user,sharedIds).param("limit", size).param("offset", (page - 1) * size);
         return PageResponse.of(total, page, size, query.query(this::row).list());
     }
 
     public Map<String, Object> get(long id) {
         long userId=CurrentUser.require().id();
-        Map<String, Object> value = jdbc.sql("SELECT d.*,EXISTS(SELECT 1 FROM user_favorite f WHERE f.user_id=:userId AND f.target_type='dataset' AND f.target_id=d.id) AS favorited FROM data_dataset d WHERE d.id=:id AND d.deleted=0")
+        Map<String, Object> value = jdbc.sql("""
+                SELECT d.*,
+                EXISTS(SELECT 1 FROM user_favorite f WHERE f.user_id=:userId AND f.target_type='dataset' AND f.target_id=d.id) AS favorited,
+                EXISTS(SELECT 1 FROM file_asset fa WHERE fa.business_type='DATASET' AND fa.business_ref=CAST(d.id AS text) AND fa.status='AVAILABLE') AS has_attachments,
+                EXISTS(SELECT 1 FROM lifecycle_archive_item ai WHERE ai.dataset_id=d.id AND (ai.state IN ('ARCHIVING','ARCHIVED','RESTORING') OR (ai.state='FAILED' AND ai.archive_path IS NOT NULL))) AS has_recoverable_archive
+                FROM data_dataset d WHERE d.id=:id AND d.deleted=0
+                """)
                 .param("userId",userId).param("id", id).query(this::row).optional().orElseThrow(() -> BusinessException.notFound("数据集不存在"));
         long scopeId = ((Number) value.get("dataScopeId")).longValue();
         UserPrincipal user = CurrentUser.require();
@@ -180,8 +191,8 @@ public class DatasetService {
         Map<String, Object> existing = get(id);
         requireOwnerOrAdmin(existing);
         ensureNoPendingCreates(id);
-        if (((Number) existing.get("dataCount")).longValue() > 0||hasRecoverableArchive(id)) {
-            throw BusinessException.badRequest("数据集存在在线或可恢复归档记录，不能删除");
+        if (((Number) existing.get("dataCount")).longValue() > 0||hasRecoverableArchive(id)||hasAttachments(id)) {
+            throw BusinessException.badRequest("数据集存在在线记录、可恢复归档或附件，不能删除");
         }
         jdbc.sql("UPDATE data_dataset SET deleted=1,updated_time=now() WHERE id=:id").param("id", id).update();
         Map<String,Object> deleted=new LinkedHashMap<>(auditSnapshot(existing));deleted.put("deleted",true);
@@ -524,6 +535,7 @@ public class DatasetService {
         value.put("version", rs.getInt("version")); value.put("templateId", rs.getObject("template_id"));
         value.put("templateVersion", rs.getObject("template_version")); value.put("provisionStatus", rs.getString("provision_status"));
         value.put("favorited", rs.getBoolean("favorited"));
+        value.put("hasAttachments", rs.getBoolean("has_attachments")); value.put("hasRecoverableArchive", rs.getBoolean("has_recoverable_archive"));
         value.put("createdTime", rs.getObject("created_time")); value.put("updatedTime", rs.getObject("updated_time"));
         return value;
     }

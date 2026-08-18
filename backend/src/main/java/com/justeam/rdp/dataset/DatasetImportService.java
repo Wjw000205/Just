@@ -7,17 +7,22 @@ import com.justeam.rdp.common.JsonSupport;
 import com.justeam.rdp.security.CurrentUser;
 import com.justeam.rdp.security.UserPrincipal;
 import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -50,6 +55,37 @@ public class DatasetImportService {
             int failures=rows.size()-success;String status=failures==0?"COMPLETED":success==0?"FAILED":"PARTIAL";
             finish(jobId,status,rows.size(),success,failures);audit.record("IMPORT","DATASET","批量导入数据集",Map.of("datasetId",datasetId,"jobId",jobId,"fileName",name,"total",rows.size(),"success",success,"failure",failures));return job(jobId);
         }catch(Exception ex){finish(jobId,"FAILED",0,0,1);recordError(jobId,0,Map.of("fileName",name),message(ex));if(ex instanceof BusinessException business)throw business;throw BusinessException.badRequest("导入文件解析失败："+message(ex));}
+    }
+
+    public void writeTemplate(Map<String,Object> dataset,String format,OutputStream output)throws IOException{
+        List<Map<String,Object>> definitions=fields(dataset);String normalized=format.toLowerCase(Locale.ROOT);
+        switch(normalized){
+            case "csv"->writeCsvTemplate(definitions,output);
+            case "json"->writeJsonTemplate(definitions,output);
+            case "xlsx"->writeXlsxTemplate(definitions,output);
+            default->throw BusinessException.badRequest("导入模板仅支持 csv、json、xlsx");
+        }
+    }
+
+    private void writeCsvTemplate(List<Map<String,Object>> definitions,OutputStream output)throws IOException{
+        String[] headers=definitions.stream().map(field->String.valueOf(field.get("key"))).toArray(String[]::new);
+        try(var writer=new OutputStreamWriter(output,StandardCharsets.UTF_8);var printer=new CSVPrinter(writer,CSVFormat.DEFAULT.builder().setHeader(headers).get())){printer.flush();}
+    }
+
+    private void writeJsonTemplate(List<Map<String,Object>> definitions,OutputStream output)throws IOException{
+        List<Map<String,Object>> descriptions=definitions.stream().map(field->{Map<String,Object> item=new LinkedHashMap<>();item.put("key",field.get("key"));item.put("label",field.get("label"));item.put("type",field.get("type"));item.put("required",Boolean.TRUE.equals(field.get("required")));if(field.get("unit")!=null)item.put("unit",field.get("unit"));if(field.get("options")!=null)item.put("options",field.get("options"));return item;}).toList();
+        Map<String,Object> template=new LinkedHashMap<>();template.put("records",List.of());template.put("fieldDefinitions",descriptions);json.mapper().writerWithDefaultPrettyPrinter().writeValue(output,template);
+    }
+
+    private void writeXlsxTemplate(List<Map<String,Object>> definitions,OutputStream output)throws IOException{
+        try(var workbook=new XSSFWorkbook()){
+            var dataSheet=workbook.createSheet("数据");Row header=dataSheet.createRow(0);
+            for(int i=0;i<definitions.size();i++){header.createCell(i).setCellValue(String.valueOf(definitions.get(i).get("key")));dataSheet.setColumnWidth(i,Math.min(40,Math.max(14,String.valueOf(definitions.get(i).get("label")).length()*2+6))*256);}
+            dataSheet.createFreezePane(0,1);
+            var guide=workbook.createSheet("字段说明");String[] guideHeaders={"字段 Key","字段名称","数据类型","是否必填","单位","可选值"};Row guideHeader=guide.createRow(0);for(int i=0;i<guideHeaders.length;i++)guideHeader.createCell(i).setCellValue(guideHeaders[i]);
+            for(int rowIndex=0;rowIndex<definitions.size();rowIndex++){Map<String,Object> field=definitions.get(rowIndex);Row row=guide.createRow(rowIndex+1);row.createCell(0).setCellValue(String.valueOf(field.get("key")));row.createCell(1).setCellValue(String.valueOf(field.get("label")));row.createCell(2).setCellValue(String.valueOf(field.get("type")));row.createCell(3).setCellValue(Boolean.TRUE.equals(field.get("required"))?"是":"否");row.createCell(4).setCellValue(field.get("unit")==null?"":String.valueOf(field.get("unit")));row.createCell(5).setCellValue(field.get("options")==null?"":String.valueOf(field.get("options")));}
+            for(int i=0;i<guideHeaders.length;i++)guide.setColumnWidth(i,(i==5?36:18)*256);guide.createFreezePane(0,1);workbook.write(output);
+        }
     }
 
     public List<Map<String,Object>> jobs(long datasetId){Map<String,Object> dataset=datasets.get(datasetId);requireImportVisibility(dataset);return jdbc.sql("SELECT * FROM data_import_job WHERE dataset_id=:dataset ORDER BY started_time DESC LIMIT 100").param("dataset",datasetId).query((rs,n)->{Map<String,Object> v=new LinkedHashMap<>();v.put("id",rs.getLong("id"));v.put("fileName",rs.getString("file_name"));v.put("fileType",rs.getString("file_type"));v.put("status",rs.getString("status"));v.put("totalCount",rs.getInt("total_count"));v.put("successCount",rs.getInt("success_count"));v.put("failureCount",rs.getInt("failure_count"));v.put("createdByName",rs.getString("created_by_name"));v.put("startedTime",rs.getObject("started_time"));v.put("finishedTime",rs.getObject("finished_time"));return v;}).list();}

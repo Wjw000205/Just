@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {computed,onMounted,ref} from 'vue'
 import {ElMessage} from 'element-plus'
+import {ArrowDown} from '@element-plus/icons-vue'
 import {http,dataOf} from '../api/http'
 import {stepUpHeader,withStepUp} from '../api/stepUp'
 import {useAuthStore} from '../stores/auth'
@@ -24,7 +25,7 @@ onMounted(load)
 
 <template>
  <div class="page">
-  <div class="page-head"><div><h1 class="page-title">审计中心</h1><div class="page-subtitle">不可篡改的追加写入日志与 HMAC 摘要链，共 {{total}} 条事件</div></div><div class="head-actions"><el-dropdown v-if="canExport" @command="exportFile"><el-button type="success" plain :loading="exporting">导出当前筛选<el-icon class="el-icon--right"><arrow-down/></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="csv">CSV</el-dropdown-item><el-dropdown-item command="xlsx">Excel</el-dropdown-item></el-dropdown-menu></template></el-dropdown><el-button type="primary" plain :loading="verifying" @click="check">验证审计链</el-button></div></div>
+  <div class="page-head"><div><h1 class="page-title">审计中心</h1><div class="page-subtitle">不可篡改的追加写入日志与 HMAC 摘要链，共 {{total}} 条事件</div></div><div class="head-actions"><el-dropdown v-if="canExport" @command="exportFile"><el-button type="success" plain :loading="exporting">导出当前筛选<el-icon class="el-icon--right"><ArrowDown/></el-icon></el-button><template #dropdown><el-dropdown-menu><el-dropdown-item command="csv">CSV</el-dropdown-item><el-dropdown-item command="xlsx">Excel</el-dropdown-item></el-dropdown-menu></template></el-dropdown><el-button type="primary" plain :loading="verifying" @click="check">验证审计链</el-button></div></div>
   <el-alert v-if="verify" :type="verify.valid?'success':'error'" :title="verify.message" :description="`已验证 ${verify.verifiedRecords} 条记录${verify.failureId?'，失败记录 #'+verify.failureId:''}`" show-icon class="verify"/>
   <div class="surface filters">
    <el-select v-model="module" placeholder="全部模块" clearable><el-option v-for="m in modules" :key="m" :value="m"/></el-select>

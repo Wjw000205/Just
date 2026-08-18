@@ -159,6 +159,18 @@ public class DatasetController {
     @PreAuthorize("hasAuthority('dataset:import')")
     public ApiResponse<Map<String,Object>> importFile(@PathVariable long id,@RequestPart org.springframework.web.multipart.MultipartFile file){return ApiResponse.ok("导入作业已完成",imports.importFile(id,file));}
 
+    @GetMapping("/{id}/imports/template")
+    @PreAuthorize("hasAuthority('dataset:import')")
+    public void importTemplate(@PathVariable long id,@RequestParam(defaultValue="xlsx")String format,
+                               jakarta.servlet.http.HttpServletResponse response)throws java.io.IOException{
+        Map<String,Object> dataset=service.get(id);service.requireWriteAccess(dataset);String normalized=format.toLowerCase(java.util.Locale.ROOT);
+        if(!java.util.Set.of("csv","json","xlsx").contains(normalized))throw com.justeam.rdp.common.BusinessException.badRequest("导入模板仅支持 csv、json、xlsx");
+        String filename=String.valueOf(dataset.get("name"))+"-导入模板."+normalized;
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename*=UTF-8''"+URLEncoder.encode(filename,StandardCharsets.UTF_8));noStore(response);
+        response.setContentType(switch(normalized){case "json"->"application/json;charset=UTF-8";case "xlsx"->"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";default->"text/csv;charset=UTF-8";});
+        imports.writeTemplate(dataset,normalized,response.getOutputStream());
+    }
+
     @GetMapping("/{id}/imports")
     @PreAuthorize("hasAuthority('dataset:read')")
     public ApiResponse<List<Map<String,Object>>> importJobs(@PathVariable long id){return ApiResponse.ok(imports.jobs(id));}

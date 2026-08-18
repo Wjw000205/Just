@@ -33,11 +33,12 @@ public class TemplateService {
     }
 
     public PageResponse<Map<String, Object>> list(String keyword, String type, Boolean published, String visibility,
-                                                  Boolean enabled, Boolean usable, int pageNum, int pageSize) {
+                                                  Boolean enabled, Boolean usable, String view, int pageNum, int pageSize) {
         UserPrincipal user = CurrentUser.require();
         int size = Math.max(1, Math.min(pageSize, 100));
         int page = Math.max(1, pageNum);
         boolean canAudit = user.admin() || user.permissions().contains("template:audit");
+        String normalizedView=normalizeListView(view);
         String scopeClause = user.admin() ? "TRUE" : user.assignedScopes().isEmpty()
                 ? "(t.creator_id=:userId OR (t.visibility='PUBLIC' AND t.published=TRUE AND t.enabled=TRUE))"
                 : "(t.creator_id=:userId OR (t.visibility='PUBLIC' AND t.published=TRUE AND t.enabled=TRUE)"
@@ -53,6 +54,13 @@ public class TemplateService {
         if (Boolean.TRUE.equals(usable)) {
             where += " AND t.type='template' AND t.enabled=TRUE AND ((t.visibility='PUBLIC' AND t.published=TRUE) OR (t.visibility='PRIVATE' AND t.creator_id=:userId))";
         }
+        if("MINE".equals(normalizedView))where+=" AND t.creator_id=:userId";
+        else if("FAVORITES".equals(normalizedView))where+=" AND EXISTS(SELECT 1 FROM user_favorite vf WHERE vf.user_id=:userId AND vf.target_type='template' AND vf.target_id=t.id)";
+        else if("REVIEW".equals(normalizedView)){
+            if(!canAudit||!user.admin()&&user.assignedScopes().isEmpty())where+=" AND FALSE";
+            else where+=" AND t.visibility='PUBLIC' AND t.audit_status=0 AND t.creator_id<>:userId"
+                    +(user.admin()?"":" AND t.data_scope_id IN (:scopes)");
+        }
         JdbcClient.StatementSpec countSpec = params(jdbc.sql("SELECT count(*) " + where), keyword, type, published,
                 visibility, enabled, user, canAudit);
         long total = countSpec.query(Long.class).single();
@@ -61,7 +69,9 @@ public class TemplateService {
                 """ + where + " ORDER BY t.created_time DESC LIMIT :limit OFFSET :offset"), keyword, type, published,
                 visibility, enabled, user, canAudit)
                 .param("limit", size).param("offset", (page - 1) * size);
-        return PageResponse.of(total, page, size, listSpec.query(this::row).list());
+        List<Map<String,Object>> values=listSpec.query(this::row).list().stream()
+                .map(value->withAuditCapability(value,user)).toList();
+        return PageResponse.of(total, page, size, values);
     }
 
     public Map<String, Object> get(long id) {
@@ -85,7 +95,7 @@ public class TemplateService {
         if (!user.admin() && creatorId != user.id() && !publicCatalog && !auditorAccess) {
             throw BusinessException.forbidden("无权访问该模板");
         }
-        return value;
+        return withAuditCapability(value,user);
     }
 
     @Transactional
@@ -354,6 +364,26 @@ public class TemplateService {
 
     private boolean pending(Map<String, Object> existing) {
         return existing.get("auditStatus") instanceof Number value && value.intValue() == 0;
+    }
+
+    private String normalizeListView(String view){
+        if(view==null||view.isBlank())return"ALL";
+        String value=view.trim().toUpperCase(java.util.Locale.ROOT);
+        if(!java.util.Set.of("ALL","REVIEW","MINE","FAVORITES").contains(value))throw BusinessException.badRequest("模板视图不正确");
+        return value;
+    }
+
+    private Map<String,Object> withAuditCapability(Map<String,Object> value,UserPrincipal user){
+        long creatorId=((Number)value.get("creatorId")).longValue();
+        long scopeId=((Number)value.get("dataScopeId")).longValue();
+        String reason=null;
+        if(!pending(value))reason="模板当前不是待审核状态";
+        else if(creatorId==user.id())reason="为确保职责分离，创建者不能审核自己的模板";
+        else if(!user.admin()&&!user.permissions().contains("template:audit"))reason="当前账号未授予模板审核权限";
+        else if(!scopes.canWriteAccess(scopeId))reason="当前账号未直接授权该模板所属数据域 #"+scopeId;
+        value.put("canAudit",reason==null);
+        value.put("auditRestriction",reason);
+        return value;
     }
 
     private Map<String,Object> auditSnapshot(Map<String,Object> source){Map<String,Object> value=new LinkedHashMap<>();

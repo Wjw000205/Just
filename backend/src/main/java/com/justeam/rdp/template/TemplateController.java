@@ -32,9 +32,10 @@ public class TemplateController {
             @RequestParam(required = false) String visibility,
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(required = false) Boolean usable,
+            @RequestParam(required = false) String view,
             @RequestParam(defaultValue = "1") int pageNum, @RequestParam(defaultValue = "10") int pageSize) {
         return ApiResponse.ok(service.list(blankToNull(keyword), blankToNull(type), published,
-                blankToNull(visibility), enabled, usable, pageNum, pageSize));
+                blankToNull(visibility), enabled, usable, blankToNull(view), pageNum, pageSize));
     }
 
     @GetMapping("/{id}")
@@ -82,13 +83,13 @@ public class TemplateController {
     public ApiResponse<Void> publish(@PathVariable long id) { service.publish(id); return ApiResponse.ok("已提交审核", null); }
 
     @PostMapping("/{id}/audit")
-    @PreAuthorize("hasAuthority('template:audit')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('template:audit')")
     public ApiResponse<Void> audit(@PathVariable long id, @RequestBody AuditBody body) {
         service.audit(id, body.auditStatus(), body.auditComment()); return ApiResponse.ok("审核完成", null);
     }
 
     @PutMapping("/{id}/enabled")
-    @PreAuthorize("hasAuthority('template:audit')")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('template:audit')")
     public ApiResponse<Void> enabled(@PathVariable long id, @Valid @RequestBody EnabledBody body) {
         service.setEnabled(id, body.enabled(), body.reason());
         return ApiResponse.ok(body.enabled() ? "模板已重新启用" : "模板已停用", null);

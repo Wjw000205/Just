@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import {ref,computed,onMounted,onUnmounted,watch} from 'vue';import {useRoute,useRouter} from 'vue-router';import {useAuthStore} from '../stores/auth';import {http,dataOf} from '../api/http'
-const route=useRoute(),router=useRouter(),auth=useAuthStore(),collapsed=ref(false),search=ref(''),results=ref<any|null>(null),searching=ref(false),healthy=ref(false),openGroups=ref<string[]>([]);let healthTimer=0
+const route=useRoute(),router=useRouter(),auth=useAuthStore(),collapsed=ref(false),search=ref(''),results=ref<any|null>(null),searching=ref(false),healthy=ref(false),openGroups=ref<string[]>([]);let healthTimer=0,searchTimer=0,searchRequest=0
 const searchGroups=computed(()=>[{key:'templates',label:'模板',show:auth.can('template:read')},{key:'datasets',label:'数据集',show:auth.can('dataset:read')},{key:'entities',label:'追溯实体',show:auth.can('trace:read')}].filter(group=>group.show))
+const searchResultCount=computed(()=>searchGroups.value.reduce((total,group)=>total+(results.value?.[group.key]?.length||0),0))
 const groups=computed(()=>[
  {code:'01',label:'数据驾驶舱',mark:'◫',path:'/dashboard',show:auth.can('dashboard:read'),children:[]},
  {code:'02',label:'数据资产中心',mark:'▦',show:true,children:[
@@ -9,8 +10,8 @@ const groups=computed(()=>[
   ['/assets/devices','设备数据库',auth.can('device:read')],['/assets/files','文件资料库',auth.can('file:read')],['/assets/datasets','通用数据集',auth.can('dataset:read')]
  ]},
  {code:'03',label:'全链路追溯',mark:'⌘',show:auth.can('trace:read'),children:[['/trace/search','追溯搜索',true],['/trace/history','追溯记录',true]]},
- {code:'04',label:'研发数据中心',mark:'⌬',show:true,children:[['/research/projects','研发项目',true],['/research/experiments','实验管理',true],['/research/process-experiments','工艺实验',true],['/research/simulations','仿真管理',true]]},
- {code:'05',label:'生产数据中心',mark:'⌁',show:true,children:[['/production/overview','生产总览',true],['/production/work-orders','工单',true],['/production/operations','工序',true],['/production/batches','生产批次',true],['/production/devices','设备运行',auth.can('device:read')],['/production/realtime','实时数据',true]]},
+ {code:'04',label:'研发数据中心',mark:'⌬',show:true,children:[['/research/projects','研发项目',true],['/research/experiments','实验管理',true],['/research/process-experiments','工艺实验',true],['/research/machine-learning','机器学习',true],['/research/simulations','仿真管理',true]]},
+ {code:'05',label:'生产数据中心',mark:'⌁',show:true,children:[['/production/overview','生产总览',true],['/production/work-orders','工单',true],['/production/operations','工序',true],['/production/batches','生产批次',true],['/production/realtime','实时数据',true]]},
  {code:'06',label:'质量数据中心',mark:'◎',show:true,children:[['/quality/inspections','检验记录',true],['/quality/ct-metallography','CT / 金相',true],['/quality/hardness-thickness','硬度 / 厚度',true],['/quality/fatigue','疲劳试验',true],['/quality/defects','缺陷分析',true]]},
  {code:'07',label:'数据分析',mark:'⌁',show:true,children:[['/analytics/process','工艺对比',true],['/analytics/performance','性能对比',true],['/analytics/batches','批次对比',true],['/analytics/correlation','参数相关性',true],['/analytics/trends','趋势分析',true]]},
  {code:'08',label:'数据集成中心',mark:'⇄',show:auth.can('integration:read')||auth.can('integration:manage'),platform:true,children:[['/integration/overview','集成总览',true],['/integration/systems','外部系统',true],['/integration/mappings','API 与字段映射',true],['/integration/tasks','同步任务',true],['/integration/logs','同步日志',true],['/integration/exceptions','异常队列',true]]},
@@ -19,13 +20,15 @@ const groups=computed(()=>[
 ].filter(group=>group.show).map(group=>({...group,children:(group.children||[]).filter((item:any)=>item[2]).map((item:any)=>({path:item[0],label:item[1]}))})))
 const currentGroup=computed(()=>String(route.meta.group||''))
 function toggleGroup(code:string){if(collapsed.value){const group=groups.value.find(item=>item.code===code);if(group?.children?.[0])router.push(group.children[0].path);return}openGroups.value=openGroups.value.includes(code)?openGroups.value.filter(item=>item!==code):[...openGroups.value,code]}
-async function globalSearch(){if(search.value.trim().length<2)return;searching.value=true;try{results.value=dataOf(await http.get('/dashboard/search',{params:{keyword:search.value}}))}finally{searching.value=false}}
+function closeSearchResults(){searchRequest++;results.value=null;searching.value=false}
+async function globalSearch(){window.clearTimeout(searchTimer);const keyword=search.value.trim();if(keyword.length<2){closeSearchResults();return}const request=++searchRequest;searching.value=true;try{const data=dataOf(await http.get('/dashboard/search',{params:{keyword}}));if(request===searchRequest&&search.value.trim()===keyword)results.value=data}catch{if(request===searchRequest)results.value=null}finally{if(request===searchRequest)searching.value=false}}
 function openResult(group:string,id:number){results.value=null;search.value='';if(group==='templates')router.push({path:'/templates',query:{focus:String(id)}});else if(group==='datasets')router.push(`/datasets/${id}`);else router.push({path:'/trace',query:{root:String(id)}})}
 async function logout(){await auth.logout();router.push('/login')}
 async function checkHealth(){try{const response=await fetch('/actuator/health');healthy.value=response.ok&&(await response.json()).status==='UP'}catch{healthy.value=false}}
 async function loadNavigation(){try{await http.get('/governance/navigation');const config=dataOf<any>(await http.get('/governance/ui-config'));const root=document.documentElement;root.style.setProperty('--rdp-primary',config.primaryColor);root.style.setProperty('--rdp-font-size',`${config.fontSize}px`);root.style.setProperty('--rdp-radius',`${config.borderRadius}px`);root.style.setProperty('--rdp-spacing',`${config.contentSpacing}px`)}catch{/* 使用前端十模块信息架构，不影响现有权限接口 */}}
 watch(currentGroup,value=>{const code=value.slice(0,2);if(code&&!openGroups.value.includes(code))openGroups.value=[...openGroups.value,code]},{immediate:true})
-onMounted(()=>{loadNavigation();checkHealth();healthTimer=window.setInterval(checkHealth,30000)});onUnmounted(()=>clearInterval(healthTimer))
+watch(search,value=>{window.clearTimeout(searchTimer);if(value.trim().length<2){closeSearchResults();return}searchTimer=window.setTimeout(globalSearch,300)})
+onMounted(()=>{loadNavigation();checkHealth();healthTimer=window.setInterval(checkHealth,30000)});onUnmounted(()=>{clearInterval(healthTimer);window.clearTimeout(searchTimer);searchRequest++})
 </script>
 <template><div class="shell" :class="{collapsed}">
  <aside class="sidebar"><div class="sidebar-beam"></div><div class="brand"><div class="brand-glyph"><span>J</span></div><div v-if="!collapsed"><strong>嘉思特数据平台</strong><small>R&D · PRODUCTION</small></div></div>
@@ -33,8 +36,8 @@ onMounted(()=>{loadNavigation();checkHealth();healthTimer=window.setInterval(che
   <button class="collapse" @click="collapsed=!collapsed">{{collapsed?'›':'‹ 收起导航'}}</button>
  </aside>
  <main><header class="topbar"><div class="crumb"><i></i><span>研发与生产大数据平台</span><template v-if="route.meta.group"><b>/</b><span>{{route.meta.group}}</span></template><b>/</b><strong>{{route.meta.title}}</strong></div>
-  <div class="top-actions"><el-popover :visible="!!results" placement="bottom" :width="430"><template #reference><el-input v-model="search" class="global-search" placeholder="搜索模板、数据集、批次…" clearable @keyup.enter="globalSearch" @clear="results=null"><template #prefix>⌕</template></el-input></template>
-   <div class="search-results" v-loading="searching"><template v-if="results"><div v-for="group in searchGroups" :key="group.key"><h4>{{group.label}}</h4><button v-for="r in results[group.key]||[]" :key="r.id" class="result-row" @click="openResult(group.key,r.id)"><b>{{r.name}}</b><small>{{r.secondary}}</small></button></div><button class="close-results" @click="results=null">关闭</button></template></div>
+  <div class="top-actions"><el-popover :visible="!!results" placement="bottom" :width="430"><template #reference><el-input v-model="search" class="global-search" placeholder="输入至少2个字符，搜索模板、数据集、追溯实体…" clearable @keyup.enter="globalSearch" @clear="closeSearchResults"><template #prefix>⌕</template></el-input></template>
+   <div class="search-results" v-loading="searching"><template v-if="results"><div v-for="group in searchGroups" v-show="(results[group.key]||[]).length" :key="group.key"><h4>{{group.label}}</h4><button v-for="r in results[group.key]||[]" :key="r.id" class="result-row" @click="openResult(group.key,r.id)"><b>{{r.name}}</b><small>{{r.secondary}}</small></button></div><el-empty v-if="!searching&&searchResultCount===0" description="没有找到当前账号可访问的结果" :image-size="48"/><button class="close-results" @click="closeSearchResults">关闭</button></template></div>
   </el-popover><span class="health" :class="{down:!healthy}"><i></i> {{healthy?'服务正常':'服务异常'}}</span><el-dropdown><div class="avatar">{{auth.user?.realName.slice(0,1)}}</div><template #dropdown><el-dropdown-menu><el-dropdown-item disabled>{{auth.user?.realName}} · {{auth.user?.roles.join(',')}}</el-dropdown-item><el-dropdown-item divided @click="router.push('/profile')">个人中心</el-dropdown-item><el-dropdown-item @click="logout">安全退出</el-dropdown-item></el-dropdown-menu></template></el-dropdown></div>
  </header><router-view/></main>
 </div></template>
