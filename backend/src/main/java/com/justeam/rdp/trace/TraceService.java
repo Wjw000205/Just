@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -74,7 +75,8 @@ public class TraceService {
                 INSERT INTO trace_relation(from_entity_id,to_entity_id,relation_type,properties,effective_time,created_by)
                 VALUES (:fromId,:toId,:type,CAST(:properties AS jsonb),COALESCE(:effectiveTime,now()),:userId) RETURNING id
                 """).param("fromId", body.fromEntityId()).param("toId", body.toEntityId()).param("type", body.relationType())
-                .param("properties", json.write(body.properties())).param("effectiveTime", body.effectiveTime())
+                .param("properties", json.write(body.properties()))
+                .param("effectiveTime", body.effectiveTime() == null ? null : Timestamp.from(body.effectiveTime()))
                 .param("userId", CurrentUser.require().id()).query(Long.class).single();
         audit.record("CREATE_RELATION", "TRACE", "创建追溯关系", Map.of("relationId", id, "from", body.fromEntityId(), "to", body.toEntityId(), "type", body.relationType()));
         return id;
