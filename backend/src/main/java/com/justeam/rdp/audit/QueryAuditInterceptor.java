@@ -42,5 +42,5 @@ public class QueryAuditInterceptor implements HandlerInterceptor {
     }
 
     private boolean skip(String path){return path.startsWith("/api/audits")||path.equals("/api/dashboard/search")||path.contains("/export");}
-    private String module(String path){String[] parts=path.split("/");String value=parts.length>2?parts[2]:"SYSTEM";return switch(value){case "datasets"->"DATASET";case "templates"->"TEMPLATE";case "trace"->"TRACE";case "devices"->"DEVICE";case "files"->"FILE";case "integrations"->"INTEGRATION";case "dashboard"->"DASHBOARD";case "admin"->"ADMIN";case "user"->"USER";default->value.toUpperCase(Locale.ROOT);};}
+    private String module(String path){String[] parts=path.split("/");String value=parts.length>2?parts[2]:"SYSTEM";return switch(value){case "datasets"->"DATASET";case "templates"->"TEMPLATE";case "trace"->"TRACE";case "business"->"BUSINESS";case "devices"->"DEVICE";case "files"->"FILE";case "integrations"->"INTEGRATION";case "dashboard"->"DASHBOARD";case "admin"->"ADMIN";case "user"->"USER";default->value.toUpperCase(Locale.ROOT);};}
 }

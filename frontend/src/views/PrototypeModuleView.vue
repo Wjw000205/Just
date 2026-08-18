@@ -1,126 +1,2916 @@
 <script setup lang="ts">
-import {computed,ref,watch} from 'vue'
-import {useRoute,useRouter} from 'vue-router'
-import {ElMessage} from 'element-plus'
-import {prototypeCatalog} from './prototypeCatalog'
+import { computed, reactive, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
+import { prototypeCatalog } from "./prototypeCatalog";
+import { dataOf, http } from "../api/http";
+import { useAuthStore } from "../stores/auth";
 
-const route=useRoute(),router=useRouter(),keyword=ref(''),activeTab=ref(''),selected=ref<Record<string,string>|null>(null),dialog=ref(false)
-const pageKey=computed(()=>String(route.meta.prototype||route.params.module||''))
-const page=computed(()=>prototypeCatalog[pageKey.value]||prototypeCatalog['assets-overview'])
-const filteredRows=computed(()=>{const value=keyword.value.trim().toLowerCase();return value?page.value.rows.filter(row=>Object.values(row).some(item=>String(item).toLowerCase().includes(value))):page.value.rows})
-const maxSeries=computed(()=>Math.max(...page.value.series,1))
-const sourceLabel=computed(()=>page.value.source==='HYBRID'?'现有能力 + 演示视图':page.value.source==='PENDING'?'待外部系统接入':'前端演示数据')
-const sourceTone=computed(()=>page.value.source==='HYBRID'?'live':page.value.source==='PENDING'?'pending':'demo')
-const isIntegration=computed(()=>pageKey.value.includes('integration')||pageKey.value.startsWith('sync'))
-const isProductionOverview=computed(()=>pageKey.value==='production-overview')
-const isQualityLab=computed(()=>['ct-metallography','fatigue'].includes(pageKey.value))
-const analysisKind=computed(()=>pageKey.value==='correlation'?'correlation':pageKey.value==='defects'?'pareto':pageKey.value==='hardness-thickness'?'heatmap':pageKey.value==='trend-analysis'?'trend':'compare')
-const assetDomains=[{name:'材料',value:'2,486',quality:96,route:'/assets/materials'},{name:'工艺',value:'864',quality:91,route:'/assets/processes'},{name:'产品',value:'1,208',quality:94,route:'/assets/products'},{name:'性能',value:'18,642',quality:88,route:'/assets/performance'},{name:'设备',value:'326',quality:97,route:'/assets/devices'},{name:'文件',value:'12,840',quality:82,route:'/assets/files'}]
-const productionDomains=[{name:'工单',value:'36',quality:86,route:'/production/work-orders'},{name:'工序',value:'128',quality:92,route:'/production/operations'},{name:'生产批次',value:'18',quality:88,route:'/production/batches'},{name:'设备运行',value:'42 / 45',quality:93,route:'/production/devices'},{name:'实时采集',value:'1,842/s',quality:97,route:'/production/realtime'},{name:'质量放行',value:'94.6%',quality:95,route:'/quality/inspections'}]
-const integrationDomains=[{name:'MES',value:'328k',quality:98,route:'/integration/systems'},{name:'ERP',value:'86k',quality:96,route:'/integration/systems'},{name:'PLM',value:'42k',quality:97,route:'/integration/systems'},{name:'IoT',value:'1,842/s',quality:94,route:'/integration/systems'},{name:'API 映射',value:'126',quality:91,route:'/integration/mappings'},{name:'异常队列',value:'12',quality:88,route:'/integration/exceptions'}]
-const overviewDomains=computed(()=>isIntegration.value?integrationDomains:isProductionOverview.value?productionDomains:assetDomains)
-const sources=[{name:'平台录入',value:32,color:'#39d9f2'},{name:'MES',value:27,color:'#4f82ff'},{name:'IoT / 设备',value:19,color:'#43d6a9'},{name:'PLM / ERP',value:14,color:'#9a6dff'},{name:'文件导入',value:8,color:'#e8a94c'}]
-const workflowColumns=computed(()=>{
- const labels=pageKey.value==='simulations'?['等待计算','计算中','结果复核','已归档']:pageKey.value==='rnd-projects'?['需求与立项','方案开发','验证确认','成果归档']:['计划中','执行中','结果判定','已完成']
- return labels.map((label,index)=>({label,count:[3,4,2,8][index],items:page.value.rows.slice(index,index+2).concat(index===3?page.value.rows.slice(0,1):[])}))
-})
-const monitorChannels=[{name:'激光功率',unit:'W',now:'284.6',color:'#38dff5',values:[38,44,35,62,70,58,76,68,83,78,91,74,82,67,73,88,79,94]},{name:'氧含量',unit:'ppm',now:'86.2',color:'#50d5ab',values:[54,52,55,48,57,51,58,54,62,59,64,60,57,66,61,64,60,58]},{name:'腔体温度',unit:'°C',now:'182.4',color:'#9a78ff',values:[26,32,38,43,48,56,61,67,72,76,79,83,80,86,88,84,90,87]}]
-const alarms=[{level:'高',title:'SLM-07 氧含量触发上限预警',time:'10:41:28'},{level:'中',title:'喷涂设备流量波动超过 8%',time:'10:36:12'},{level:'低',title:'A02 产线采样延迟 2.4 秒',time:'10:28:46'}]
-const heatValues=[88,92,96,78,85,94,97,89,82,91,98,87,75,86,93,99,91,84,79,89,95,92,88,81]
-const scatter=Array.from({length:36},(_,i)=>({x:(i*37)%92+4,y:(i*53+i*i)%86+7,size:4+(i%4)}))
-const logLines=computed(()=>page.value.rows.concat(page.value.rows).map((row,index)=>({time:`10:${String(42-index*2).padStart(2,'0')}:${String(18+index).slice(-2)}`,level:index%6===2?'ERROR':index%4===1?'WARN':'INFO',service:isIntegration.value?'sync-worker':'platform-core',message:index%6===2?`记录 ${row.code} 字段映射校验失败`:`${row.name} 处理完成，状态 ${row.status}`})))
+type BusinessRow = Record<string, any>;
+type AssetDomain = {
+  name: string;
+  value: string;
+  quality: number;
+  route: string;
+};
+type SourceSlice = { name: string; value: number; color: string };
 
-watch(pageKey,()=>{activeTab.value=page.value.tabs[0];selected.value=null;keyword.value=''}, {immediate:true})
-function open(row:Record<string,string>){selected.value=row}
-function simulate(action:string){if(action.includes('真实')||action.includes('通用数据集')){router.push(action.includes('集成')?'/integrations':'/datasets');return}dialog.value=true;ElMessage.info(`${action}为前端演示交互，不会写入数据库`)}
-function statusType(value:string){return value.includes('异常')||value.includes('失败')?'danger':value.includes('待')?'warning':value.includes('运行')?'primary':'success'}
+const route = useRoute(),
+  router = useRouter(),
+  auth = useAuthStore(),
+  keyword = ref(""),
+  activeTab = ref(""),
+  selected = ref<Record<string, any> | null>(null),
+  dialog = ref(false),
+  loading = ref(false),
+  saving = ref(false),
+  liveResult = ref<any | null>(null),
+  createDialog = ref(false);
+const liveModules = new Set([
+  "assets-overview",
+  "materials",
+  "processes",
+  "products",
+  "performance",
+  "trace-history",
+  "rnd-projects",
+  "experiments",
+  "process-experiments",
+  "simulations",
+  "system-logs",
+]);
+const writableModules = new Set([
+  "materials",
+  "processes",
+  "products",
+  "performance",
+  "rnd-projects",
+  "experiments",
+  "process-experiments",
+  "simulations",
+]);
+const recordForm = reactive({
+  code: "",
+  name: "",
+  status: "有效",
+  sourceSystem: "MANUAL",
+  dataScopeId: 0,
+  propertiesText: "{}",
+});
+const pageKey = computed(() =>
+  String(route.meta.prototype || route.params.module || ""),
+);
+const staticPage = computed(
+  () => prototypeCatalog[pageKey.value] || prototypeCatalog["assets-overview"],
+);
+const page = computed<any>(() => {
+  const base = staticPage.value;
+  if (!liveModules.has(pageKey.value)) return base;
+  const live = liveResult.value || { metrics: [], rows: [] };
+  const actions = writableModules.has(pageKey.value)
+    ? auth.can("trace:write")
+      ? ["新增业务对象", "刷新数据"]
+      : ["刷新数据"]
+    : pageKey.value === "assets-overview"
+      ? ["进入通用数据集", "查看文件资料", "刷新数据"]
+      : ["刷新数据"];
+  return {
+    ...base,
+    source: "LIVE" as const,
+    metrics: live.metrics || [],
+    rows: live.rows || [],
+    insights: [
+      "数据来自受控业务对象与平台审计源",
+      "统计结果按当前账号的数据域实时计算",
+      "新增、修改与删除操作均进入不可变审计链",
+    ],
+    actions,
+  };
+});
+const filteredRows = computed(() => {
+  const value = keyword.value.trim().toLowerCase();
+  return value
+    ? page.value.rows.filter((row: BusinessRow) =>
+        Object.values(row).some((item) =>
+          String(item).toLowerCase().includes(value),
+        ),
+      )
+    : page.value.rows;
+});
+const maxSeries = computed(() => Math.max(...page.value.series, 1));
+const sourceLabel = computed(() =>
+  page.value.source === "LIVE"
+    ? "真实业务数据"
+    : page.value.source === "HYBRID"
+      ? "现有能力 + 演示视图"
+      : page.value.source === "PENDING"
+        ? "待外部系统接入"
+        : "前端演示数据",
+);
+const sourceTone = computed(() =>
+  page.value.source === "LIVE" || page.value.source === "HYBRID"
+    ? "live"
+    : page.value.source === "PENDING"
+      ? "pending"
+      : "demo",
+);
+const isIntegration = computed(
+  () =>
+    pageKey.value.includes("integration") || pageKey.value.startsWith("sync"),
+);
+const isProductionOverview = computed(
+  () => pageKey.value === "production-overview",
+);
+const isQualityLab = computed(() =>
+  ["ct-metallography", "fatigue"].includes(pageKey.value),
+);
+const analysisKind = computed(() =>
+  pageKey.value === "correlation"
+    ? "correlation"
+    : pageKey.value === "defects"
+      ? "pareto"
+      : pageKey.value === "hardness-thickness"
+        ? "heatmap"
+        : pageKey.value === "trend-analysis"
+          ? "trend"
+          : "compare",
+);
+const fallbackAssetDomains: AssetDomain[] = [
+  { name: "材料", value: "2,486", quality: 96, route: "/assets/materials" },
+  { name: "工艺", value: "864", quality: 91, route: "/assets/processes" },
+  { name: "产品", value: "1,208", quality: 94, route: "/assets/products" },
+  { name: "性能", value: "18,642", quality: 88, route: "/assets/performance" },
+  { name: "设备", value: "326", quality: 97, route: "/assets/devices" },
+  { name: "文件", value: "12,840", quality: 82, route: "/assets/files" },
+];
+const productionDomains = [
+  { name: "工单", value: "36", quality: 86, route: "/production/work-orders" },
+  { name: "工序", value: "128", quality: 92, route: "/production/operations" },
+  { name: "生产批次", value: "18", quality: 88, route: "/production/batches" },
+  {
+    name: "设备运行",
+    value: "42 / 45",
+    quality: 93,
+    route: "/production/devices",
+  },
+  {
+    name: "实时采集",
+    value: "1,842/s",
+    quality: 97,
+    route: "/production/realtime",
+  },
+  {
+    name: "质量放行",
+    value: "94.6%",
+    quality: 95,
+    route: "/quality/inspections",
+  },
+];
+const integrationDomains = [
+  { name: "MES", value: "328k", quality: 98, route: "/integration/systems" },
+  { name: "ERP", value: "86k", quality: 96, route: "/integration/systems" },
+  { name: "PLM", value: "42k", quality: 97, route: "/integration/systems" },
+  { name: "IoT", value: "1,842/s", quality: 94, route: "/integration/systems" },
+  {
+    name: "API 映射",
+    value: "126",
+    quality: 91,
+    route: "/integration/mappings",
+  },
+  {
+    name: "异常队列",
+    value: "12",
+    quality: 88,
+    route: "/integration/exceptions",
+  },
+];
+const assetDomains = computed<AssetDomain[]>(() =>
+  liveResult.value ? liveResult.value.domains || [] : fallbackAssetDomains,
+);
+const overviewDomains = computed(() =>
+  isIntegration.value
+    ? integrationDomains
+    : isProductionOverview.value
+      ? productionDomains
+      : assetDomains.value,
+);
+const fallbackSources: SourceSlice[] = [
+  { name: "平台录入", value: 32, color: "#39d9f2" },
+  { name: "MES", value: 27, color: "#4f82ff" },
+  { name: "IoT / 设备", value: 19, color: "#43d6a9" },
+  { name: "PLM / ERP", value: 14, color: "#9a6dff" },
+  { name: "文件导入", value: 8, color: "#e8a94c" },
+];
+const sources = computed<SourceSlice[]>(() =>
+  liveResult.value ? liveResult.value.sources || [] : fallbackSources,
+);
+const sourceGradient = computed(() =>
+  sources.value.length
+    ? sources.value
+    .map((source: SourceSlice, index: number) => {
+      const start = sources.value
+        .slice(0, index)
+        .reduce(
+          (total: number, item: SourceSlice) => total + Number(item.value),
+          0,
+        );
+      const end = sources.value
+        .slice(0, index + 1)
+        .reduce(
+          (total: number, item: SourceSlice) => total + Number(item.value),
+          0,
+        );
+      return `${source.color} ${start}% ${end}%`;
+    })
+    .join(",")
+    : "#15374e 0% 100%",
+);
+const workflowColumns = computed(() => {
+  const labels =
+    pageKey.value === "simulations"
+      ? ["等待计算", "计算中", "结果复核", "已归档"]
+      : pageKey.value === "rnd-projects"
+        ? ["需求与立项", "方案开发", "验证确认", "成果归档"]
+        : ["计划中", "执行中", "结果判定", "已完成"];
+  const columns = labels.map((label) => ({
+    label,
+    count: 0,
+    items: [] as any[],
+  }));
+  page.value.rows.forEach((row: BusinessRow, rowIndex: number) => {
+    const status = String(row.status || "");
+    let index =
+      status.includes("完成") || status.includes("归档")
+        ? 3
+        : status.includes("验证") ||
+            status.includes("判定") ||
+            status.includes("复核")
+          ? 2
+          : status.includes("进行") ||
+              status.includes("执行") ||
+              status.includes("开发") ||
+              status.includes("计算中")
+            ? 1
+            : 0;
+    if (!status) index = rowIndex % 4;
+    columns[index].items.push(row);
+    columns[index].count++;
+  });
+  return columns;
+});
+const monitorChannels = [
+  {
+    name: "激光功率",
+    unit: "W",
+    now: "284.6",
+    color: "#38dff5",
+    values: [
+      38, 44, 35, 62, 70, 58, 76, 68, 83, 78, 91, 74, 82, 67, 73, 88, 79, 94,
+    ],
+  },
+  {
+    name: "氧含量",
+    unit: "ppm",
+    now: "86.2",
+    color: "#50d5ab",
+    values: [
+      54, 52, 55, 48, 57, 51, 58, 54, 62, 59, 64, 60, 57, 66, 61, 64, 60, 58,
+    ],
+  },
+  {
+    name: "腔体温度",
+    unit: "°C",
+    now: "182.4",
+    color: "#9a78ff",
+    values: [
+      26, 32, 38, 43, 48, 56, 61, 67, 72, 76, 79, 83, 80, 86, 88, 84, 90, 87,
+    ],
+  },
+];
+const alarms = [
+  { level: "高", title: "SLM-07 氧含量触发上限预警", time: "10:41:28" },
+  { level: "中", title: "喷涂设备流量波动超过 8%", time: "10:36:12" },
+  { level: "低", title: "A02 产线采样延迟 2.4 秒", time: "10:28:46" },
+];
+const heatValues = [
+  88, 92, 96, 78, 85, 94, 97, 89, 82, 91, 98, 87, 75, 86, 93, 99, 91, 84, 79,
+  89, 95, 92, 88, 81,
+];
+const scatter = Array.from({ length: 36 }, (_, i) => ({
+  x: ((i * 37) % 92) + 4,
+  y: ((i * 53 + i * i) % 86) + 7,
+  size: 4 + (i % 4),
+}));
+const logLines = computed(() =>
+  page.value.rows.map((row: BusinessRow, index: number) =>
+    row.message
+      ? {
+          time: String(row.time || "").slice(0, 19),
+          level: row.level || "INFO",
+          service: row.service || row.source || "platform-core",
+          message: row.message,
+        }
+      : {
+          time: String(row.time || "").slice(0, 19),
+          level: index % 6 === 2 ? "ERROR" : index % 4 === 1 ? "WARN" : "INFO",
+          service: isIntegration.value ? "sync-worker" : "platform-core",
+          message: `${row.name} 处理完成，状态 ${row.status}`,
+        },
+  ),
+);
+
+watch(
+  pageKey,
+  async () => {
+    liveResult.value = null;
+    activeTab.value = staticPage.value.tabs[0];
+    selected.value = null;
+    keyword.value = "";
+    await loadModule();
+  },
+  { immediate: true },
+);
+async function loadModule() {
+  if (!liveModules.has(pageKey.value)) return;
+  loading.value = true;
+  try {
+    liveResult.value = dataOf<any>(
+      await http.get(`/business/modules/${pageKey.value}`, {
+        params: { pageNum: 1, pageSize: 200 },
+      }),
+    );
+  } finally {
+    loading.value = false;
+  }
+}
+function open(row: Record<string, any>) {
+  selected.value = row;
+}
+function simulate(action: string) {
+  if (action === "刷新数据") {
+    loadModule();
+    return;
+  }
+  if (action === "新增业务对象") {
+    const scope = auth.user?.assignedScopes?.[0];
+    if (!scope) return ElMessage.warning("当前账号没有可写数据域");
+    Object.assign(recordForm, {
+      code: "",
+      name: "",
+      status: "有效",
+      sourceSystem: "MANUAL",
+      dataScopeId: scope,
+      propertiesText: "{}",
+    });
+    createDialog.value = true;
+    return;
+  }
+  if (action.includes("真实") || action.includes("通用数据集")) {
+    router.push(action.includes("集成") ? "/integrations" : "/datasets");
+    return;
+  }
+  if (action.includes("文件资料")) {
+    router.push("/assets/files");
+    return;
+  }
+  dialog.value = true;
+  ElMessage.info(`${action}为前端演示交互，不会写入数据库`);
+}
+async function createRecord() {
+  if (!recordForm.code.trim() || !recordForm.name.trim())
+    return ElMessage.warning("请填写业务编码和名称");
+  let properties: Record<string, any>;
+  try {
+    properties = JSON.parse(recordForm.propertiesText || "{}");
+    if (
+      !properties ||
+      Array.isArray(properties) ||
+      typeof properties !== "object"
+    )
+      throw new Error();
+  } catch {
+    return ElMessage.warning("扩展属性必须是 JSON 对象");
+  }
+  saving.value = true;
+  try {
+    await http.post(`/business/modules/${pageKey.value}/records`, {
+      code: recordForm.code,
+      name: recordForm.name,
+      status: recordForm.status,
+      sourceSystem: recordForm.sourceSystem,
+      dataScopeId: recordForm.dataScopeId,
+      properties,
+      version: null,
+    });
+    ElMessage.success("业务对象已创建并纳入追溯与审计");
+    createDialog.value = false;
+    await loadModule();
+  } finally {
+    saving.value = false;
+  }
+}
+function statusType(value: string) {
+  return value.includes("异常") || value.includes("失败")
+    ? "danger"
+    : value.includes("待")
+      ? "warning"
+      : value.includes("运行")
+        ? "primary"
+        : "success";
+}
 </script>
 
-<template><div class="page prototype-page" :class="`variant-${page.variant}`">
- <section class="module-head"><div><p><i></i>{{page.eyebrow}}</p><div class="title"><b>{{page.code}}</b><h1>{{page.title}}</h1><span class="source-badge" :class="sourceTone"><i></i>{{sourceLabel}}</span></div><small>{{page.subtitle}}</small></div><div class="head-actions"><span><i></i>DATA FLOW ONLINE</span><el-button v-for="action in page.actions" :key="action" :type="action===page.actions[0]?'primary':undefined" @click="simulate(action)">{{action}}</el-button></div></section>
+<template>
+  <div
+    class="page prototype-page"
+    :class="`variant-${page.variant}`"
+    v-loading="loading"
+  >
+    <section class="module-head">
+      <div>
+        <p><i></i>{{ page.eyebrow }}</p>
+        <div class="title">
+          <b>{{ page.code }}</b>
+          <h1>{{ page.title }}</h1>
+          <span class="source-badge" :class="sourceTone"
+            ><i></i>{{ sourceLabel }}</span
+          >
+        </div>
+        <small>{{ page.subtitle }}</small>
+      </div>
+      <div class="head-actions">
+        <span><i></i>DATA FLOW ONLINE</span
+        ><el-button
+          v-for="action in page.actions"
+          :key="action"
+          :type="action === page.actions[0] ? 'primary' : undefined"
+          @click="simulate(action)"
+          >{{ action }}</el-button
+        >
+      </div>
+    </section>
 
- <div class="metric-strip"><article v-for="metric in page.metrics" :key="metric.label" :class="metric.tone"><span>{{metric.label}}</span><strong>{{metric.value}}<small>{{metric.unit}}</small></strong><em>{{metric.trend}}</em><i></i></article></div>
+    <div class="metric-strip">
+      <article
+        v-for="metric in page.metrics"
+        :key="metric.label"
+        :class="metric.tone"
+      >
+        <span>{{ metric.label }}</span
+        ><strong
+          >{{ metric.value }}<small>{{ metric.unit }}</small></strong
+        ><em>{{ metric.trend }}</em
+        ><i></i>
+      </article>
+    </div>
 
- <!-- 资产与生产/集成总览：版图、来源分布和运行动态 -->
- <template v-if="page.variant==='overview'">
-  <section class="overview-layout">
-   <article class="surface domain-map"><header class="section-title"><div><small>BUSINESS DOMAIN MAP</small><h3>{{isIntegration?'系统接入拓扑':isProductionOverview?'生产执行态势':'企业数据资产版图'}}</h3></div><span>全域总览</span></header><div class="map-canvas"><div class="map-core"><b>{{isIntegration?'集成总线':isProductionOverview?'生产指挥核':'可信数据核'}}</b><small>{{isIntegration?'API · MQ · ETL':isProductionOverview?'计划 · 执行 · 质量':'主数据 · 权限 · 审计'}}</small></div><button v-for="(domain,index) in overviewDomains" :key="domain.name" :class="`domain domain-${index+1}`" @click="router.push(domain.route)"><span>{{domain.name}}</span><b>{{domain.value}}</b><em>{{domain.quality}}% {{isProductionOverview?'达成':'完整'}}</em></button></div></article>
-   <article class="surface source-chart"><header class="section-title"><div><small>SOURCE DISTRIBUTION</small><h3>来源系统分布</h3></div><b>100%</b></header><div class="source-ring" :style="{background:`conic-gradient(${sources.map((s,i)=>`${s.color} ${sources.slice(0,i).reduce((a,b)=>a+b.value,0)}% ${sources.slice(0,i+1).reduce((a,b)=>a+b.value,0)}%`).join(',')})`}"><span>6<small>数据域</small></span></div><ul><li v-for="source in sources" :key="source.name"><i :style="{background:source.color}"/><span>{{source.name}}</span><b>{{source.value}}%</b></li></ul></article>
-   <article class="surface quality-board"><header class="section-title"><div><small>QUALITY HEATMAP</small><h3>{{isProductionOverview?'产线负载热力':isIntegration?'接口健康热力':'资产质量热力'}}</h3></div><span>近 24h</span></header><div class="heat-grid"><i v-for="(value,index) in heatValues" :key="index" :style="{opacity:value/100}" :title="`${value}%`"/></div><div class="quality-lines"><p v-for="domain in overviewDomains.slice(0,4)" :key="domain.name"><span>{{domain.name}}</span><i><b :style="{width:domain.quality+'%'}"></b></i><em>{{domain.quality}}%</em></p></div></article>
-   <article class="surface activity-feed"><header class="section-title"><div><small>LIVE ACTIVITY</small><h3>资产运行动态</h3></div><i class="pulse"></i></header><button v-for="row in page.rows" :key="row.code" @click="open(row)"><i></i><div><b>{{row.name}}</b><span>{{row.source}} · {{row.type}}</span></div><time>{{row.time.slice(11)}}</time></button></article>
-  </section>
- </template>
+    <!-- 资产与生产/集成总览：版图、来源分布和运行动态 -->
+    <template v-if="page.variant === 'overview'">
+      <section class="overview-layout">
+        <article class="surface domain-map">
+          <header class="section-title">
+            <div>
+              <small>BUSINESS DOMAIN MAP</small>
+              <h3>
+                {{
+                  isIntegration
+                    ? "系统接入拓扑"
+                    : isProductionOverview
+                      ? "生产执行态势"
+                      : "企业数据资产版图"
+                }}
+              </h3>
+            </div>
+            <span>全域总览</span>
+          </header>
+          <div class="map-canvas">
+            <div class="map-core">
+              <b>{{
+                isIntegration
+                  ? "集成总线"
+                  : isProductionOverview
+                    ? "生产指挥核"
+                    : "可信数据核"
+              }}</b
+              ><small>{{
+                isIntegration
+                  ? "API · MQ · ETL"
+                  : isProductionOverview
+                    ? "计划 · 执行 · 质量"
+                    : "主数据 · 权限 · 审计"
+              }}</small>
+            </div>
+            <button
+              v-for="(domain, index) in overviewDomains"
+              :key="domain.name"
+              :class="`domain domain-${Number(index) + 1}`"
+              @click="router.push(domain.route)"
+            >
+              <span>{{ domain.name }}</span
+              ><b>{{ domain.value }}</b
+              ><em
+                >{{ domain.quality }}%
+                {{ isProductionOverview ? "达成" : "完整" }}</em
+              >
+            </button>
+          </div>
+        </article>
+        <article class="surface source-chart">
+          <header class="section-title">
+            <div>
+              <small>SOURCE DISTRIBUTION</small>
+              <h3>来源系统分布</h3>
+            </div>
+            <b>100%</b>
+          </header>
+          <div
+            class="source-ring"
+            :style="{
+              background: `conic-gradient(${sourceGradient})`,
+            }"
+          >
+            <span>6<small>数据域</small></span>
+          </div>
+          <ul>
+            <li v-for="source in sources" :key="source.name">
+              <i :style="{ background: source.color }" /><span>{{
+                source.name
+              }}</span
+              ><b>{{ source.value }}%</b>
+            </li>
+          </ul>
+        </article>
+        <article class="surface quality-board">
+          <header class="section-title">
+            <div>
+              <small>QUALITY HEATMAP</small>
+              <h3>
+                {{
+                  isProductionOverview
+                    ? "产线负载热力"
+                    : isIntegration
+                      ? "接口健康热力"
+                      : "资产质量热力"
+                }}
+              </h3>
+            </div>
+            <span>近 24h</span>
+          </header>
+          <div class="heat-grid">
+            <i
+              v-for="(value, index) in heatValues"
+              :key="index"
+              :style="{ opacity: value / 100 }"
+              :title="`${value}%`"
+            />
+          </div>
+          <div class="quality-lines">
+            <p v-for="domain in overviewDomains.slice(0, 4)" :key="domain.name">
+              <span>{{ domain.name }}</span
+              ><i><b :style="{ width: domain.quality + '%' }"></b></i
+              ><em>{{ domain.quality }}%</em>
+            </p>
+          </div>
+        </article>
+        <article class="surface activity-feed">
+          <header class="section-title">
+            <div>
+              <small>LIVE ACTIVITY</small>
+              <h3>资产运行动态</h3>
+            </div>
+            <i class="pulse"></i>
+          </header>
+          <button v-for="row in page.rows" :key="row.code" @click="open(row)">
+            <i></i>
+            <div>
+              <b>{{ row.name }}</b
+              ><span>{{ row.source }} · {{ row.type }}</span>
+            </div>
+            <time>{{ row.time.slice(11) }}</time>
+          </button>
+        </article>
+      </section>
+    </template>
 
- <!-- 材料、工艺、产品、工单等：左侧多维筛选 + 中央目录 + 右侧对象画像 -->
- <template v-else-if="page.variant==='registry'">
-  <section class="registry-layout">
-   <aside class="surface filter-rail"><header><small>FACET FILTER</small><h3>多维筛选</h3></header><el-input v-model="keyword" clearable placeholder="编码 / 名称 / 来源"><template #prefix>⌕</template></el-input><div v-for="(group,index) in ['业务状态','来源系统','更新时间','数据质量']" :key="group" class="filter-group"><b>{{group}}</b><label v-for="option in [['有效','待复核','运行中'],['平台录入','MES','PLM'],['今日','近7天','近30天'],['完整','待治理','有缺项']][index]" :key="option"><el-checkbox/>{{option}}<em>{{12+index*7}}</em></label></div><button class="reset-filter">重置全部筛选</button></aside>
-   <article class="surface catalog-table"><header class="section-title"><div><small>STRUCTURED CATALOG</small><h3>{{page.title}}对象目录</h3></div><div class="tabs"><button v-for="tab in page.tabs" :key="tab" :class="{active:activeTab===tab}" @click="activeTab=tab">{{tab}}</button></div></header><el-table :data="filteredRows" height="470" @row-click="open"><el-table-column v-for="column in page.columns" :key="column.key" :prop="column.key" :label="column.label" :min-width="column.wide?200:105"><template #default="{row}"><el-tag v-if="column.key==='status'" :type="statusType(row[column.key])" effect="dark" size="small">{{row[column.key]}}</el-tag><span v-else-if="column.key==='code'" class="mono code">{{row[column.key]}}</span><b v-else-if="column.key==='name'">{{row[column.key]}}</b><span v-else>{{row[column.key]}}</span></template></el-table-column></el-table></article>
-   <aside class="surface object-profile"><header><small>OBJECT PROFILE</small><h3>对象数据画像</h3></header><div class="profile-ring"><span>94<small>可信分</small></span></div><h4>{{filteredRows[0]?.name}}</h4><p>{{filteredRows[0]?.code}} · {{filteredRows[0]?.source}}</p><dl><div><dt>字段完整</dt><dd>28 / 30</dd></div><div><dt>关联批次</dt><dd>12</dd></div><div><dt>关联文件</dt><dd>8</dd></div><div><dt>追溯节点</dt><dd>16</dd></div></dl><h5>关键属性覆盖</h5><p class="property"><span v-for="item in ['基础主档','技术参数','版本记录','来源映射','质量状态']" :key="item">{{item}}</span></p><button @click="open(filteredRows[0])">打开完整画像 →</button></aside>
-  </section>
- </template>
+    <!-- 材料、工艺、产品、工单等：左侧多维筛选 + 中央目录 + 右侧对象画像 -->
+    <template v-else-if="page.variant === 'registry'">
+      <section class="registry-layout">
+        <aside class="surface filter-rail">
+          <header>
+            <small>FACET FILTER</small>
+            <h3>多维筛选</h3>
+          </header>
+          <el-input v-model="keyword" clearable placeholder="编码 / 名称 / 来源"
+            ><template #prefix>⌕</template></el-input
+          >
+          <div
+            v-for="(group, index) in [
+              '业务状态',
+              '来源系统',
+              '更新时间',
+              '数据质量',
+            ]"
+            :key="group"
+            class="filter-group"
+          >
+            <b>{{ group }}</b
+            ><label
+              v-for="option in [
+                ['有效', '待复核', '运行中'],
+                ['平台录入', 'MES', 'PLM'],
+                ['今日', '近7天', '近30天'],
+                ['完整', '待治理', '有缺项'],
+              ][index]"
+              :key="option"
+              ><el-checkbox />{{ option }}<em>{{ 12 + index * 7 }}</em></label
+            >
+          </div>
+          <button class="reset-filter">重置全部筛选</button>
+        </aside>
+        <article class="surface catalog-table">
+          <header class="section-title">
+            <div>
+              <small>STRUCTURED CATALOG</small>
+              <h3>{{ page.title }}对象目录</h3>
+            </div>
+            <div class="tabs">
+              <button
+                v-for="tab in page.tabs"
+                :key="tab"
+                :class="{ active: activeTab === tab }"
+                @click="activeTab = tab"
+              >
+                {{ tab }}
+              </button>
+            </div>
+          </header>
+          <el-table :data="filteredRows" height="470" @row-click="open"
+            ><el-table-column
+              v-for="column in page.columns"
+              :key="column.key"
+              :prop="column.key"
+              :label="column.label"
+              :min-width="column.wide ? 200 : 105"
+              ><template #default="{ row }"
+                ><el-tag
+                  v-if="column.key === 'status'"
+                  :type="statusType(row[column.key])"
+                  effect="dark"
+                  size="small"
+                  >{{ row[column.key] }}</el-tag
+                ><span v-else-if="column.key === 'code'" class="mono code">{{
+                  row[column.key]
+                }}</span
+                ><b v-else-if="column.key === 'name'">{{ row[column.key] }}</b
+                ><span v-else>{{ row[column.key] }}</span></template
+              ></el-table-column
+            ></el-table
+          >
+        </article>
+        <aside class="surface object-profile">
+          <header>
+            <small>OBJECT PROFILE</small>
+            <h3>对象数据画像</h3>
+          </header>
+          <div class="profile-ring">
+            <span>94<small>可信分</small></span>
+          </div>
+          <h4>{{ filteredRows[0]?.name }}</h4>
+          <p>{{ filteredRows[0]?.code }} · {{ filteredRows[0]?.source }}</p>
+          <dl>
+            <div>
+              <dt>字段完整</dt>
+              <dd>28 / 30</dd>
+            </div>
+            <div>
+              <dt>关联批次</dt>
+              <dd>12</dd>
+            </div>
+            <div>
+              <dt>关联文件</dt>
+              <dd>8</dd>
+            </div>
+            <div>
+              <dt>追溯节点</dt>
+              <dd>16</dd>
+            </div>
+          </dl>
+          <h5>关键属性覆盖</h5>
+          <p class="property">
+            <span
+              v-for="item in [
+                '基础主档',
+                '技术参数',
+                '版本记录',
+                '来源映射',
+                '质量状态',
+              ]"
+              :key="item"
+              >{{ item }}</span
+            >
+          </p>
+          <button @click="open(filteredRows[0])">打开完整画像 →</button>
+        </aside>
+      </section>
+    </template>
 
- <!-- 研发与实验室：阶段看板 + 专用实验画布 -->
- <template v-else-if="page.variant==='lab'">
-  <section class="lab-layout">
-   <article class="surface lab-board"><header class="section-title"><div><small>STAGE COLLABORATION</small><h3>{{pageKey==='rnd-projects'?'研发阶段协同看板':pageKey==='simulations'?'仿真任务调度':'实验执行看板'}}</h3></div><span>{{page.rows.length+12}} 个活动对象</span></header><div class="kanban"><div v-for="(column,index) in workflowColumns" :key="column.label"><header><b>{{column.label}}</b><span>{{column.count}}</span></header><button v-for="row in column.items" :key="row.code+index" @click="open(row)"><small>{{row.code}}</small><strong>{{row.name}}</strong><p><span>{{row.owner}}</span><em>{{index===1?'进行中':row.status}}</em></p><i><b :style="{width:(24+index*22)+'%'}"></b></i></button></div></div></article>
-   <article class="surface lab-canvas"><header class="section-title"><div><small>{{isQualityLab?'LAB EVIDENCE':'PARAMETER MATRIX'}}</small><h3>{{pageKey==='ct-metallography'?'CT 缺陷标注工作区':pageKey==='fatigue'?'S-N 疲劳试验曲线':pageKey==='simulations'?'仿真模型预览':'实验参数矩阵'}}</h3></div><span>DEMO ANALYSIS</span></header>
-    <div v-if="pageKey==='ct-metallography'" class="ct-view"><div class="scan-object"></div><i v-for="n in 5" :key="n" :class="`mark mark-${n}`">{{n}}</i><span>SLICE 084 / 120</span></div>
-    <div v-else-if="pageKey==='fatigue'" class="fatigue-chart"><i v-for="(point,index) in scatter.slice(0,18)" :key="index" :style="{left:point.x+'%',bottom:(15+index*3.8)+'%'}"></i><b class="sn-line"></b><span>S-N 拟合区间 · R² 0.962</span></div>
-    <div v-else-if="pageKey==='simulations'" class="simulation-view"><div class="mesh"><i v-for="n in 64" :key="n"></i></div><div class="scale"><span>420 MPa</span><i></i><span>0 MPa</span></div></div>
-    <div v-else class="parameter-matrix"><div v-for="n in 24" :key="n" :class="{selected:n===11||n===12}"><span>P{{String(n).padStart(2,'0')}}</span><b>{{180+n*4}}</b><em>{{n%3===0?'通过':'待验证'}}</em></div></div>
-   </article>
-  </section>
- </template>
+    <!-- 研发与实验室：阶段看板 + 专用实验画布 -->
+    <template v-else-if="page.variant === 'lab'">
+      <section class="lab-layout">
+        <article class="surface lab-board">
+          <header class="section-title">
+            <div>
+              <small>STAGE COLLABORATION</small>
+              <h3>
+                {{
+                  pageKey === "rnd-projects"
+                    ? "研发阶段协同看板"
+                    : pageKey === "simulations"
+                      ? "仿真任务调度"
+                      : "实验执行看板"
+                }}
+              </h3>
+            </div>
+            <span>{{ liveResult?.total ?? page.rows.length }} 个活动对象</span>
+          </header>
+          <div class="kanban">
+            <div v-for="(column, index) in workflowColumns" :key="column.label">
+              <header>
+                <b>{{ column.label }}</b
+                ><span>{{ column.count }}</span>
+              </header>
+              <button
+                v-for="row in column.items"
+                :key="row.code + index"
+                @click="open(row)"
+              >
+                <small>{{ row.code }}</small
+                ><strong>{{ row.name }}</strong>
+                <p>
+                  <span>{{ row.owner }}</span
+                  ><em>{{ index === 1 ? "进行中" : row.status }}</em>
+                </p>
+                <i><b :style="{ width: 24 + index * 22 + '%' }"></b></i>
+              </button>
+            </div>
+          </div>
+        </article>
+        <article class="surface lab-canvas">
+          <header class="section-title">
+            <div>
+              <small>{{
+                isQualityLab ? "LAB EVIDENCE" : "PARAMETER MATRIX"
+              }}</small>
+              <h3>
+                {{
+                  pageKey === "ct-metallography"
+                    ? "CT 缺陷标注工作区"
+                    : pageKey === "fatigue"
+                      ? "S-N 疲劳试验曲线"
+                      : pageKey === "simulations"
+                        ? "仿真模型预览"
+                        : "实验参数矩阵"
+                }}
+              </h3>
+            </div>
+            <span>DEMO ANALYSIS</span>
+          </header>
+          <div v-if="pageKey === 'ct-metallography'" class="ct-view">
+            <div class="scan-object"></div>
+            <i v-for="n in 5" :key="n" :class="`mark mark-${n}`">{{ n }}</i
+            ><span>SLICE 084 / 120</span>
+          </div>
+          <div v-else-if="pageKey === 'fatigue'" class="fatigue-chart">
+            <i
+              v-for="(point, index) in scatter.slice(0, 18)"
+              :key="index"
+              :style="{ left: point.x + '%', bottom: 15 + index * 3.8 + '%' }"
+            ></i
+            ><b class="sn-line"></b><span>S-N 拟合区间 · R² 0.962</span>
+          </div>
+          <div v-else-if="pageKey === 'simulations'" class="simulation-view">
+            <div class="mesh"><i v-for="n in 64" :key="n"></i></div>
+            <div class="scale">
+              <span>420 MPa</span><i></i><span>0 MPa</span>
+            </div>
+          </div>
+          <div v-else class="parameter-matrix">
+            <div
+              v-for="n in 24"
+              :key="n"
+              :class="{ selected: n === 11 || n === 12 }"
+            >
+              <span>P{{ String(n).padStart(2, "0") }}</span
+              ><b>{{ 180 + n * 4 }}</b
+              ><em>{{ n % 3 === 0 ? "通过" : "待验证" }}</em>
+            </div>
+          </div>
+        </article>
+      </section>
+    </template>
 
- <!-- 实时数据与同步任务：多通道波形 + 设备状态和告警 -->
- <template v-else-if="page.variant==='monitor'">
-  <section class="monitor-layout">
-   <article class="surface waveform"><header class="section-title"><div><small>REAL-TIME TELEMETRY</small><h3>{{isIntegration?'同步吞吐实时监控':'设备关键参数实时曲线'}}</h3></div><span class="live-dot"><i></i>LIVE · 1s</span></header><div v-for="channel in monitorChannels" :key="channel.name" class="channel"><header><b>{{isIntegration?['写入吞吐','接口延迟','失败速率'][monitorChannels.indexOf(channel)]:channel.name}}</b><strong :style="{color:channel.color}">{{channel.now}} <small>{{channel.unit}}</small></strong></header><div><i v-for="(value,index) in channel.values" :key="index" :style="{height:value+'%',background:channel.color,opacity:.25+index/channel.values.length*.7}"></i></div></div></article>
-   <aside class="surface equipment-state"><header class="section-title"><div><small>NODE STATUS</small><h3>{{isIntegration?'任务节点':'设备运行状态'}}</h3></div><b>12 / 14</b></header><button v-for="(row,index) in page.rows" :key="row.code" @click="open(row)"><i :class="index===2?'warn':''"></i><div><b>{{row.name}}</b><span>{{row.code}} · {{index===2?'负载偏高':'稳定运行'}}</span></div><em>{{[86,72,94,63,78][index]}}%</em></button></aside>
-   <article class="surface alarm-stream"><header class="section-title"><div><small>EVENT STREAM</small><h3>实时事件与阈值告警</h3></div><el-tag type="warning" effect="dark">3 条</el-tag></header><button v-for="alarm in alarms" :key="alarm.title"><em>{{alarm.level}}</em><b>{{alarm.title}}</b><time>{{alarm.time}}</time><span>查看 →</span></button></article>
-  </section>
- </template>
+    <!-- 实时数据与同步任务：多通道波形 + 设备状态和告警 -->
+    <template v-else-if="page.variant === 'monitor'">
+      <section class="monitor-layout">
+        <article class="surface waveform">
+          <header class="section-title">
+            <div>
+              <small>REAL-TIME TELEMETRY</small>
+              <h3>
+                {{
+                  isIntegration ? "同步吞吐实时监控" : "设备关键参数实时曲线"
+                }}
+              </h3>
+            </div>
+            <span class="live-dot"><i></i>LIVE · 1s</span>
+          </header>
+          <div
+            v-for="channel in monitorChannels"
+            :key="channel.name"
+            class="channel"
+          >
+            <header>
+              <b>{{
+                isIntegration
+                  ? ["写入吞吐", "接口延迟", "失败速率"][
+                      monitorChannels.indexOf(channel)
+                    ]
+                  : channel.name
+              }}</b
+              ><strong :style="{ color: channel.color }"
+                >{{ channel.now }} <small>{{ channel.unit }}</small></strong
+              >
+            </header>
+            <div>
+              <i
+                v-for="(value, index) in channel.values"
+                :key="index"
+                :style="{
+                  height: value + '%',
+                  background: channel.color,
+                  opacity: 0.25 + (index / channel.values.length) * 0.7,
+                }"
+              ></i>
+            </div>
+          </div>
+        </article>
+        <aside class="surface equipment-state">
+          <header class="section-title">
+            <div>
+              <small>NODE STATUS</small>
+              <h3>{{ isIntegration ? "任务节点" : "设备运行状态" }}</h3>
+            </div>
+            <b>12 / 14</b>
+          </header>
+          <button
+            v-for="(row, index) in page.rows"
+            :key="row.code"
+            @click="open(row)"
+          >
+            <i :class="index === 2 ? 'warn' : ''"></i>
+            <div>
+              <b>{{ row.name }}</b
+              ><span
+                >{{ row.code }} ·
+                {{ index === 2 ? "负载偏高" : "稳定运行" }}</span
+              >
+            </div>
+            <em>{{ [86, 72, 94, 63, 78][Number(index)] }}%</em>
+          </button>
+        </aside>
+        <article class="surface alarm-stream">
+          <header class="section-title">
+            <div>
+              <small>EVENT STREAM</small>
+              <h3>实时事件与阈值告警</h3>
+            </div>
+            <el-tag type="warning" effect="dark">3 条</el-tag>
+          </header>
+          <button v-for="alarm in alarms" :key="alarm.title">
+            <em>{{ alarm.level }}</em
+            ><b>{{ alarm.title }}</b
+            ><time>{{ alarm.time }}</time
+            ><span>查看 →</span>
+          </button>
+        </article>
+      </section>
+    </template>
 
- <!-- 数据分析：根据相关性、缺陷、硬度/厚度、趋势、对比显示不同分析画布 -->
- <template v-else-if="page.variant==='analysis'">
-  <section class="analysis-toolbar surface"><div><span>分析对象</span><button>TA15 / Ti6Al4V ELI⌄</button></div><div><span>指标维度</span><button>{{analysisKind==='correlation'?'激光功率 × 孔隙率':'强度 · 硬度 · 缺陷率'}}⌄</button></div><div><span>时间范围</span><button>近 12 个月⌄</button></div><el-button type="primary" @click="simulate('运行分析')">运行分析</el-button></section>
-  <section class="analysis-layout">
-   <article class="surface analysis-canvas"><header class="section-title"><div><small>ANALYTICS CANVAS</small><h3>{{page.title}} · 多维分析</h3></div><span>样本 n=1,842</span></header>
-    <div v-if="analysisKind==='correlation'" class="scatter-chart"><i v-for="(point,index) in scatter" :key="index" :style="{left:point.x+'%',bottom:point.y+'%',width:point.size+'px',height:point.size+'px'}"></i><b></b><span>相关系数 r = 0.82 · 强正相关</span></div>
-    <div v-else-if="analysisKind==='heatmap'" class="measurement-map"><div v-for="(value,index) in heatValues" :key="index" :style="{background:`rgba(${value<84?'255,102,125':'58,215,239'},${.18+(value-70)/45})`}"><span>P{{index+1}}</span><b>{{value*4+18}}</b><em>HV</em></div></div>
-    <div v-else-if="analysisKind==='pareto'" class="pareto-chart"><div v-for="(value,index) in [92,76,61,48,36,27,18]" :key="index"><b :style="{height:value+'%'}"></b><i :style="{bottom:(42+index*7)+'%'}"></i><span>{{['孔隙','裂纹','夹杂','尺寸','涂层','变形','其他'][index]}}</span></div></div>
-    <div v-else class="compare-chart"><div v-for="(value,index) in page.series.slice(0,8)" :key="index"><i><b :style="{height:value/maxSeries*100+'%'}"></b><em :style="{height:(page.series[(index+3)%page.series.length]/maxSeries*100)+'%'}"></em></i><span>{{analysisKind==='trend'?'M'+(index+1):'方案 '+String.fromCharCode(65+index)}}</span></div></div>
-   </article>
-   <aside class="surface analysis-insight"><header class="section-title"><div><small>MODEL INSIGHT</small><h3>分析结论</h3></div><b>AI READY</b></header><div class="score-orbit"><span>92.6<small>置信度</small></span></div><ul><li v-for="(item,index) in page.insights" :key="item"><b>0{{index+1}}</b><span>{{item}}</span></li></ul><button @click="simulate('生成分析报告')">生成分析报告 →</button></aside>
-   <article class="surface analysis-table"><header class="section-title"><div><small>ANALYSIS SAMPLE</small><h3>样本数据与对比结果</h3></div><el-input v-model="keyword" clearable placeholder="检索样本"/></header><el-table :data="filteredRows" @row-click="open"><el-table-column v-for="column in page.columns" :key="column.key" :prop="column.key" :label="column.label" :min-width="column.wide?220:110"/></el-table></article>
-  </section>
- </template>
+    <!-- 数据分析：根据相关性、缺陷、硬度/厚度、趋势、对比显示不同分析画布 -->
+    <template v-else-if="page.variant === 'analysis'">
+      <section class="analysis-toolbar surface">
+        <div><span>分析对象</span><button>TA15 / Ti6Al4V ELI⌄</button></div>
+        <div>
+          <span>指标维度</span
+          ><button>
+            {{
+              analysisKind === "correlation"
+                ? "激光功率 × 孔隙率"
+                : "强度 · 硬度 · 缺陷率"
+            }}⌄
+          </button>
+        </div>
+        <div><span>时间范围</span><button>近 12 个月⌄</button></div>
+        <el-button type="primary" @click="simulate('运行分析')"
+          >运行分析</el-button
+        >
+      </section>
+      <section class="analysis-layout">
+        <article class="surface analysis-canvas">
+          <header class="section-title">
+            <div>
+              <small>ANALYTICS CANVAS</small>
+              <h3>{{ page.title }} · 多维分析</h3>
+            </div>
+            <span>样本 n={{ liveResult?.total ?? page.rows.length }}</span>
+          </header>
+          <div v-if="analysisKind === 'correlation'" class="scatter-chart">
+            <i
+              v-for="(point, index) in scatter"
+              :key="index"
+              :style="{
+                left: point.x + '%',
+                bottom: point.y + '%',
+                width: point.size + 'px',
+                height: point.size + 'px',
+              }"
+            ></i
+            ><b></b><span>相关系数 r = 0.82 · 强正相关</span>
+          </div>
+          <div v-else-if="analysisKind === 'heatmap'" class="measurement-map">
+            <div
+              v-for="(value, index) in heatValues"
+              :key="index"
+              :style="{
+                background: `rgba(${value < 84 ? '255,102,125' : '58,215,239'},${0.18 + (value - 70) / 45})`,
+              }"
+            >
+              <span>P{{ index + 1 }}</span
+              ><b>{{ value * 4 + 18 }}</b
+              ><em>HV</em>
+            </div>
+          </div>
+          <div v-else-if="analysisKind === 'pareto'" class="pareto-chart">
+            <div
+              v-for="(value, index) in [92, 76, 61, 48, 36, 27, 18]"
+              :key="index"
+            >
+              <b :style="{ height: value + '%' }"></b
+              ><i :style="{ bottom: 42 + index * 7 + '%' }"></i
+              ><span>{{
+                ["孔隙", "裂纹", "夹杂", "尺寸", "涂层", "变形", "其他"][index]
+              }}</span>
+            </div>
+          </div>
+          <div v-else class="compare-chart">
+            <div v-for="(value, index) in page.series.slice(0, 8)" :key="index">
+              <i
+                ><b :style="{ height: (value / maxSeries) * 100 + '%' }"></b
+                ><em
+                  :style="{
+                    height:
+                      (page.series[(Number(index) + 3) % page.series.length] /
+                        maxSeries) *
+                        100 +
+                      '%',
+                  }"
+                ></em></i
+              ><span>{{
+                analysisKind === "trend"
+                  ? "M" + (Number(index) + 1)
+                  : "方案 " + String.fromCharCode(65 + Number(index))
+              }}</span>
+            </div>
+          </div>
+        </article>
+        <aside class="surface analysis-insight">
+          <header class="section-title">
+            <div>
+              <small>MODEL INSIGHT</small>
+              <h3>分析结论</h3>
+            </div>
+            <b>AI READY</b>
+          </header>
+          <div class="score-orbit">
+            <span>92.6<small>置信度</small></span>
+          </div>
+          <ul>
+            <li v-for="(item, index) in page.insights" :key="item">
+              <b>0{{ Number(index) + 1 }}</b
+              ><span>{{ item }}</span>
+            </li>
+          </ul>
+          <button @click="simulate('生成分析报告')">生成分析报告 →</button>
+        </aside>
+        <article class="surface analysis-table">
+          <header class="section-title">
+            <div>
+              <small>ANALYSIS SAMPLE</small>
+              <h3>样本数据与对比结果</h3>
+            </div>
+            <el-input v-model="keyword" clearable placeholder="检索样本" />
+          </header>
+          <el-table :data="filteredRows" @row-click="open"
+            ><el-table-column
+              v-for="column in page.columns"
+              :key="column.key"
+              :prop="column.key"
+              :label="column.label"
+              :min-width="column.wide ? 220 : 110"
+          /></el-table>
+        </article>
+      </section>
+    </template>
 
- <!-- 数据治理：血缘、规则覆盖、标准目录 -->
- <template v-else-if="page.variant==='governance'">
-  <section class="govern-layout">
-   <article class="surface lineage"><header class="section-title"><div><small>DATA LINEAGE</small><h3>标准对象血缘链路</h3></div><span>端到端可追溯</span></header><div class="lineage-flow"><button><b>源系统</b><span>MES / PLM / ERP</span></button><i>→</i><button><b>标准化层</b><span>编码 · 单位 · 口径</span></button><i>→</i><button class="active"><b>{{page.title}}</b><span>权威标准对象</span></button><i>→</i><button><b>消费应用</b><span>研发 · 生产 · 质量</span></button></div><div class="impact"><p><span>上游对象</span><b>18</b></p><p><span>下游应用</span><b>12</b></p><p><span>字段映射</span><b>146</b></p><p><span>责任人</span><b>8</b></p></div></article>
-   <aside class="surface rule-health"><header class="section-title"><div><small>RULE COVERAGE</small><h3>治理规则健康度</h3></div><b>94.8%</b></header><div v-for="(label,index) in ['完整性','唯一性','一致性','及时性','有效性']" :key="label" class="rule"><span>{{label}}</span><i><b :style="{width:(96-index*3)+'%'}"></b></i><em>{{96-index*3}}%</em></div><button @click="simulate('新增质量规则')">＋ 新增治理规则</button></aside>
-   <article class="surface standard-catalog"><header class="section-title"><div><small>STANDARD CATALOG</small><h3>{{page.title}}标准目录</h3></div><el-input v-model="keyword" clearable placeholder="搜索标准对象"/></header><div class="standard-list"><button v-for="row in filteredRows" :key="row.code" @click="open(row)"><span class="code">{{row.code}}</span><b>{{row.name}}</b><em>{{row.type}}</em><i><strong>94</strong><small>可信分</small></i><el-tag :type="statusType(row.status)" size="small">{{row.status}}</el-tag></button></div></article>
-  </section>
- </template>
+    <!-- 数据治理：血缘、规则覆盖、标准目录 -->
+    <template v-else-if="page.variant === 'governance'">
+      <section class="govern-layout">
+        <article class="surface lineage">
+          <header class="section-title">
+            <div>
+              <small>DATA LINEAGE</small>
+              <h3>标准对象血缘链路</h3>
+            </div>
+            <span>端到端可追溯</span>
+          </header>
+          <div class="lineage-flow">
+            <button><b>源系统</b><span>MES / PLM / ERP</span></button><i>→</i
+            ><button><b>标准化层</b><span>编码 · 单位 · 口径</span></button
+            ><i>→</i
+            ><button class="active">
+              <b>{{ page.title }}</b
+              ><span>权威标准对象</span></button
+            ><i>→</i
+            ><button><b>消费应用</b><span>研发 · 生产 · 质量</span></button>
+          </div>
+          <div class="impact">
+            <p><span>上游对象</span><b>18</b></p>
+            <p><span>下游应用</span><b>12</b></p>
+            <p><span>字段映射</span><b>146</b></p>
+            <p><span>责任人</span><b>8</b></p>
+          </div>
+        </article>
+        <aside class="surface rule-health">
+          <header class="section-title">
+            <div>
+              <small>RULE COVERAGE</small>
+              <h3>治理规则健康度</h3>
+            </div>
+            <b>94.8%</b>
+          </header>
+          <div
+            v-for="(label, index) in [
+              '完整性',
+              '唯一性',
+              '一致性',
+              '及时性',
+              '有效性',
+            ]"
+            :key="label"
+            class="rule"
+          >
+            <span>{{ label }}</span
+            ><i><b :style="{ width: 96 - index * 3 + '%' }"></b></i
+            ><em>{{ 96 - index * 3 }}%</em>
+          </div>
+          <button @click="simulate('新增质量规则')">＋ 新增治理规则</button>
+        </aside>
+        <article class="surface standard-catalog">
+          <header class="section-title">
+            <div>
+              <small>STANDARD CATALOG</small>
+              <h3>{{ page.title }}标准目录</h3>
+            </div>
+            <el-input v-model="keyword" clearable placeholder="搜索标准对象" />
+          </header>
+          <div class="standard-list">
+            <button
+              v-for="row in filteredRows"
+              :key="row.code"
+              @click="open(row)"
+            >
+              <span class="code">{{ row.code }}</span
+              ><b>{{ row.name }}</b
+              ><em>{{ row.type }}</em
+              ><i><strong>94</strong><small>可信分</small></i
+              ><el-tag :type="statusType(row.status)" size="small">{{
+                row.status
+              }}</el-tag>
+            </button>
+          </div>
+        </article>
+      </section>
+    </template>
 
- <!-- 日志与追溯历史：终端式日志流 + 严重度统计 -->
- <template v-else>
-  <section class="log-layout">
-   <article class="surface log-console"><header class="section-title"><div><small>OBSERVABILITY CONSOLE</small><h3>{{page.title}}实时流</h3></div><div class="console-filter"><button class="active">全部</button><button>INFO</button><button>WARN</button><button>ERROR</button></div></header><div class="console"><p v-for="line in logLines" :key="line.time+line.message" :class="line.level.toLowerCase()"><time>{{line.time}}</time><em>{{line.level}}</em><span>{{line.service}}</span><b>{{line.message}}</b></p></div></article>
-   <aside class="surface severity"><header class="section-title"><div><small>SEVERITY</small><h3>事件严重度</h3></div><span>近 24h</span></header><div class="severity-bars"><p v-for="(item,index) in [{name:'INFO',v:92},{name:'WARN',v:46},{name:'ERROR',v:18},{name:'FATAL',v:4}]" :key="item.name"><span>{{item.name}}</span><i><b :style="{width:item.v+'%'}"></b></i><em>{{item.v*12}}</em></p></div><h4>处理状态</h4><div class="state-cards"><p><b>12</b><span>待处理</span></p><p><b>28</b><span>重试中</span></p><p><b>96%</b><span>已恢复</span></p></div></aside>
-  </section>
- </template>
+    <!-- 日志与追溯历史：终端式日志流 + 严重度统计 -->
+    <template v-else>
+      <section class="log-layout">
+        <article class="surface log-console">
+          <header class="section-title">
+            <div>
+              <small>OBSERVABILITY CONSOLE</small>
+              <h3>{{ page.title }}实时流</h3>
+            </div>
+            <div class="console-filter">
+              <button class="active">全部</button><button>INFO</button
+              ><button>WARN</button><button>ERROR</button>
+            </div>
+          </header>
+          <div class="console">
+            <p
+              v-for="line in logLines"
+              :key="line.time + line.message"
+              :class="line.level.toLowerCase()"
+            >
+              <time>{{ line.time }}</time
+              ><em>{{ line.level }}</em
+              ><span>{{ line.service }}</span
+              ><b>{{ line.message }}</b>
+            </p>
+          </div>
+        </article>
+        <aside class="surface severity">
+          <header class="section-title">
+            <div>
+              <small>SEVERITY</small>
+              <h3>事件严重度</h3>
+            </div>
+            <span>近 24h</span>
+          </header>
+          <div class="severity-bars">
+            <p
+              v-for="(item, index) in [
+                { name: 'INFO', v: 92 },
+                { name: 'WARN', v: 46 },
+                { name: 'ERROR', v: 18 },
+                { name: 'FATAL', v: 4 },
+              ]"
+              :key="item.name"
+            >
+              <span>{{ item.name }}</span
+              ><i><b :style="{ width: item.v + '%' }"></b></i
+              ><em>{{ item.v * 12 }}</em>
+            </p>
+          </div>
+          <h4>处理状态</h4>
+          <div class="state-cards">
+            <p><b>12</b><span>待处理</span></p>
+            <p><b>28</b><span>重试中</span></p>
+            <p><b>96%</b><span>已恢复</span></p>
+          </div>
+        </aside>
+      </section>
+    </template>
 
- <el-drawer :model-value="!!selected" size="560" :title="selected?.name" @close="selected=null"><template v-if="selected"><div class="prototype-detail"><div class="detail-status"><span class="source-badge demo"><i></i>演示详情</span><el-tag :type="statusType(selected.status)">{{selected.status}}</el-tag></div><h3>对象基础信息</h3><dl><div v-for="column in page.columns" :key="column.key"><dt>{{column.label}}</dt><dd>{{selected[column.key]}}</dd></div></dl><h3>关联能力</h3><div class="relation-grid"><button>关联业务对象 <b>12</b></button><button>相关文件 <b>8</b></button><button>追溯关系 <b>16</b></button><button>审计事件 <b>24</b></button></div><el-alert title="当前为前端演示详情，不会写入数据库；正式接口接入后可复用现有权限与审计能力。" type="info" :closable="false"/></div></template></el-drawer>
- <el-dialog v-model="dialog" title="前端演示操作" width="500"><div class="demo-dialog"><div>UI</div><h3>交互流程已触发</h3><p>此功能只展示页面、状态和交互反馈，不请求新增后端接口，也不会修改数据库。</p></div><template #footer><el-button @click="dialog=false">关闭</el-button><el-button type="primary" @click="dialog=false">确认演示</el-button></template></el-dialog>
-</div></template>
+    <el-drawer
+      :model-value="!!selected"
+      size="560"
+      :title="selected?.name"
+      @close="selected = null"
+      ><template v-if="selected"
+        ><div class="prototype-detail">
+          <div class="detail-status">
+            <span class="source-badge live"><i></i>真实业务对象</span
+            ><el-tag :type="statusType(selected.status)">{{
+              selected.status
+            }}</el-tag>
+          </div>
+          <h3>对象基础信息</h3>
+          <dl>
+            <div v-for="column in page.columns" :key="column.key">
+              <dt>{{ column.label }}</dt>
+              <dd>{{ selected[column.key] }}</dd>
+            </div>
+          </dl>
+          <h3>关联能力</h3>
+          <div class="relation-grid">
+            <button>
+              关联业务对象 <b>{{ selected.relationCount ?? 0 }}</b></button
+            ><button>
+              相关文件 <b>{{ selected.fileCount ?? 0 }}</b></button
+            ><button>
+              数据域 <b>#{{ selected.dataScopeId ?? "—" }}</b></button
+            ><button>
+              记录版本 <b>v{{ selected.version ?? 1 }}</b>
+            </button>
+          </div>
+          <template v-if="selected.properties">
+            <h3>扩展属性</h3>
+            <pre class="property-json">{{
+              JSON.stringify(selected.properties, null, 2)
+            }}</pre>
+          </template>
+          <el-alert
+            title="数据来自后端真实接口，并按当前账号的数据域和模块权限过滤；创建、修改与删除均写入不可变审计日志。"
+            type="success"
+            :closable="false"
+          /></div></template
+    ></el-drawer>
+    <el-dialog v-model="createDialog" title="新增业务对象" width="620">
+      <el-alert
+        title="对象将写入统一追溯实体库，可继续关联附件、上下游关系和审计证据。"
+        type="info"
+        :closable="false"
+      />
+      <el-form label-position="top" class="record-create-form">
+        <el-form-item label="业务编码 *">
+          <el-input
+            v-model="recordForm.code"
+            maxlength="100"
+            class="mono"
+            placeholder="例如 MAT-2026-001"
+            @blur="recordForm.code = recordForm.code.trim().toUpperCase()"
+          />
+        </el-form-item>
+        <el-form-item label="名称 *">
+          <el-input v-model="recordForm.name" maxlength="200" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="recordForm.status">
+            <el-option label="有效" value="有效" />
+            <el-option label="计划中" value="计划中" />
+            <el-option label="执行中" value="执行中" />
+            <el-option label="待复核" value="待复核" />
+            <el-option label="已完成" value="已完成" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="来源系统">
+          <el-input v-model="recordForm.sourceSystem" maxlength="40" />
+        </el-form-item>
+        <el-form-item label="数据域 *">
+          <el-select v-model="recordForm.dataScopeId">
+            <el-option
+              v-for="scope in auth.user?.assignedScopes || []"
+              :key="scope"
+              :label="`数据域 #${scope}`"
+              :value="scope"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="扩展属性（JSON 对象）" class="wide">
+          <el-input
+            v-model="recordForm.propertiesText"
+            type="textarea"
+            :rows="7"
+            class="mono"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createDialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="createRecord"
+          >创建并纳入追溯</el-button
+        >
+      </template>
+    </el-dialog>
+    <el-dialog v-model="dialog" title="前端演示操作" width="500"
+      ><div class="demo-dialog">
+        <div>UI</div>
+        <h3>交互流程已触发</h3>
+        <p>
+          此功能只展示页面、状态和交互反馈，不请求新增后端接口，也不会修改数据库。
+        </p>
+      </div>
+      <template #footer
+        ><el-button @click="dialog = false">关闭</el-button
+        ><el-button type="primary" @click="dialog = false"
+          >确认演示</el-button
+        ></template
+      ></el-dialog
+    >
+  </div>
+</template>
 
 <style scoped>
-.prototype-page{padding-top:20px}.module-head{min-height:128px;padding:23px 28px;display:flex;justify-content:space-between;align-items:center;gap:24px;border:1px solid rgba(52,193,234,.23);border-radius:12px;background:radial-gradient(circle at 72% 50%,rgba(28,141,185,.16),transparent 18rem),linear-gradient(112deg,#092944,#061728);box-shadow:0 20px 48px rgba(0,4,13,.32);position:relative;overflow:hidden}.module-head:after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(68,187,229,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(68,187,229,.045) 1px,transparent 1px);background-size:25px 25px;mask-image:linear-gradient(90deg,black,transparent 78%);pointer-events:none}.module-head>div{z-index:1}.module-head p{font:8px monospace;letter-spacing:.23em;color:#4fd8f4;margin:0}.module-head p>i{display:inline-block;width:24px;height:1px;background:#4de0f8;box-shadow:0 0 8px #4de0f8;margin:0 8px 3px 0}.title{display:flex;align-items:center;gap:12px;margin:10px 0}.title> b{font:700 12px monospace;color:#68e7fa;border:1px solid rgba(64,211,240,.32);padding:6px 8px;background:rgba(17,91,119,.24)}.title h1{font-size:25px;color:#edfaff;margin:0}.module-head>div>small{font-size:10px;color:#7897ae}.source-badge{display:flex;align-items:center;gap:6px;font-size:8px;color:#698aa1;border:1px solid #1a465f;padding:5px 7px;border-radius:3px;margin-left:5px}.source-badge i{width:5px;height:5px;border-radius:50%;background:#e7a747;box-shadow:0 0 7px #e7a747}.source-badge.live i{background:#45dbad;box-shadow:0 0 7px #45dbad}.head-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.head-actions>span{font:8px monospace;color:#4fd4b0;margin-right:7px}.head-actions>span i,.live-dot i{display:inline-block;width:5px;height:5px;border-radius:50%;background:#45e0b2;box-shadow:0 0 7px #45e0b2;margin-right:6px}.metric-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:13px 0}.metric-strip article{padding:14px 16px;border:1px solid rgba(46,126,163,.18);border-radius:7px;background:rgba(6,22,38,.7);position:relative;overflow:hidden}.metric-strip span,.metric-strip strong,.metric-strip em{display:block}.metric-strip span{font-size:9px;color:#68869d}.metric-strip strong{font:700 21px monospace;color:#dff8ff;margin:7px 0}.metric-strip strong small{font-size:9px;color:#668aa1;margin-left:3px}.metric-strip em{font-style:normal;font-size:8px;color:#45cfa8}.metric-strip article>i{position:absolute;left:0;bottom:0;width:42%;height:1px;background:linear-gradient(90deg,#35d9f1,transparent);box-shadow:0 0 7px #35d9f1}.metric-strip article.amber>i{background:linear-gradient(90deg,#e7a943,transparent)}.section-title{display:flex;justify-content:space-between;align-items:flex-start}.section-title small{font:8px monospace;letter-spacing:.15em;color:#4c7790}.section-title h3{font-size:13px;color:#cce6f3;margin:5px 0}.section-title>span{font-size:8px;color:#62839a}.overview-layout{display:grid;grid-template-columns:1.45fr .75fr;gap:13px}.overview-layout>article{padding:18px}.domain-map{grid-row:span 2}.map-canvas{height:435px;position:relative;background:radial-gradient(circle at center,rgba(29,139,178,.13),transparent 42%),linear-gradient(rgba(45,108,143,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(45,108,143,.06) 1px,transparent 1px);background-size:auto,28px 28px,28px 28px}.map-core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:145px;height:145px;border-radius:50%;border:1px solid #3bd5ec;display:grid;place-content:center;text-align:center;background:radial-gradient(circle,rgba(28,138,176,.3),#071a2c 70%);box-shadow:0 0 30px rgba(53,208,234,.14),inset 0 0 20px rgba(48,193,221,.08)}.map-core:before{content:"";position:absolute;inset:-16px;border:1px dashed rgba(67,206,234,.25);border-radius:50%;animation:spin 20s linear infinite}.map-core b{font-size:13px;color:#bbf5ff}.map-core small{font-size:8px;color:#568098;margin-top:6px}.domain{position:absolute;width:128px;padding:12px;border:1px solid #1b4b64;background:#081f33;border-radius:7px;text-align:left;cursor:pointer}.domain span,.domain b,.domain em{display:block}.domain span{font-size:9px;color:#698ba1}.domain b{font:700 16px monospace;color:#bcecf5;margin:5px 0}.domain em{font-style:normal;font-size:8px;color:#4dd3ae}.domain-1{left:5%;top:8%}.domain-2{right:5%;top:8%}.domain-3{left:1%;top:44%}.domain-4{right:1%;top:44%}.domain-5{left:7%;bottom:5%}.domain-6{right:7%;bottom:5%}.source-chart{display:grid;grid-template-columns:145px 1fr;align-items:center}.source-chart header{grid-column:1/-1}.source-ring{width:118px;height:118px;border-radius:50%;padding:11px;display:grid;place-items:center;margin:auto}.source-ring>span{width:100%;height:100%;border-radius:50%;display:grid;place-content:center;text-align:center;background:#071b2e;font:700 20px monospace;color:#d7f8ff}.source-ring small{display:block;font-size:7px;color:#5a7e95;margin-top:3px}.source-chart ul{list-style:none;padding:0;margin:0}.source-chart li{display:grid;grid-template-columns:6px 1fr auto;gap:7px;margin:10px 0;font-size:8px;color:#66859b}.source-chart li i{width:5px;height:5px;border-radius:50%}.source-chart li b{color:#b3d4e0}.quality-board{display:grid;grid-template-columns:125px 1fr;gap:8px}.quality-board header{grid-column:1/-1}.heat-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:3px}.heat-grid i{height:19px;background:#39d9f0;box-shadow:inset 0 0 5px rgba(255,255,255,.15)}.quality-lines p{display:grid;grid-template-columns:34px 1fr 28px;gap:6px;align-items:center;margin:8px 0;font-size:7px;color:#5f7e95}.quality-lines p>i{height:3px;background:#112f44}.quality-lines p>i b{display:block;height:100%;background:#42d9f0}.quality-lines em{font-style:normal;color:#8eb6c8}.activity-feed button{display:grid;grid-template-columns:7px 1fr auto;gap:8px;align-items:center;width:100%;padding:11px 0;border:0;border-bottom:1px solid #142f43;text-align:left;background:transparent;cursor:pointer}.activity-feed button>i{width:5px;height:5px;border-radius:50%;background:#3ed7b0;box-shadow:0 0 7px #3ed7b0}.activity-feed b,.activity-feed span{display:block}.activity-feed b{font-size:9px;color:#accbd9}.activity-feed span,.activity-feed time{font-size:7px;color:#547188;margin-top:3px}.pulse{width:6px;height:6px;border-radius:50%;background:#42d8b0;box-shadow:0 0 8px #42d8b0}.registry-layout{display:grid;grid-template-columns:210px minmax(0,1fr) 238px;gap:13px}.filter-rail,.catalog-table,.object-profile{padding:17px}.filter-rail header small,.object-profile header small{font:8px monospace;color:#4d7891;letter-spacing:.14em}.filter-rail h3,.object-profile h3{font-size:13px;color:#cbe5f1;margin:5px 0 14px}.filter-group{padding:14px 0;border-bottom:1px solid #153147}.filter-group>b{display:block;font-size:9px;color:#91adbf;margin-bottom:9px}.filter-group label{display:flex;align-items:center;font-size:8px;color:#638199;margin:8px 0}.filter-group label em{margin-left:auto;font-style:normal;color:#4f6c83}.reset-filter{width:100%;margin-top:13px;padding:8px;border:1px solid #1a455f;background:#091f33;color:#55cbe4;font-size:8px}.tabs{display:flex;gap:3px}.tabs button{padding:6px 9px;border:1px solid #173d55;background:#081c2f;color:#5f7f96;font-size:8px}.tabs button.active{color:#71e5f6;border-color:#2a92b4}.code{font:9px monospace;color:#4ecce8}.profile-ring{width:112px;height:112px;border-radius:50%;margin:22px auto;display:grid;place-content:center;text-align:center;background:radial-gradient(circle at center,#071c2e 57%,transparent 59%),conic-gradient(#42d9ef 0 94%,#15374e 94%);box-shadow:0 0 18px rgba(54,205,231,.1)}.profile-ring span{font:700 23px monospace;color:#d9f8ff}.profile-ring small{display:block;font-size:7px;color:#5c8197}.object-profile h4{font-size:11px;color:#bfd9e6;margin:0}.object-profile>p{font-size:8px;color:#56758b}.object-profile dl{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:15px 0}.object-profile dl div{padding:9px;background:#081e31;border:1px solid #163950}.object-profile dt{font-size:7px;color:#557389}.object-profile dd{font:700 11px monospace;color:#b9e4ef;margin:4px 0 0}.object-profile h5{font-size:9px;color:#85a3b5}.property{display:flex;flex-wrap:wrap;gap:5px}.property span{font-size:7px;border:1px solid #1d4b64;color:#62aec1;padding:4px}.object-profile>button{width:100%;padding:9px;border:1px solid #206580;background:#0b2b42;color:#60d9ee;font-size:8px}.lab-layout{display:grid;grid-template-columns:1.2fr .8fr;gap:13px}.lab-board,.lab-canvas{padding:18px}.lab-board{grid-row:span 2}.kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:13px;overflow:auto}.kanban>div{min-width:150px;background:rgba(6,21,36,.66);border:1px solid #15364d;padding:8px}.kanban>div>header{display:flex;justify-content:space-between;padding:4px 3px 10px}.kanban>div>header b{font-size:9px;color:#92b2c2}.kanban>div>header span{font:8px monospace;color:#4fd1e9}.kanban button{width:100%;padding:11px;margin-bottom:7px;border:1px solid #183c54;border-radius:5px;background:#0a2337;text-align:left;cursor:pointer}.kanban button small,.kanban button strong{display:block}.kanban button small{font:7px monospace;color:#47c3dc}.kanban button strong{font-size:9px;line-height:1.5;color:#b7d1dd;margin:7px 0 11px}.kanban button p{display:flex;justify-content:space-between;font-size:7px;color:#5e7d93}.kanban button em{font-style:normal;color:#4ed3ad}.kanban button>i{display:block;height:2px;background:#13344a}.kanban button>i b{display:block;height:100%;background:#3ed7ee}.lab-canvas{min-height:430px}.ct-view,.fatigue-chart,.simulation-view,.parameter-matrix{height:350px;margin-top:15px;position:relative;border:1px solid #173a52;background:#061a2c}.ct-view{overflow:hidden;background:radial-gradient(ellipse,rgba(119,191,213,.34),rgba(13,51,70,.8) 35%,#051321 37%),repeating-radial-gradient(circle,transparent 0 12px,rgba(80,160,185,.08) 13px 14px)}.scan-object{position:absolute;inset:15% 23%;border-radius:47% 52% 44% 55%;border:16px solid rgba(124,192,210,.3);box-shadow:inset 0 0 35px rgba(78,157,179,.3),0 0 25px rgba(69,173,202,.12)}.ct-view .mark{position:absolute;width:21px;height:21px;border:1px solid #ff6b7d;color:#ff8998;border-radius:50%;display:grid;place-items:center;font:8px monospace;box-shadow:0 0 11px rgba(255,91,115,.3)}.mark-1{left:35%;top:29%}.mark-2{right:29%;top:41%}.mark-3{left:42%;bottom:26%}.mark-4{right:39%;top:23%}.mark-5{left:26%;top:50%}.ct-view>span,.fatigue-chart>span{position:absolute;left:10px;bottom:8px;font:7px monospace;color:#5ad9ee}.fatigue-chart{background-image:linear-gradient(rgba(50,114,148,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(50,114,148,.12) 1px,transparent 1px);background-size:100% 45px,55px 100%}.fatigue-chart>i{position:absolute;width:6px;height:6px;border-radius:50%;background:#43dcef;box-shadow:0 0 6px #43dcef}.sn-line{position:absolute;left:9%;top:21%;width:82%;height:2px;background:#986fff;transform:rotate(-28deg);transform-origin:left;box-shadow:0 0 8px #986fff}.simulation-view{display:flex;align-items:center;justify-content:center;background:radial-gradient(circle,#0f4b67,#061727 56%)}.mesh{width:210px;height:210px;display:grid;grid-template-columns:repeat(8,1fr);transform:perspective(450px) rotateX(58deg) rotateZ(28deg);box-shadow:0 0 30px rgba(57,210,237,.18)}.mesh i{border:1px solid rgba(92,222,242,.42);background:rgba(24,126,159,.14)}.scale{position:absolute;right:18px;display:grid;gap:8px;font:7px monospace;color:#6f90a4}.scale i{height:140px;width:7px;background:linear-gradient(#ff667d,#f0b44a,#47d6ad,#4c7fff)}.parameter-matrix{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:10px;height:auto}.parameter-matrix div{padding:11px 8px;border:1px solid #16384f;background:#081f32}.parameter-matrix div.selected{border-color:#39d7ef;box-shadow:inset 0 0 12px rgba(57,215,239,.12)}.parameter-matrix span,.parameter-matrix b,.parameter-matrix em{display:block}.parameter-matrix span{font:7px monospace;color:#4ec7de}.parameter-matrix b{font:700 12px monospace;color:#bddce7;margin:6px 0}.parameter-matrix em{font-style:normal;font-size:7px;color:#43ceaa}.monitor-layout{display:grid;grid-template-columns:1.4fr .6fr;gap:13px}.waveform,.equipment-state,.alarm-stream{padding:18px}.waveform{grid-row:span 2}.live-dot{font:8px monospace;color:#46d5af}.channel{display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:center;margin-top:14px}.channel>header b,.channel>header strong{display:block}.channel>header b{font-size:9px;color:#82a3b5}.channel>header strong{font:700 18px monospace;margin-top:8px}.channel>header strong small{font-size:7px;color:#58788e}.channel>div{height:100px;display:flex;align-items:center;gap:3px;background-image:linear-gradient(rgba(48,111,148,.1) 1px,transparent 1px);background-size:100% 25px;border-left:1px solid #17364d}.channel>div i{width:100%;min-height:3px;border-radius:2px}.equipment-state button{display:grid;grid-template-columns:7px 1fr auto;gap:9px;align-items:center;width:100%;padding:12px 2px;border:0;border-bottom:1px solid #143047;background:transparent;text-align:left}.equipment-state button>i{width:6px;height:6px;border-radius:50%;background:#45d8ad;box-shadow:0 0 7px #45d8ad}.equipment-state button>i.warn{background:#f0ad45;box-shadow:0 0 7px #f0ad45}.equipment-state button b,.equipment-state button span{display:block}.equipment-state button b{font-size:9px;color:#afceda}.equipment-state button span{font-size:7px;color:#54738a;margin-top:4px}.equipment-state button em{font:8px monospace;color:#50cce4}.alarm-stream button{display:grid;grid-template-columns:28px 1fr 64px 48px;gap:8px;align-items:center;width:100%;padding:13px 3px;border:0;border-bottom:1px solid #143047;background:transparent;text-align:left}.alarm-stream em{font-style:normal;font-size:7px;color:#f0aa47}.alarm-stream b{font-size:9px;color:#aecbd8}.alarm-stream time,.alarm-stream span{font-size:7px;color:#55768c}.alarm-stream span{color:#4ccbe3}.analysis-toolbar{display:flex;align-items:flex-end;gap:10px;padding:14px 17px;margin-bottom:13px}.analysis-toolbar>div{display:grid;gap:5px}.analysis-toolbar span{font-size:7px;color:#58768d}.analysis-toolbar button{min-width:190px;padding:8px 11px;border:1px solid #193f57;background:#081e31;color:#89a8b8;text-align:left;font-size:8px}.analysis-layout{display:grid;grid-template-columns:1.4fr .6fr;gap:13px}.analysis-canvas,.analysis-insight,.analysis-table{padding:18px}.analysis-table{grid-column:1/-1}.scatter-chart,.pareto-chart,.compare-chart,.measurement-map{height:350px;margin-top:12px;border-left:1px solid #17384f;border-bottom:1px solid #17384f;position:relative;background-image:linear-gradient(rgba(46,107,145,.1) 1px,transparent 1px),linear-gradient(90deg,rgba(46,107,145,.1) 1px,transparent 1px);background-size:100% 50px,60px 100%}.scatter-chart>i{position:absolute;border-radius:50%;background:#46dcf1;box-shadow:0 0 6px #46dcf1}.scatter-chart>b{position:absolute;left:5%;bottom:12%;width:90%;height:2px;background:#9a6dff;transform:rotate(31deg);transform-origin:left}.scatter-chart>span{position:absolute;right:10px;top:10px;font:8px monospace;color:#56d7b3}.measurement-map{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;padding:10px;height:auto;border:0;background:none}.measurement-map div{min-height:66px;padding:8px;border:1px solid rgba(60,190,220,.18)}.measurement-map span,.measurement-map b,.measurement-map em{display:block}.measurement-map span{font:7px monospace;color:#6f94a8}.measurement-map b{font:700 15px monospace;color:#d8f5fb;margin:6px 0}.measurement-map em{font-style:normal;font-size:7px;color:#6b899d}.pareto-chart,.compare-chart{display:flex;align-items:flex-end;gap:12px;padding:15px 16px 0}.pareto-chart>div,.compare-chart>div{height:100%;flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:8px;position:relative}.pareto-chart b{width:46%;background:linear-gradient(#42def2,#176da0);box-shadow:0 0 10px rgba(57,210,236,.14)}.pareto-chart i{position:absolute;width:6px;height:6px;border-radius:50%;background:#ecac49;box-shadow:0 0 6px #ecac49}.pareto-chart span,.compare-chart span{font-size:7px;color:#56758c}.compare-chart>div>i{height:100%;display:flex;align-items:flex-end;gap:3px}.compare-chart b,.compare-chart em{display:block;width:12px;min-height:4px}.compare-chart b{background:linear-gradient(#3edff3,#176c9b)}.compare-chart em{background:linear-gradient(#9473ff,#443c90)}.analysis-insight>header>b{font:7px monospace;color:#63e1f5;border:1px solid #21627d;padding:4px}.score-orbit{width:126px;height:126px;margin:20px auto;border-radius:50%;display:grid;place-content:center;text-align:center;background:radial-gradient(circle at center,#071c2f 55%,transparent 57%),conic-gradient(#42daf0 0 92.6%,#16364c 92.6%);box-shadow:0 0 20px rgba(60,206,232,.1)}.score-orbit span{font:700 21px monospace;color:#d8f8ff}.score-orbit small{display:block;font-size:7px;color:#5d8197}.analysis-insight ul{list-style:none;padding:0}.analysis-insight li{display:grid;grid-template-columns:24px 1fr;gap:7px;padding:10px 0;border-bottom:1px solid #143047}.analysis-insight li b{font:8px monospace;color:#48cce5}.analysis-insight li span{font-size:8px;line-height:1.5;color:#6c899d}.analysis-insight>button,.rule-health>button{width:100%;padding:9px;border:1px solid #1d5e79;background:#0b2b42;color:#5bd6ed;font-size:8px}.analysis-table .el-input,.standard-catalog .el-input{width:220px}.govern-layout{display:grid;grid-template-columns:1.35fr .65fr;gap:13px}.lineage,.rule-health,.standard-catalog{padding:18px}.standard-catalog{grid-column:1/-1}.lineage-flow{display:flex;align-items:center;justify-content:space-between;margin:35px 5px}.lineage-flow button{width:150px;padding:15px;border:1px solid #1b465f;background:#081f32;color:#7594a9}.lineage-flow button.active{border-color:#38d6ed;box-shadow:0 0 18px rgba(53,206,232,.1)}.lineage-flow b,.lineage-flow span{display:block}.lineage-flow b{font-size:10px;color:#bad6e2}.lineage-flow span{font-size:7px;margin-top:5px}.lineage-flow>i{font-style:normal;color:#36bed9}.impact{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.impact p{padding:10px;border:1px solid #17384f;background:#071c2e}.impact span,.impact b{display:block}.impact span{font-size:7px;color:#58768d}.impact b{font:700 14px monospace;color:#aee6f2;margin-top:5px}.rule-health header>b{font:700 17px monospace;color:#55d7b4}.rule{display:grid;grid-template-columns:45px 1fr 28px;gap:8px;align-items:center;margin:18px 0;font-size:8px;color:#648299}.rule>i{height:4px;background:#123046}.rule>i b{display:block;height:100%;background:linear-gradient(90deg,#347fbc,#42dcb7)}.rule em{font-style:normal;color:#a5c9d7}.standard-list{margin-top:12px}.standard-list button{display:grid;grid-template-columns:105px 1fr 130px 70px 70px;gap:12px;align-items:center;width:100%;padding:12px 8px;border:0;border-bottom:1px solid #153147;background:transparent;text-align:left}.standard-list b{font-size:9px;color:#b4d0dc}.standard-list em{font-style:normal;font-size:8px;color:#617f95}.standard-list>button>i strong,.standard-list>button>i small{display:block}.standard-list>button>i strong{font:700 12px monospace;color:#54d8b5}.standard-list>button>i small{font-size:7px;color:#58758b}.log-layout{display:grid;grid-template-columns:1.35fr .65fr;gap:13px}.log-console,.severity{padding:18px}.console-filter button{padding:5px 8px;border:1px solid #173e57;background:#081d30;color:#5d7d94;font-size:7px}.console-filter button.active{color:#67e0f2;border-color:#2a829f}.console{height:470px;overflow:auto;margin-top:12px;padding:8px 12px;background:#04131f;border:1px solid #133249;font-family:monospace}.console p{display:grid;grid-template-columns:65px 42px 90px 1fr;gap:8px;margin:0;padding:7px 0;border-bottom:1px solid rgba(24,61,83,.38);font-size:8px}.console time{color:#4f7188}.console em{font-style:normal;color:#48d3b0}.console span{color:#4fc6df}.console b{font-weight:400;color:#7f9cac}.console p.warn em{color:#e8a849}.console p.error em,.console p.error b{color:#ff6c7d}.severity-bars{margin:20px 0}.severity-bars p{display:grid;grid-template-columns:40px 1fr 35px;gap:8px;align-items:center;font:8px monospace;color:#6b889d}.severity-bars i{height:6px;background:#112f44}.severity-bars i b{display:block;height:100%;background:linear-gradient(90deg,#3287b8,#42d8ef)}.severity h4{font-size:9px;color:#8caabb}.state-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.state-cards p{padding:12px 6px;text-align:center;border:1px solid #17384f;background:#081d30}.state-cards b,.state-cards span{display:block}.state-cards b{font:700 14px monospace;color:#bceaf4}.state-cards span{font-size:7px;color:#58758c;margin-top:5px}.prototype-detail{padding:4px}.detail-status{display:flex;justify-content:space-between}.prototype-detail h3{font-size:11px;color:#a9c8d8;margin:22px 0 10px}.prototype-detail dl{display:grid;grid-template-columns:1fr 1fr;border:1px solid #19384f}.prototype-detail dl div{padding:11px;border-right:1px solid #163149;border-bottom:1px solid #163149}.prototype-detail dt{font-size:7px;color:#5b7a92}.prototype-detail dd{font-size:9px;color:#b5d0dd;margin:5px 0 0}.relation-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:20px}.relation-grid button{display:flex;justify-content:space-between;padding:11px;border:1px solid #193b53;background:#091f32;color:#6e8da2;font-size:8px}.relation-grid b{color:#52d5ec}.demo-dialog{text-align:center;padding:10px 20px}.demo-dialog>div{width:58px;height:58px;border:1px solid #36cde8;border-radius:50%;display:grid;place-items:center;margin:auto;color:#65e4f7;box-shadow:inset 0 0 16px rgba(54,205,232,.15)}.demo-dialog h3{color:#d1eaf4}.demo-dialog p{font-size:10px;line-height:1.7;color:#69869b}@keyframes spin{to{transform:rotate(360deg)}}
-@media(max-width:1200px){.registry-layout{grid-template-columns:190px minmax(0,1fr)}.object-profile{display:none}.lab-layout,.analysis-layout,.govern-layout,.log-layout{grid-template-columns:1fr}.analysis-table,.standard-catalog{grid-column:auto}.overview-layout{grid-template-columns:1fr}.domain-map{grid-row:auto}.monitor-layout{grid-template-columns:1fr}.waveform{grid-row:auto}}
-@media(max-width:800px){.module-head{align-items:flex-start;flex-direction:column}.head-actions{justify-content:flex-start}.metric-strip{grid-template-columns:repeat(2,1fr)}.registry-layout{grid-template-columns:1fr}.filter-rail{display:none}.source-chart,.quality-board{grid-template-columns:1fr}.kanban{grid-template-columns:repeat(4,160px)}.analysis-toolbar{align-items:stretch;flex-direction:column}.analysis-toolbar button{width:100%}.lineage-flow{overflow:auto}.lineage-flow button{min-width:140px}.standard-list button{grid-template-columns:95px 1fr 70px}.standard-list em,.standard-list>button>i{display:none}}
-@media(max-width:520px){.metric-strip{grid-template-columns:1fr}.title h1{font-size:21px}.title .source-badge{display:none}.map-canvas{height:500px}.domain{width:108px}.source-topology{transform:scale(.85)}.measurement-map{grid-template-columns:repeat(3,1fr)}.console p{grid-template-columns:54px 36px 1fr}.console span{display:none}}
+.prototype-page {
+  padding-top: 20px;
+}
+.module-head {
+  min-height: 128px;
+  padding: 23px 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  border: 1px solid rgba(52, 193, 234, 0.23);
+  border-radius: 12px;
+  background:
+    radial-gradient(
+      circle at 72% 50%,
+      rgba(28, 141, 185, 0.16),
+      transparent 18rem
+    ),
+    linear-gradient(112deg, #092944, #061728);
+  box-shadow: 0 20px 48px rgba(0, 4, 13, 0.32);
+  position: relative;
+  overflow: hidden;
+}
+.module-head:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(68, 187, 229, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(68, 187, 229, 0.045) 1px, transparent 1px);
+  background-size: 25px 25px;
+  mask-image: linear-gradient(90deg, black, transparent 78%);
+  pointer-events: none;
+}
+.module-head > div {
+  z-index: 1;
+}
+.module-head p {
+  font: 8px monospace;
+  letter-spacing: 0.23em;
+  color: #4fd8f4;
+  margin: 0;
+}
+.module-head p > i {
+  display: inline-block;
+  width: 24px;
+  height: 1px;
+  background: #4de0f8;
+  box-shadow: 0 0 8px #4de0f8;
+  margin: 0 8px 3px 0;
+}
+.title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+}
+.title > b {
+  font: 700 12px monospace;
+  color: #68e7fa;
+  border: 1px solid rgba(64, 211, 240, 0.32);
+  padding: 6px 8px;
+  background: rgba(17, 91, 119, 0.24);
+}
+.title h1 {
+  font-size: 25px;
+  color: #edfaff;
+  margin: 0;
+}
+.module-head > div > small {
+  font-size: 10px;
+  color: #7897ae;
+}
+.source-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 8px;
+  color: #698aa1;
+  border: 1px solid #1a465f;
+  padding: 5px 7px;
+  border-radius: 3px;
+  margin-left: 5px;
+}
+.source-badge i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #e7a747;
+  box-shadow: 0 0 7px #e7a747;
+}
+.source-badge.live i {
+  background: #45dbad;
+  box-shadow: 0 0 7px #45dbad;
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.head-actions > span {
+  font: 8px monospace;
+  color: #4fd4b0;
+  margin-right: 7px;
+}
+.head-actions > span i,
+.live-dot i {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #45e0b2;
+  box-shadow: 0 0 7px #45e0b2;
+  margin-right: 6px;
+}
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin: 13px 0;
+}
+.metric-strip article {
+  padding: 14px 16px;
+  border: 1px solid rgba(46, 126, 163, 0.18);
+  border-radius: 7px;
+  background: rgba(6, 22, 38, 0.7);
+  position: relative;
+  overflow: hidden;
+}
+.metric-strip span,
+.metric-strip strong,
+.metric-strip em {
+  display: block;
+}
+.metric-strip span {
+  font-size: 9px;
+  color: #68869d;
+}
+.metric-strip strong {
+  font: 700 21px monospace;
+  color: #dff8ff;
+  margin: 7px 0;
+}
+.metric-strip strong small {
+  font-size: 9px;
+  color: #668aa1;
+  margin-left: 3px;
+}
+.metric-strip em {
+  font-style: normal;
+  font-size: 8px;
+  color: #45cfa8;
+}
+.metric-strip article > i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 42%;
+  height: 1px;
+  background: linear-gradient(90deg, #35d9f1, transparent);
+  box-shadow: 0 0 7px #35d9f1;
+}
+.metric-strip article.amber > i {
+  background: linear-gradient(90deg, #e7a943, transparent);
+}
+.section-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.section-title small {
+  font: 8px monospace;
+  letter-spacing: 0.15em;
+  color: #4c7790;
+}
+.section-title h3 {
+  font-size: 13px;
+  color: #cce6f3;
+  margin: 5px 0;
+}
+.section-title > span {
+  font-size: 8px;
+  color: #62839a;
+}
+.overview-layout {
+  display: grid;
+  grid-template-columns: 1.45fr 0.75fr;
+  gap: 13px;
+}
+.overview-layout > article {
+  padding: 18px;
+}
+.domain-map {
+  grid-row: span 2;
+}
+.map-canvas {
+  height: 435px;
+  position: relative;
+  background:
+    radial-gradient(
+      circle at center,
+      rgba(29, 139, 178, 0.13),
+      transparent 42%
+    ),
+    linear-gradient(rgba(45, 108, 143, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45, 108, 143, 0.06) 1px, transparent 1px);
+  background-size:
+    auto,
+    28px 28px,
+    28px 28px;
+}
+.map-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 145px;
+  height: 145px;
+  border-radius: 50%;
+  border: 1px solid #3bd5ec;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background: radial-gradient(circle, rgba(28, 138, 176, 0.3), #071a2c 70%);
+  box-shadow:
+    0 0 30px rgba(53, 208, 234, 0.14),
+    inset 0 0 20px rgba(48, 193, 221, 0.08);
+}
+.map-core:before {
+  content: "";
+  position: absolute;
+  inset: -16px;
+  border: 1px dashed rgba(67, 206, 234, 0.25);
+  border-radius: 50%;
+  animation: spin 20s linear infinite;
+}
+.map-core b {
+  font-size: 13px;
+  color: #bbf5ff;
+}
+.map-core small {
+  font-size: 8px;
+  color: #568098;
+  margin-top: 6px;
+}
+.domain {
+  position: absolute;
+  width: 128px;
+  padding: 12px;
+  border: 1px solid #1b4b64;
+  background: #081f33;
+  border-radius: 7px;
+  text-align: left;
+  cursor: pointer;
+}
+.domain span,
+.domain b,
+.domain em {
+  display: block;
+}
+.domain span {
+  font-size: 9px;
+  color: #698ba1;
+}
+.domain b {
+  font: 700 16px monospace;
+  color: #bcecf5;
+  margin: 5px 0;
+}
+.domain em {
+  font-style: normal;
+  font-size: 8px;
+  color: #4dd3ae;
+}
+.domain-1 {
+  left: 5%;
+  top: 8%;
+}
+.domain-2 {
+  right: 5%;
+  top: 8%;
+}
+.domain-3 {
+  left: 1%;
+  top: 44%;
+}
+.domain-4 {
+  right: 1%;
+  top: 44%;
+}
+.domain-5 {
+  left: 7%;
+  bottom: 5%;
+}
+.domain-6 {
+  right: 7%;
+  bottom: 5%;
+}
+.source-chart {
+  display: grid;
+  grid-template-columns: 145px 1fr;
+  align-items: center;
+}
+.source-chart header {
+  grid-column: 1/-1;
+}
+.source-ring {
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  padding: 11px;
+  display: grid;
+  place-items: center;
+  margin: auto;
+}
+.source-ring > span {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background: #071b2e;
+  font: 700 20px monospace;
+  color: #d7f8ff;
+}
+.source-ring small {
+  display: block;
+  font-size: 7px;
+  color: #5a7e95;
+  margin-top: 3px;
+}
+.source-chart ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.source-chart li {
+  display: grid;
+  grid-template-columns: 6px 1fr auto;
+  gap: 7px;
+  margin: 10px 0;
+  font-size: 8px;
+  color: #66859b;
+}
+.source-chart li i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+.source-chart li b {
+  color: #b3d4e0;
+}
+.quality-board {
+  display: grid;
+  grid-template-columns: 125px 1fr;
+  gap: 8px;
+}
+.quality-board header {
+  grid-column: 1/-1;
+}
+.heat-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 3px;
+}
+.heat-grid i {
+  height: 19px;
+  background: #39d9f0;
+  box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.15);
+}
+.quality-lines p {
+  display: grid;
+  grid-template-columns: 34px 1fr 28px;
+  gap: 6px;
+  align-items: center;
+  margin: 8px 0;
+  font-size: 7px;
+  color: #5f7e95;
+}
+.quality-lines p > i {
+  height: 3px;
+  background: #112f44;
+}
+.quality-lines p > i b {
+  display: block;
+  height: 100%;
+  background: #42d9f0;
+}
+.quality-lines em {
+  font-style: normal;
+  color: #8eb6c8;
+}
+.activity-feed button {
+  display: grid;
+  grid-template-columns: 7px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 0;
+  border: 0;
+  border-bottom: 1px solid #142f43;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+.activity-feed button > i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #3ed7b0;
+  box-shadow: 0 0 7px #3ed7b0;
+}
+.activity-feed b,
+.activity-feed span {
+  display: block;
+}
+.activity-feed b {
+  font-size: 9px;
+  color: #accbd9;
+}
+.activity-feed span,
+.activity-feed time {
+  font-size: 7px;
+  color: #547188;
+  margin-top: 3px;
+}
+.pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #42d8b0;
+  box-shadow: 0 0 8px #42d8b0;
+}
+.registry-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr) 238px;
+  gap: 13px;
+}
+.filter-rail,
+.catalog-table,
+.object-profile {
+  padding: 17px;
+}
+.filter-rail header small,
+.object-profile header small {
+  font: 8px monospace;
+  color: #4d7891;
+  letter-spacing: 0.14em;
+}
+.filter-rail h3,
+.object-profile h3 {
+  font-size: 13px;
+  color: #cbe5f1;
+  margin: 5px 0 14px;
+}
+.filter-group {
+  padding: 14px 0;
+  border-bottom: 1px solid #153147;
+}
+.filter-group > b {
+  display: block;
+  font-size: 9px;
+  color: #91adbf;
+  margin-bottom: 9px;
+}
+.filter-group label {
+  display: flex;
+  align-items: center;
+  font-size: 8px;
+  color: #638199;
+  margin: 8px 0;
+}
+.filter-group label em {
+  margin-left: auto;
+  font-style: normal;
+  color: #4f6c83;
+}
+.reset-filter {
+  width: 100%;
+  margin-top: 13px;
+  padding: 8px;
+  border: 1px solid #1a455f;
+  background: #091f33;
+  color: #55cbe4;
+  font-size: 8px;
+}
+.tabs {
+  display: flex;
+  gap: 3px;
+}
+.tabs button {
+  padding: 6px 9px;
+  border: 1px solid #173d55;
+  background: #081c2f;
+  color: #5f7f96;
+  font-size: 8px;
+}
+.tabs button.active {
+  color: #71e5f6;
+  border-color: #2a92b4;
+}
+.code {
+  font: 9px monospace;
+  color: #4ecce8;
+}
+.profile-ring {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  margin: 22px auto;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background:
+    radial-gradient(circle at center, #071c2e 57%, transparent 59%),
+    conic-gradient(#42d9ef 0 94%, #15374e 94%);
+  box-shadow: 0 0 18px rgba(54, 205, 231, 0.1);
+}
+.profile-ring span {
+  font: 700 23px monospace;
+  color: #d9f8ff;
+}
+.profile-ring small {
+  display: block;
+  font-size: 7px;
+  color: #5c8197;
+}
+.object-profile h4 {
+  font-size: 11px;
+  color: #bfd9e6;
+  margin: 0;
+}
+.object-profile > p {
+  font-size: 8px;
+  color: #56758b;
+}
+.object-profile dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 15px 0;
+}
+.object-profile dl div {
+  padding: 9px;
+  background: #081e31;
+  border: 1px solid #163950;
+}
+.object-profile dt {
+  font-size: 7px;
+  color: #557389;
+}
+.object-profile dd {
+  font: 700 11px monospace;
+  color: #b9e4ef;
+  margin: 4px 0 0;
+}
+.object-profile h5 {
+  font-size: 9px;
+  color: #85a3b5;
+}
+.property {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.property span {
+  font-size: 7px;
+  border: 1px solid #1d4b64;
+  color: #62aec1;
+  padding: 4px;
+}
+.object-profile > button {
+  width: 100%;
+  padding: 9px;
+  border: 1px solid #206580;
+  background: #0b2b42;
+  color: #60d9ee;
+  font-size: 8px;
+}
+.lab-layout {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 13px;
+}
+.lab-board,
+.lab-canvas {
+  padding: 18px;
+}
+.lab-board {
+  grid-row: span 2;
+}
+.kanban {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 13px;
+  overflow: auto;
+}
+.kanban > div {
+  min-width: 150px;
+  background: rgba(6, 21, 36, 0.66);
+  border: 1px solid #15364d;
+  padding: 8px;
+}
+.kanban > div > header {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 3px 10px;
+}
+.kanban > div > header b {
+  font-size: 9px;
+  color: #92b2c2;
+}
+.kanban > div > header span {
+  font: 8px monospace;
+  color: #4fd1e9;
+}
+.kanban button {
+  width: 100%;
+  padding: 11px;
+  margin-bottom: 7px;
+  border: 1px solid #183c54;
+  border-radius: 5px;
+  background: #0a2337;
+  text-align: left;
+  cursor: pointer;
+}
+.kanban button small,
+.kanban button strong {
+  display: block;
+}
+.kanban button small {
+  font: 7px monospace;
+  color: #47c3dc;
+}
+.kanban button strong {
+  font-size: 9px;
+  line-height: 1.5;
+  color: #b7d1dd;
+  margin: 7px 0 11px;
+}
+.kanban button p {
+  display: flex;
+  justify-content: space-between;
+  font-size: 7px;
+  color: #5e7d93;
+}
+.kanban button em {
+  font-style: normal;
+  color: #4ed3ad;
+}
+.kanban button > i {
+  display: block;
+  height: 2px;
+  background: #13344a;
+}
+.kanban button > i b {
+  display: block;
+  height: 100%;
+  background: #3ed7ee;
+}
+.lab-canvas {
+  min-height: 430px;
+}
+.ct-view,
+.fatigue-chart,
+.simulation-view,
+.parameter-matrix {
+  height: 350px;
+  margin-top: 15px;
+  position: relative;
+  border: 1px solid #173a52;
+  background: #061a2c;
+}
+.ct-view {
+  overflow: hidden;
+  background:
+    radial-gradient(
+      ellipse,
+      rgba(119, 191, 213, 0.34),
+      rgba(13, 51, 70, 0.8) 35%,
+      #051321 37%
+    ),
+    repeating-radial-gradient(
+      circle,
+      transparent 0 12px,
+      rgba(80, 160, 185, 0.08) 13px 14px
+    );
+}
+.scan-object {
+  position: absolute;
+  inset: 15% 23%;
+  border-radius: 47% 52% 44% 55%;
+  border: 16px solid rgba(124, 192, 210, 0.3);
+  box-shadow:
+    inset 0 0 35px rgba(78, 157, 179, 0.3),
+    0 0 25px rgba(69, 173, 202, 0.12);
+}
+.ct-view .mark {
+  position: absolute;
+  width: 21px;
+  height: 21px;
+  border: 1px solid #ff6b7d;
+  color: #ff8998;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 8px monospace;
+  box-shadow: 0 0 11px rgba(255, 91, 115, 0.3);
+}
+.mark-1 {
+  left: 35%;
+  top: 29%;
+}
+.mark-2 {
+  right: 29%;
+  top: 41%;
+}
+.mark-3 {
+  left: 42%;
+  bottom: 26%;
+}
+.mark-4 {
+  right: 39%;
+  top: 23%;
+}
+.mark-5 {
+  left: 26%;
+  top: 50%;
+}
+.ct-view > span,
+.fatigue-chart > span {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font: 7px monospace;
+  color: #5ad9ee;
+}
+.fatigue-chart {
+  background-image:
+    linear-gradient(rgba(50, 114, 148, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(50, 114, 148, 0.12) 1px, transparent 1px);
+  background-size:
+    100% 45px,
+    55px 100%;
+}
+.fatigue-chart > i {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #43dcef;
+  box-shadow: 0 0 6px #43dcef;
+}
+.sn-line {
+  position: absolute;
+  left: 9%;
+  top: 21%;
+  width: 82%;
+  height: 2px;
+  background: #986fff;
+  transform: rotate(-28deg);
+  transform-origin: left;
+  box-shadow: 0 0 8px #986fff;
+}
+.simulation-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle, #0f4b67, #061727 56%);
+}
+.mesh {
+  width: 210px;
+  height: 210px;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  transform: perspective(450px) rotateX(58deg) rotateZ(28deg);
+  box-shadow: 0 0 30px rgba(57, 210, 237, 0.18);
+}
+.mesh i {
+  border: 1px solid rgba(92, 222, 242, 0.42);
+  background: rgba(24, 126, 159, 0.14);
+}
+.scale {
+  position: absolute;
+  right: 18px;
+  display: grid;
+  gap: 8px;
+  font: 7px monospace;
+  color: #6f90a4;
+}
+.scale i {
+  height: 140px;
+  width: 7px;
+  background: linear-gradient(#ff667d, #f0b44a, #47d6ad, #4c7fff);
+}
+.parameter-matrix {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  padding: 10px;
+  height: auto;
+}
+.parameter-matrix div {
+  padding: 11px 8px;
+  border: 1px solid #16384f;
+  background: #081f32;
+}
+.parameter-matrix div.selected {
+  border-color: #39d7ef;
+  box-shadow: inset 0 0 12px rgba(57, 215, 239, 0.12);
+}
+.parameter-matrix span,
+.parameter-matrix b,
+.parameter-matrix em {
+  display: block;
+}
+.parameter-matrix span {
+  font: 7px monospace;
+  color: #4ec7de;
+}
+.parameter-matrix b {
+  font: 700 12px monospace;
+  color: #bddce7;
+  margin: 6px 0;
+}
+.parameter-matrix em {
+  font-style: normal;
+  font-size: 7px;
+  color: #43ceaa;
+}
+.monitor-layout {
+  display: grid;
+  grid-template-columns: 1.4fr 0.6fr;
+  gap: 13px;
+}
+.waveform,
+.equipment-state,
+.alarm-stream {
+  padding: 18px;
+}
+.waveform {
+  grid-row: span 2;
+}
+.live-dot {
+  font: 8px monospace;
+  color: #46d5af;
+}
+.channel {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  align-items: center;
+  margin-top: 14px;
+}
+.channel > header b,
+.channel > header strong {
+  display: block;
+}
+.channel > header b {
+  font-size: 9px;
+  color: #82a3b5;
+}
+.channel > header strong {
+  font: 700 18px monospace;
+  margin-top: 8px;
+}
+.channel > header strong small {
+  font-size: 7px;
+  color: #58788e;
+}
+.channel > div {
+  height: 100px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background-image: linear-gradient(
+    rgba(48, 111, 148, 0.1) 1px,
+    transparent 1px
+  );
+  background-size: 100% 25px;
+  border-left: 1px solid #17364d;
+}
+.channel > div i {
+  width: 100%;
+  min-height: 3px;
+  border-radius: 2px;
+}
+.equipment-state button {
+  display: grid;
+  grid-template-columns: 7px 1fr auto;
+  gap: 9px;
+  align-items: center;
+  width: 100%;
+  padding: 12px 2px;
+  border: 0;
+  border-bottom: 1px solid #143047;
+  background: transparent;
+  text-align: left;
+}
+.equipment-state button > i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #45d8ad;
+  box-shadow: 0 0 7px #45d8ad;
+}
+.equipment-state button > i.warn {
+  background: #f0ad45;
+  box-shadow: 0 0 7px #f0ad45;
+}
+.equipment-state button b,
+.equipment-state button span {
+  display: block;
+}
+.equipment-state button b {
+  font-size: 9px;
+  color: #afceda;
+}
+.equipment-state button span {
+  font-size: 7px;
+  color: #54738a;
+  margin-top: 4px;
+}
+.equipment-state button em {
+  font: 8px monospace;
+  color: #50cce4;
+}
+.alarm-stream button {
+  display: grid;
+  grid-template-columns: 28px 1fr 64px 48px;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 13px 3px;
+  border: 0;
+  border-bottom: 1px solid #143047;
+  background: transparent;
+  text-align: left;
+}
+.alarm-stream em {
+  font-style: normal;
+  font-size: 7px;
+  color: #f0aa47;
+}
+.alarm-stream b {
+  font-size: 9px;
+  color: #aecbd8;
+}
+.alarm-stream time,
+.alarm-stream span {
+  font-size: 7px;
+  color: #55768c;
+}
+.alarm-stream span {
+  color: #4ccbe3;
+}
+.analysis-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 14px 17px;
+  margin-bottom: 13px;
+}
+.analysis-toolbar > div {
+  display: grid;
+  gap: 5px;
+}
+.analysis-toolbar span {
+  font-size: 7px;
+  color: #58768d;
+}
+.analysis-toolbar button {
+  min-width: 190px;
+  padding: 8px 11px;
+  border: 1px solid #193f57;
+  background: #081e31;
+  color: #89a8b8;
+  text-align: left;
+  font-size: 8px;
+}
+.analysis-layout {
+  display: grid;
+  grid-template-columns: 1.4fr 0.6fr;
+  gap: 13px;
+}
+.analysis-canvas,
+.analysis-insight,
+.analysis-table {
+  padding: 18px;
+}
+.analysis-table {
+  grid-column: 1/-1;
+}
+.scatter-chart,
+.pareto-chart,
+.compare-chart,
+.measurement-map {
+  height: 350px;
+  margin-top: 12px;
+  border-left: 1px solid #17384f;
+  border-bottom: 1px solid #17384f;
+  position: relative;
+  background-image:
+    linear-gradient(rgba(46, 107, 145, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(46, 107, 145, 0.1) 1px, transparent 1px);
+  background-size:
+    100% 50px,
+    60px 100%;
+}
+.scatter-chart > i {
+  position: absolute;
+  border-radius: 50%;
+  background: #46dcf1;
+  box-shadow: 0 0 6px #46dcf1;
+}
+.scatter-chart > b {
+  position: absolute;
+  left: 5%;
+  bottom: 12%;
+  width: 90%;
+  height: 2px;
+  background: #9a6dff;
+  transform: rotate(31deg);
+  transform-origin: left;
+}
+.scatter-chart > span {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  font: 8px monospace;
+  color: #56d7b3;
+}
+.measurement-map {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+  padding: 10px;
+  height: auto;
+  border: 0;
+  background: none;
+}
+.measurement-map div {
+  min-height: 66px;
+  padding: 8px;
+  border: 1px solid rgba(60, 190, 220, 0.18);
+}
+.measurement-map span,
+.measurement-map b,
+.measurement-map em {
+  display: block;
+}
+.measurement-map span {
+  font: 7px monospace;
+  color: #6f94a8;
+}
+.measurement-map b {
+  font: 700 15px monospace;
+  color: #d8f5fb;
+  margin: 6px 0;
+}
+.measurement-map em {
+  font-style: normal;
+  font-size: 7px;
+  color: #6b899d;
+}
+.pareto-chart,
+.compare-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 15px 16px 0;
+}
+.pareto-chart > div,
+.compare-chart > div {
+  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+.pareto-chart b {
+  width: 46%;
+  background: linear-gradient(#42def2, #176da0);
+  box-shadow: 0 0 10px rgba(57, 210, 236, 0.14);
+}
+.pareto-chart i {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ecac49;
+  box-shadow: 0 0 6px #ecac49;
+}
+.pareto-chart span,
+.compare-chart span {
+  font-size: 7px;
+  color: #56758c;
+}
+.compare-chart > div > i {
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+}
+.compare-chart b,
+.compare-chart em {
+  display: block;
+  width: 12px;
+  min-height: 4px;
+}
+.compare-chart b {
+  background: linear-gradient(#3edff3, #176c9b);
+}
+.compare-chart em {
+  background: linear-gradient(#9473ff, #443c90);
+}
+.analysis-insight > header > b {
+  font: 7px monospace;
+  color: #63e1f5;
+  border: 1px solid #21627d;
+  padding: 4px;
+}
+.score-orbit {
+  width: 126px;
+  height: 126px;
+  margin: 20px auto;
+  border-radius: 50%;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background:
+    radial-gradient(circle at center, #071c2f 55%, transparent 57%),
+    conic-gradient(#42daf0 0 92.6%, #16364c 92.6%);
+  box-shadow: 0 0 20px rgba(60, 206, 232, 0.1);
+}
+.score-orbit span {
+  font: 700 21px monospace;
+  color: #d8f8ff;
+}
+.score-orbit small {
+  display: block;
+  font-size: 7px;
+  color: #5d8197;
+}
+.analysis-insight ul {
+  list-style: none;
+  padding: 0;
+}
+.analysis-insight li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 7px;
+  padding: 10px 0;
+  border-bottom: 1px solid #143047;
+}
+.analysis-insight li b {
+  font: 8px monospace;
+  color: #48cce5;
+}
+.analysis-insight li span {
+  font-size: 8px;
+  line-height: 1.5;
+  color: #6c899d;
+}
+.analysis-insight > button,
+.rule-health > button {
+  width: 100%;
+  padding: 9px;
+  border: 1px solid #1d5e79;
+  background: #0b2b42;
+  color: #5bd6ed;
+  font-size: 8px;
+}
+.analysis-table .el-input,
+.standard-catalog .el-input {
+  width: 220px;
+}
+.govern-layout {
+  display: grid;
+  grid-template-columns: 1.35fr 0.65fr;
+  gap: 13px;
+}
+.lineage,
+.rule-health,
+.standard-catalog {
+  padding: 18px;
+}
+.standard-catalog {
+  grid-column: 1/-1;
+}
+.lineage-flow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 35px 5px;
+}
+.lineage-flow button {
+  width: 150px;
+  padding: 15px;
+  border: 1px solid #1b465f;
+  background: #081f32;
+  color: #7594a9;
+}
+.lineage-flow button.active {
+  border-color: #38d6ed;
+  box-shadow: 0 0 18px rgba(53, 206, 232, 0.1);
+}
+.lineage-flow b,
+.lineage-flow span {
+  display: block;
+}
+.lineage-flow b {
+  font-size: 10px;
+  color: #bad6e2;
+}
+.lineage-flow span {
+  font-size: 7px;
+  margin-top: 5px;
+}
+.lineage-flow > i {
+  font-style: normal;
+  color: #36bed9;
+}
+.impact {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.impact p {
+  padding: 10px;
+  border: 1px solid #17384f;
+  background: #071c2e;
+}
+.impact span,
+.impact b {
+  display: block;
+}
+.impact span {
+  font-size: 7px;
+  color: #58768d;
+}
+.impact b {
+  font: 700 14px monospace;
+  color: #aee6f2;
+  margin-top: 5px;
+}
+.rule-health header > b {
+  font: 700 17px monospace;
+  color: #55d7b4;
+}
+.rule {
+  display: grid;
+  grid-template-columns: 45px 1fr 28px;
+  gap: 8px;
+  align-items: center;
+  margin: 18px 0;
+  font-size: 8px;
+  color: #648299;
+}
+.rule > i {
+  height: 4px;
+  background: #123046;
+}
+.rule > i b {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #347fbc, #42dcb7);
+}
+.rule em {
+  font-style: normal;
+  color: #a5c9d7;
+}
+.standard-list {
+  margin-top: 12px;
+}
+.standard-list button {
+  display: grid;
+  grid-template-columns: 105px 1fr 130px 70px 70px;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 12px 8px;
+  border: 0;
+  border-bottom: 1px solid #153147;
+  background: transparent;
+  text-align: left;
+}
+.standard-list b {
+  font-size: 9px;
+  color: #b4d0dc;
+}
+.standard-list em {
+  font-style: normal;
+  font-size: 8px;
+  color: #617f95;
+}
+.standard-list > button > i strong,
+.standard-list > button > i small {
+  display: block;
+}
+.standard-list > button > i strong {
+  font: 700 12px monospace;
+  color: #54d8b5;
+}
+.standard-list > button > i small {
+  font-size: 7px;
+  color: #58758b;
+}
+.log-layout {
+  display: grid;
+  grid-template-columns: 1.35fr 0.65fr;
+  gap: 13px;
+}
+.log-console,
+.severity {
+  padding: 18px;
+}
+.console-filter button {
+  padding: 5px 8px;
+  border: 1px solid #173e57;
+  background: #081d30;
+  color: #5d7d94;
+  font-size: 7px;
+}
+.console-filter button.active {
+  color: #67e0f2;
+  border-color: #2a829f;
+}
+.console {
+  height: 470px;
+  overflow: auto;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: #04131f;
+  border: 1px solid #133249;
+  font-family: monospace;
+}
+.console p {
+  display: grid;
+  grid-template-columns: 65px 42px 90px 1fr;
+  gap: 8px;
+  margin: 0;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(24, 61, 83, 0.38);
+  font-size: 8px;
+}
+.console time {
+  color: #4f7188;
+}
+.console em {
+  font-style: normal;
+  color: #48d3b0;
+}
+.console span {
+  color: #4fc6df;
+}
+.console b {
+  font-weight: 400;
+  color: #7f9cac;
+}
+.console p.warn em {
+  color: #e8a849;
+}
+.console p.error em,
+.console p.error b {
+  color: #ff6c7d;
+}
+.severity-bars {
+  margin: 20px 0;
+}
+.severity-bars p {
+  display: grid;
+  grid-template-columns: 40px 1fr 35px;
+  gap: 8px;
+  align-items: center;
+  font: 8px monospace;
+  color: #6b889d;
+}
+.severity-bars i {
+  height: 6px;
+  background: #112f44;
+}
+.severity-bars i b {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #3287b8, #42d8ef);
+}
+.severity h4 {
+  font-size: 9px;
+  color: #8caabb;
+}
+.state-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.state-cards p {
+  padding: 12px 6px;
+  text-align: center;
+  border: 1px solid #17384f;
+  background: #081d30;
+}
+.state-cards b,
+.state-cards span {
+  display: block;
+}
+.state-cards b {
+  font: 700 14px monospace;
+  color: #bceaf4;
+}
+.state-cards span {
+  font-size: 7px;
+  color: #58758c;
+  margin-top: 5px;
+}
+.prototype-detail {
+  padding: 4px;
+}
+.detail-status {
+  display: flex;
+  justify-content: space-between;
+}
+.prototype-detail h3 {
+  font-size: 11px;
+  color: #a9c8d8;
+  margin: 22px 0 10px;
+}
+.prototype-detail dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid #19384f;
+}
+.prototype-detail dl div {
+  padding: 11px;
+  border-right: 1px solid #163149;
+  border-bottom: 1px solid #163149;
+}
+.prototype-detail dt {
+  font-size: 7px;
+  color: #5b7a92;
+}
+.prototype-detail dd {
+  font-size: 9px;
+  color: #b5d0dd;
+  margin: 5px 0 0;
+}
+.relation-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin-bottom: 20px;
+}
+.relation-grid button {
+  display: flex;
+  justify-content: space-between;
+  padding: 11px;
+  border: 1px solid #193b53;
+  background: #091f32;
+  color: #6e8da2;
+  font-size: 8px;
+}
+.relation-grid b {
+  color: #52d5ec;
+}
+.property-json {
+  max-height: 230px;
+  margin: 0 0 18px;
+  padding: 13px;
+  overflow: auto;
+  border: 1px solid #19384f;
+  border-radius: 6px;
+  background: #061827;
+  color: #8fc6d8;
+  font:
+    10px/1.65 "SFMono-Regular",
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.record-create-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 14px;
+  margin-top: 16px;
+}
+.record-create-form .wide {
+  grid-column: 1 / -1;
+}
+.record-create-form :deep(.el-select) {
+  width: 100%;
+}
+.demo-dialog {
+  text-align: center;
+  padding: 10px 20px;
+}
+.demo-dialog > div {
+  width: 58px;
+  height: 58px;
+  border: 1px solid #36cde8;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin: auto;
+  color: #65e4f7;
+  box-shadow: inset 0 0 16px rgba(54, 205, 232, 0.15);
+}
+.demo-dialog h3 {
+  color: #d1eaf4;
+}
+.demo-dialog p {
+  font-size: 10px;
+  line-height: 1.7;
+  color: #69869b;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (max-width: 1200px) {
+  .registry-layout {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+  .object-profile {
+    display: none;
+  }
+  .lab-layout,
+  .analysis-layout,
+  .govern-layout,
+  .log-layout {
+    grid-template-columns: 1fr;
+  }
+  .analysis-table,
+  .standard-catalog {
+    grid-column: auto;
+  }
+  .overview-layout {
+    grid-template-columns: 1fr;
+  }
+  .domain-map {
+    grid-row: auto;
+  }
+  .monitor-layout {
+    grid-template-columns: 1fr;
+  }
+  .waveform {
+    grid-row: auto;
+  }
+}
+@media (max-width: 800px) {
+  .module-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .head-actions {
+    justify-content: flex-start;
+  }
+  .metric-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .registry-layout {
+    grid-template-columns: 1fr;
+  }
+  .filter-rail {
+    display: none;
+  }
+  .source-chart,
+  .quality-board {
+    grid-template-columns: 1fr;
+  }
+  .kanban {
+    grid-template-columns: repeat(4, 160px);
+  }
+  .analysis-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .analysis-toolbar button {
+    width: 100%;
+  }
+  .lineage-flow {
+    overflow: auto;
+  }
+  .lineage-flow button {
+    min-width: 140px;
+  }
+  .standard-list button {
+    grid-template-columns: 95px 1fr 70px;
+  }
+  .standard-list em,
+  .standard-list > button > i {
+    display: none;
+  }
+}
+@media (max-width: 520px) {
+  .metric-strip {
+    grid-template-columns: 1fr;
+  }
+  .title h1 {
+    font-size: 21px;
+  }
+  .title .source-badge {
+    display: none;
+  }
+  .map-canvas {
+    height: 500px;
+  }
+  .domain {
+    width: 108px;
+  }
+  .source-topology {
+    transform: scale(0.85);
+  }
+  .measurement-map {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .console p {
+    grid-template-columns: 54px 36px 1fr;
+  }
+  .console span {
+    display: none;
+  }
+}
 </style>

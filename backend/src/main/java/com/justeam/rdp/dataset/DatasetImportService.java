@@ -45,15 +45,15 @@ public class DatasetImportService {
         String name=safeName(file.getOriginalFilename()),type=type(name);UserPrincipal user=CurrentUser.require();
         Long jobId=jdbc.sql("INSERT INTO data_import_job(dataset_id,file_name,file_type,status,created_by,created_by_name) VALUES (:dataset,:name,:type,'RUNNING',:user,:userName) RETURNING id")
                 .param("dataset",datasetId).param("name",name).param("type",type).param("user",user.id()).param("userName",user.realName()).query(Long.class).single();
-        int success=0;List<ImportRow> rows;
+        int success=0;List<ImportRow> rows;List<Map<String,Object>> generatedRecords=new ArrayList<>();
         try{rows=parse(file,type,fields(dataset));if(rows.size()>MAX_ROWS)throw BusinessException.badRequest("单次导入最多"+MAX_ROWS+"行，请拆分文件");
             for(ImportRow row:rows){
                 if(row.error()!=null){recordError(jobId,row.rowNumber(),row.data(),row.error());continue;}
-                try{datasets.createRecord(datasetId,UUID.randomUUID(),row.data());success++;}
+                try{Map<String,Object> created=datasets.createRecord(datasetId,UUID.randomUUID(),row.data());success++;if(generatedRecords.size()<100){Map<String,Object> generated=new LinkedHashMap<>();generated.put("rowNumber",row.rowNumber());generated.put("recordId",created.get("id"));generated.put("businessCode",created.get("businessCode"));generatedRecords.add(generated);}}
                 catch(Exception ex){recordError(jobId,row.rowNumber(),row.data(),message(ex));}
             }
             int failures=rows.size()-success;String status=failures==0?"COMPLETED":success==0?"FAILED":"PARTIAL";
-            finish(jobId,status,rows.size(),success,failures);audit.record("IMPORT","DATASET","批量导入数据集",Map.of("datasetId",datasetId,"jobId",jobId,"fileName",name,"total",rows.size(),"success",success,"failure",failures));return job(jobId);
+            finish(jobId,status,rows.size(),success,failures);audit.record("IMPORT","DATASET","批量导入数据集",Map.of("datasetId",datasetId,"jobId",jobId,"fileName",name,"total",rows.size(),"success",success,"failure",failures));Map<String,Object> result=job(jobId);result.put("generatedRecords",generatedRecords);result.put("generatedRecordsTruncated",success>generatedRecords.size());return result;
         }catch(Exception ex){finish(jobId,"FAILED",0,0,1);recordError(jobId,0,Map.of("fileName",name),message(ex));if(ex instanceof BusinessException business)throw business;throw BusinessException.badRequest("导入文件解析失败："+message(ex));}
     }
 

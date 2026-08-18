@@ -9,8 +9,12 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.Objects;
 import java.util.UUID;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
@@ -20,6 +24,7 @@ import com.justeam.rdp.security.UserPrincipal;
 
 @Service
 public class CrossStoreOutboxService {
+    private static final DateTimeFormatter BUSINESS_DATE=DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneId.of("Asia/Shanghai"));
     private final JdbcClient jdbc;
     private final JsonSupport json;
     private final AuditService audit;
@@ -51,7 +56,7 @@ public class CrossStoreOutboxService {
                 .param("payload", json.write(payload)).update();
         Event event = jdbc.sql("""
                 SELECT id,event_key,aggregate_id,aggregate_record_id,operation,request_fingerprint,actor_id,actor_username,
-                       status,payload::text AS payload,attempts,FALSE AS leased,NULL::uuid AS processing_token
+                       created_time,status,payload::text AS payload,attempts,FALSE AS leased,NULL::uuid AS processing_token
                 FROM cross_store_outbox WHERE event_key=:key
                 """).param("key", key).query(Event.class).single();
         if (event.aggregateId() != datasetId || !event.operation().equals(operation)
@@ -113,7 +118,7 @@ public class CrossStoreOutboxService {
                        processing_token=:token,processing_started_time=now()
                 FROM candidates c WHERE o.id=c.id
                 RETURNING o.id,o.event_key,o.aggregate_id,o.aggregate_record_id,o.operation,o.request_fingerprint,
-                          o.actor_id,o.actor_username,o.status,o.payload::text AS payload,o.attempts,TRUE AS leased,
+                          o.actor_id,o.actor_username,o.created_time,o.status,o.payload::text AS payload,o.attempts,TRUE AS leased,
                           o.processing_token
                 """).param("token",token).query(Event.class).list();
     }
@@ -121,18 +126,21 @@ public class CrossStoreOutboxService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void completeCreate(Event event, long datasetId,String recordId, Map<String, Object> details) {
         UUID token=claim(event);if(token==null)return;
+        String businessCode=businessCode(event);
         jdbc.sql("UPDATE data_dataset SET data_count=data_count+1, updated_time=now() WHERE id=:id")
                 .param("id", datasetId).update();
         jdbc.sql("""
-                INSERT INTO dataset_record_workflow(dataset_id,record_id,record_version,owner_id,status,search_data,
+                INSERT INTO dataset_record_workflow(dataset_id,record_id,business_code,record_version,owner_id,status,search_data,
                                                     record_created_time,record_updated_time,search_projection_ready)
-                VALUES (:dataset,:record,1,:owner,'DRAFT',CAST(:data AS jsonb),now(),now(),TRUE)
+                VALUES (:dataset,:record,:businessCode,1,:owner,'DRAFT',CAST(:data AS jsonb),now(),now(),TRUE)
                 ON CONFLICT(dataset_id,record_id) DO UPDATE SET search_data=EXCLUDED.search_data,
+                    business_code=coalesce(dataset_record_workflow.business_code,EXCLUDED.business_code),
                     record_updated_time=EXCLUDED.record_updated_time,search_projection_ready=TRUE
-                """).param("dataset",datasetId).param("record",recordId).param("owner",event.actorId())
+                """).param("dataset",datasetId).param("record",recordId).param("businessCode",businessCode).param("owner",event.actorId())
                 .param("data",json.write(details.getOrDefault("after",Map.of()))).update();
         done(event.id(),token);
-        audit.recordAs(event.actorId(), event.actorUsername(), "CREATE_RECORD", "DATASET", "新增数据集记录", details);
+        Map<String,Object> completedDetails=new LinkedHashMap<>(details);completedDetails.put("businessCode",businessCode);
+        audit.recordAs(event.actorId(), event.actorUsername(), "CREATE_RECORD", "DATASET", "新增数据集记录", completedDetails);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -211,6 +219,14 @@ public class CrossStoreOutboxService {
         return json.map(event.payload());
     }
 
+    public String businessCode(Event event) {
+        if(!"CREATE".equals(event.operation()))throw new IllegalArgumentException("仅创建事件具有业务标识码");
+        String prefix=jdbc.sql("SELECT record_code_prefix FROM data_dataset WHERE id=:id AND deleted=0")
+                .param("id",event.aggregateId()).query(String.class).optional()
+                .orElseThrow(()->BusinessException.notFound("数据集不存在"));
+        return prefix+"-"+BUSINESS_DATE.format(event.createdTime())+"-"+String.format(java.util.Locale.ROOT,"%06d",event.id());
+    }
+
     private UUID claim(Event event) {
         if(event.leased()){
             boolean valid=jdbc.sql("SELECT count(*) FROM cross_store_outbox WHERE id=:id AND status='PROCESSING' AND processing_token=:token")
@@ -253,7 +269,7 @@ public class CrossStoreOutboxService {
 
     public record Event(long id, UUID eventKey, long aggregateId, String aggregateRecordId,
                         String operation, String requestFingerprint, Long actorId, String actorUsername,
-                        String status, String payload,int attempts,boolean leased,UUID processingToken) {}
+                        Instant createdTime,String status, String payload,int attempts,boolean leased,UUID processingToken) {}
     private record DeleteReservation(String status,int version,Long eventId){}
     private record CorrectionReservation(String status,int version,Long eventId){}
 }

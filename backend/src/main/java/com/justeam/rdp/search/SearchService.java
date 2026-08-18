@@ -164,16 +164,20 @@ public class SearchService {
                             ?"lower(trim(w.status))=lower(trim(:"+valueName+"))"
                             :"lower(w.status) LIKE lower(concat('%',:"+valueName+",'%'))");
                 }else if("KEYWORD".equals(condition.field())&&"FUZZY".equals(condition.matchMode())){
-                    where.append(" AND w.search_vector @@ plainto_tsquery('simple',rdp_search_tokens(:").append(valueName).append("))");
+                    where.append(" AND (w.search_vector @@ plainto_tsquery('simple',rdp_search_tokens(:").append(valueName)
+                            .append(")) OR lower(coalesce(w.business_code,'')) LIKE lower(concat('%',:").append(valueName).append(",'%')))");
                 }else{
                     List<String> paths=recordPaths(dataset.fields(),condition.field());
-                    if(paths.isEmpty()){where.append(" AND FALSE");conditionIndex++;continue;}
                     List<String> alternatives=new ArrayList<>();int pathIndex=0;
+                    if("KEYWORD".equals(condition.field()))alternatives.add("EXACT".equals(condition.matchMode())
+                            ?"lower(trim(coalesce(w.business_code,'')))=lower(trim(:"+valueName+"))"
+                            :"lower(coalesce(w.business_code,'')) LIKE lower(concat('%',:"+valueName+",'%'))");
                     for(String path:paths){String pathName="recordPath"+conditionIndex+"_"+pathIndex++;params.put(pathName,path.substring("data.".length()));
                         String expression="coalesce(jsonb_extract_path_text(w.search_data,:"+pathName+"),'')";
                         alternatives.add("EXACT".equals(condition.matchMode())
                                 ?"lower(trim("+expression+"))=lower(trim(:"+valueName+"))"
                                 :"lower("+expression+") LIKE lower(concat('%',:"+valueName+",'%'))");}
+                    if(alternatives.isEmpty()){where.append(" AND FALSE");conditionIndex++;continue;}
                     where.append(" AND (").append(String.join(" OR ",alternatives)).append(')');
                 }
                 conditionIndex++;
@@ -184,7 +188,7 @@ public class SearchService {
             String headline=headlineTerms(conditions);if(headline!=null)params.put("headline",headline);
             String highlight=headline==null?"NULL::text":"ts_headline('simple',rdp_headline_text("+escaped("w.search_data::text")+"),plainto_tsquery('simple',rdp_headline_text(:headline)),'StartSel=<mark>,StopSel=</mark>,MaxWords=35,MinWords=10,ShortWord=1,MaxFragments=2,FragmentDelimiter= … ')";
             JdbcClient.StatementSpec query=bind(jdbc.sql("""
-                    SELECT w.record_id,w.status,w.search_data::text AS search_data,
+                    SELECT w.record_id,w.business_code,w.status,w.search_data::text AS search_data,
                            w.record_created_time,w.record_updated_time,
                     """+highlight+" AS highlight_html "+fromSql+" ORDER BY "+order+" LIMIT :limit"),params).param("limit",limit);
             rows.addAll(query.query((rs,n)->recordProjectionResult(dataset,rs)).list());
@@ -381,14 +385,14 @@ public class SearchService {
     }
 
     private Map<String,Object> recordProjectionResult(DatasetIndex dataset,ResultSet rs)throws SQLException{
-        String id=rs.getString("record_id");Map<String,Object> data=json.map(rs.getString("search_data"));
+        String id=rs.getString("record_id"),businessCode=rs.getString("business_code");Map<String,Object> data=json.map(rs.getString("search_data"));
         Map<String,Object> value=new LinkedHashMap<>();value.put("id",id);value.put("_sortId",id);
-        value.put("resourceType","RECORD");value.put("title",dataset.name()+" · 记录 "+id.substring(0,Math.min(8,id.length())));
-        value.put("code",id);value.put("summary",json.write(data));value.put("category",dataset.category());
+        value.put("resourceType","RECORD");value.put("title",dataset.name()+" · "+(businessCode==null?"记录 "+id.substring(0,Math.min(8,id.length())):businessCode));
+        value.put("code",businessCode==null?id:businessCode);value.put("summary",json.write(data));value.put("category",dataset.category());
         value.put("status",rs.getString("status"));value.put("dataScopeId",dataset.scopeId());
         value.put("highlightHtml",compactHeadline(rs.getString("highlight_html")));
         value.put("createdTime",rs.getObject("record_created_time"));value.put("updatedTime",rs.getObject("record_updated_time"));
-        value.put("route","/datasets/"+dataset.id()+"?record="+id);value.put("attributes",Map.of("datasetId",dataset.id(),"data",data));
+        value.put("route","/datasets/"+dataset.id()+"?record="+id);value.put("attributes",Map.of("datasetId",dataset.id(),"recordId",id,"businessCode",businessCode==null?id:businessCode,"data",data));
         return value;
     }
 

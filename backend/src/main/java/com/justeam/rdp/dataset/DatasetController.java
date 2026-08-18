@@ -184,11 +184,12 @@ public class DatasetController {
 
     public record Body(@NotBlank(message = "数据集名称不能为空") @Size(max = 200, message = "数据集名称最长200字符") String name,
                        String description, String category, String tags,Long scientificCategoryId,Long industryCategoryId,
+                       @Size(max=16,message="记录标识前缀最长16字符") String recordCodePrefix,
                        @NotEmpty(message = "字段定义不能为空") List<Map<String, Object>> fieldDefinition,
                        @NotNull(message = "请选择数据域") @Positive(message = "数据域不正确") Long dataScopeId,
                        Long templateId) {
         DatasetService.DatasetBody serviceBody() {
-            return new DatasetService.DatasetBody(name, description, category, tags,scientificCategoryId,industryCategoryId, fieldDefinition, dataScopeId, templateId);
+            return new DatasetService.DatasetBody(name, description, category, tags,scientificCategoryId,industryCategoryId,recordCodePrefix,fieldDefinition, dataScopeId, templateId);
         }
     }
 

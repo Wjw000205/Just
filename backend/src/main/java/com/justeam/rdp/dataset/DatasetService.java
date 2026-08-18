@@ -26,6 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -46,6 +48,7 @@ import java.util.stream.Stream;
 
 @Service
 public class DatasetService {
+    private static final DateTimeFormatter BUSINESS_DATE=DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneId.of("Asia/Shanghai"));
     private final JdbcClient jdbc;
     private final MongoTemplate mongo;
     private final JsonSupport json;
@@ -130,16 +133,20 @@ public class DatasetService {
         validateFieldDefinitions(fields);
         validateCategories(body.scientificCategoryId(),body.industryCategoryId());
         UserPrincipal user = CurrentUser.require();String canonicalTags=normalizeTags(body.tags());
-        Long id = jdbc.sql("""
-                INSERT INTO data_dataset(name,description,category,tags,field_definition,status,creator_id,creator_name,
-                                         data_scope_id,template_id,template_version,scientific_category_id,industry_category_id)
-                VALUES (:name,:description,:category,:tags,CAST(:fields AS jsonb),0,:creatorId,:creatorName,
-                        :scopeId,:templateId,:templateVersion,:scientificCategoryId,:industryCategoryId) RETURNING id
-                """).param("name", body.name()).param("description", body.description()).param("category", body.category())
+        Long id=jdbc.sql("SELECT nextval(pg_get_serial_sequence('data_dataset','id'))").query(Long.class).single();
+        String recordCodePrefix=normalizeRecordCodePrefix(body.recordCodePrefix(),id);
+        jdbc.sql("""
+                INSERT INTO data_dataset(id,name,description,category,tags,field_definition,status,creator_id,creator_name,
+                                         data_scope_id,template_id,template_version,scientific_category_id,industry_category_id,
+                                         record_code_prefix)
+                VALUES (:id,:name,:description,:category,:tags,CAST(:fields AS jsonb),0,:creatorId,:creatorName,
+                        :scopeId,:templateId,:templateVersion,:scientificCategoryId,:industryCategoryId,:recordCodePrefix)
+                """).param("id",id).param("name", body.name()).param("description", body.description()).param("category", body.category())
                 .param("tags", canonicalTags).param("fields", json.write(fields)).param("creatorId", user.id())
                 .param("creatorName", user.realName()).param("scopeId", body.dataScopeId())
                 .param("templateId", body.templateId()).param("templateVersion", templateVersion)
-                .param("scientificCategoryId",body.scientificCategoryId()).param("industryCategoryId",body.industryCategoryId()).query(Long.class).single();
+                .param("scientificCategoryId",body.scientificCategoryId()).param("industryCategoryId",body.industryCategoryId())
+                .param("recordCodePrefix",recordCodePrefix).update();
         syncTags(id,canonicalTags);
         audit.record("CREATE", "DATASET", "创建数据集：" + body.name());
         return id;
@@ -151,6 +158,9 @@ public class DatasetService {
         lockRow(id);
         Map<String, Object> existing = get(id);
         requireOwnerOrAdmin(existing);
+        String recordCodePrefix=body.recordCodePrefix()==null||body.recordCodePrefix().isBlank()
+                ?String.valueOf(existing.get("recordCodePrefix")):normalizeRecordCodePrefix(body.recordCodePrefix(),id);
+        if(!recordCodePrefix.equals(existing.get("recordCodePrefix")))throw BusinessException.badRequest("记录标识前缀创建后不可修改，避免历史业务码失去含义");
         long dataCount=((Number) existing.get("dataCount")).longValue();boolean recoverableArchive=hasRecoverableArchive(id);
         ensureNoPendingCreates(id);
         if ((dataCount>0||recoverableArchive) && !existing.get("fieldDefinition").equals(body.fieldDefinition())) {
@@ -173,12 +183,13 @@ public class DatasetService {
                 UPDATE data_dataset SET name=:name,description=:description,category=:category,tags=:tags,
                 field_definition=CAST(:fields AS jsonb),data_scope_id=:scopeId,template_id=:templateId,
                 template_version=:templateVersion,scientific_category_id=:scientificCategoryId,
-                industry_category_id=:industryCategoryId,version=version+1,updated_time=now()
+                industry_category_id=:industryCategoryId,record_code_prefix=:recordCodePrefix,version=version+1,updated_time=now()
                 WHERE id=:id
                 """).param("name", body.name()).param("description", body.description()).param("category", body.category())
                 .param("tags", canonicalTags).param("fields", json.write(body.fieldDefinition()))
                 .param("scopeId", body.dataScopeId()).param("templateId",body.templateId()).param("templateVersion",templateVersion)
-                .param("scientificCategoryId",body.scientificCategoryId()).param("industryCategoryId",body.industryCategoryId()).param("id", id).update();
+                .param("scientificCategoryId",body.scientificCategoryId()).param("industryCategoryId",body.industryCategoryId())
+                .param("recordCodePrefix",recordCodePrefix).param("id", id).update();
         syncTags(id,canonicalTags);
         audit.record("UPDATE", "DATASET", "更新数据集：" + id,
                 Map.of("datasetId",id,"before",auditSnapshot(existing),"after",auditSnapshot(get(id))));
@@ -251,8 +262,10 @@ public class DatasetService {
         details.put("datasetId", datasetId); details.put("after", data); details.put("reason", "新增记录");
         CrossStoreOutboxService.Event event = outbox.prepare(idempotencyKey, datasetId, null, "CREATE", details,
                 Map.of("data", data));
+        String businessCode=outbox.businessCode(event);details.put("businessCode",businessCode);
         Document document = new Document("datasetId", datasetId)
                 .append("dataScopeId", ((Number) dataset.get("dataScopeId")).longValue())
+                .append("businessCode",businessCode)
                 .append("data", Document.parse(json.write(data))).append("version", 1)
                 .append("createdBy", user.id()).append("createdByName", user.realName())
                 .append("createdTime", Instant.now()).append("deleted", false).append("workflowStatus","DRAFT")
@@ -379,6 +392,8 @@ public class DatasetService {
         return (List<Map<String, Object>>) dataset.get("fieldDefinition");
     }
 
+    private List<Map<String,Object>> exportFields(Map<String,Object> dataset){List<Map<String,Object>> result=new ArrayList<>();Map<String,Object> businessCode=new LinkedHashMap<>();businessCode.put("key","_businessCode");businessCode.put("label","业务标识码");businessCode.put("type","string");businessCode.put("system",true);result.add(businessCode);result.addAll(fields(dataset));return result;}
+
     private void validateFieldDefinitions(List<Map<String, Object>> fields) {
         if (fields == null || fields.isEmpty()) throw BusinessException.badRequest("字段定义不能为空");
         if (fields.size() > 200) throw BusinessException.badRequest("字段数量不能超过200个");
@@ -405,24 +420,24 @@ public class DatasetService {
         return exportInternal(datasetId,dataset,format,requestedFields,output,actorId,actorUsername,includeUnpublished,false);
     }
     private long exportInternal(long datasetId,Map<String,Object> dataset,String format,List<String> requestedFields,OutputStream output,long actorId,String actorUsername,boolean includeUnpublished,boolean auditAttempt)throws IOException{
-        List<Map<String,Object>> available=fields(dataset);List<Map<String,Object>> selected=selectFields(available,requestedFields);
+        List<Map<String,Object>> available=exportFields(dataset);List<Map<String,Object>> selected=selectFields(available,requestedFields);
         String normalized=format==null?"csv":format.toLowerCase(java.util.Locale.ROOT);CountingOutputStream counted=new CountingOutputStream(output);MessageDigest digest;try{digest=MessageDigest.getInstance("SHA-256");}catch(Exception ex){throw new IllegalStateException(ex);}DigestOutputStream signed=new DigestOutputStream(counted,digest);
         try{long count=switch(normalized){case "csv"->writeCsv(datasetId,selected,signed,actorId,includeUnpublished);case "json"->writeJson(datasetId,selected,signed,actorId,includeUnpublished);case "xlsx"->writeXlsx(datasetId,selected,signed,actorId,includeUnpublished);default->throw BusinessException.badRequest("导出格式仅支持 csv、json、xlsx");};signed.flush();if(auditAttempt)audit.recordAs(actorId,actorUsername,"EXPORT","DATASET","导出数据集",Map.of("datasetId",datasetId,"format",normalized,"fields",selected.stream().map(f->f.get("key")).toList(),"maskedFields",selected.stream().filter(this::sensitive).map(f->f.get("key")).toList(),"recordCount",count,"sizeBytes",counted.count(),"sha256",HexFormat.of().formatHex(digest.digest()),"result","COMPLETED"));return count;
         }catch(Exception ex){if(auditAttempt)audit.recordAs(actorId,actorUsername,"EXPORT_FAILED","DATASET","导出数据集失败",Map.of("datasetId",datasetId,"format",normalized,"fields",selected.stream().map(f->f.get("key")).toList(),"sizeBytes",counted.count(),"errorType",ex.getClass().getSimpleName(),"result","FAILED"));if(ex instanceof IOException io)throw io;if(ex instanceof RuntimeException runtime)throw runtime;throw new IOException(ex);}
     }
 
-    private long writeCsv(long datasetId,List<Map<String,Object>> selected,OutputStream output,long actorId,boolean includeUnpublished)throws IOException{BufferedWriter writer=new BufferedWriter(new OutputStreamWriter(output,StandardCharsets.UTF_8));writer.write("\uFEFF");writer.write(selected.stream().map(field->escape(csvValue(field.get("label")))).reduce((a,b)->a+","+b).orElse(""));writer.write('\n');long count=0;Query query=exportQuery(actorId,includeUnpublished);try(Stream<Document> stream=mongo.stream(query,Document.class,collection(datasetId))){var iterator=stream.iterator();while(iterator.hasNext()){Document document=iterator.next();if(!authoritativelyVisible(datasetId,document,actorId,includeUnpublished))continue;Document data=document.get("data",Document.class);List<String> values=new ArrayList<>();for(Map<String,Object> field:selected)values.add(escape(csvValue(exportValue(field,data.get(field.get("key"))))));writer.write(String.join(",",values));writer.write('\n');count++;}}writer.flush();return count;}
-    private long writeJson(long datasetId,List<Map<String,Object>> selected,OutputStream output,long actorId,boolean includeUnpublished)throws IOException{BufferedWriter writer=new BufferedWriter(new OutputStreamWriter(output,StandardCharsets.UTF_8));writer.write('[');boolean first=true;long count=0;Query query=exportQuery(actorId,includeUnpublished);try(Stream<Document> stream=mongo.stream(query,Document.class,collection(datasetId))){var iterator=stream.iterator();while(iterator.hasNext()){Document document=iterator.next();if(!authoritativelyVisible(datasetId,document,actorId,includeUnpublished))continue;Document data=document.get("data",Document.class);Map<String,Object> value=new LinkedHashMap<>();for(Map<String,Object> field:selected)value.put(String.valueOf(field.get("key")),exportValue(field,data.get(field.get("key"))));if(!first)writer.write(',');writer.write(json.write(value));first=false;count++;}}writer.write(']');writer.flush();return count;}
-    private long writeXlsx(long datasetId,List<Map<String,Object>> selected,OutputStream output,long actorId,boolean includeUnpublished)throws IOException{org.apache.poi.xssf.streaming.SXSSFWorkbook workbook=new org.apache.poi.xssf.streaming.SXSSFWorkbook(100);workbook.setCompressTempFiles(true);long count=0;try{var sheet=workbook.createSheet("data");var header=sheet.createRow(0);for(int i=0;i<selected.size();i++)header.createCell(i).setCellValue(String.valueOf(selected.get(i).get("label")));Query query=exportQuery(actorId,includeUnpublished);try(Stream<Document> stream=mongo.stream(query,Document.class,collection(datasetId))){var iterator=stream.iterator();while(iterator.hasNext()){Document document=iterator.next();if(!authoritativelyVisible(datasetId,document,actorId,includeUnpublished))continue;Document data=document.get("data",Document.class);var row=sheet.createRow((int)count+1);for(int i=0;i<selected.size();i++){Map<String,Object> field=selected.get(i);Object value=exportValue(field,data.get(field.get("key")));var cell=row.createCell(i);if(!sensitive(field)&&value instanceof Number n)cell.setCellValue(n.doubleValue());else if(!sensitive(field)&&value instanceof Boolean b)cell.setCellValue(b);else cell.setCellValue(csvValue(value));}count++;}}workbook.write(output);output.flush();return count;}finally{workbook.dispose();workbook.close();}}
+    private long writeCsv(long datasetId,List<Map<String,Object>> selected,OutputStream output,long actorId,boolean includeUnpublished)throws IOException{BufferedWriter writer=new BufferedWriter(new OutputStreamWriter(output,StandardCharsets.UTF_8));writer.write("\uFEFF");writer.write(selected.stream().map(field->escape(csvValue(field.get("label")))).reduce((a,b)->a+","+b).orElse(""));writer.write('\n');long count=0;Query query=exportQuery(actorId,includeUnpublished);try(Stream<Document> stream=mongo.stream(query,Document.class,collection(datasetId))){var iterator=stream.iterator();while(iterator.hasNext()){Document document=iterator.next();if(!authoritativelyVisible(datasetId,document,actorId,includeUnpublished))continue;List<String> values=new ArrayList<>();for(Map<String,Object> field:selected)values.add(escape(csvValue(exportValue(field,document))));writer.write(String.join(",",values));writer.write('\n');count++;}}writer.flush();return count;}
+    private long writeJson(long datasetId,List<Map<String,Object>> selected,OutputStream output,long actorId,boolean includeUnpublished)throws IOException{BufferedWriter writer=new BufferedWriter(new OutputStreamWriter(output,StandardCharsets.UTF_8));writer.write('[');boolean first=true;long count=0;Query query=exportQuery(actorId,includeUnpublished);try(Stream<Document> stream=mongo.stream(query,Document.class,collection(datasetId))){var iterator=stream.iterator();while(iterator.hasNext()){Document document=iterator.next();if(!authoritativelyVisible(datasetId,document,actorId,includeUnpublished))continue;Map<String,Object> value=new LinkedHashMap<>();for(Map<String,Object> field:selected)value.put(String.valueOf(field.get("key")),exportValue(field,document));if(!first)writer.write(',');writer.write(json.write(value));first=false;count++;}}writer.write(']');writer.flush();return count;}
+    private long writeXlsx(long datasetId,List<Map<String,Object>> selected,OutputStream output,long actorId,boolean includeUnpublished)throws IOException{org.apache.poi.xssf.streaming.SXSSFWorkbook workbook=new org.apache.poi.xssf.streaming.SXSSFWorkbook(100);workbook.setCompressTempFiles(true);long count=0;try{var sheet=workbook.createSheet("data");var header=sheet.createRow(0);for(int i=0;i<selected.size();i++)header.createCell(i).setCellValue(String.valueOf(selected.get(i).get("label")));Query query=exportQuery(actorId,includeUnpublished);try(Stream<Document> stream=mongo.stream(query,Document.class,collection(datasetId))){var iterator=stream.iterator();while(iterator.hasNext()){Document document=iterator.next();if(!authoritativelyVisible(datasetId,document,actorId,includeUnpublished))continue;var row=sheet.createRow((int)count+1);for(int i=0;i<selected.size();i++){Map<String,Object> field=selected.get(i);Object value=exportValue(field,document);var cell=row.createCell(i);if(!sensitive(field)&&value instanceof Number n)cell.setCellValue(n.doubleValue());else if(!sensitive(field)&&value instanceof Boolean b)cell.setCellValue(b);else cell.setCellValue(csvValue(value));}count++;}}workbook.write(output);output.flush();return count;}finally{workbook.dispose();workbook.close();}}
     private Query exportQuery(long actorId,boolean includeUnpublished){return Query.query(visibleRecordsCriteria(actorId,includeUnpublished)).with(Sort.by(Sort.Direction.ASC,"createdTime"));}
     private Criteria visibleRecordsCriteria(long actorId,boolean includeUnpublished){Criteria active=new Criteria().andOperator(Criteria.where("deleted").ne(true),Criteria.where("archived").ne(true));if(includeUnpublished)return active;return new Criteria().andOperator(active,new Criteria().orOperator(Criteria.where("workflowStatus").is("PUBLISHED"),Criteria.where("createdBy").is(actorId)));}
     private boolean authoritativelyVisible(long datasetId,Document document,long actorId,boolean includeUnpublished){if(includeUnpublished||((Number)document.get("createdBy")).longValue()==actorId)return true;String recordId=document.getObjectId("_id").toHexString();return jdbc.sql("SELECT count(*) FROM dataset_record_workflow WHERE dataset_id=:dataset AND record_id=:record AND status='PUBLISHED'").param("dataset",datasetId).param("record",recordId).query(Long.class).single()>0;}
     private void filterAuthoritativeVisibility(long datasetId,List<Map<String,Object>> values,long actorId){List<String> candidates=values.stream().filter(v->((Number)v.get("createdBy")).longValue()!=actorId).map(v->String.valueOf(v.get("id"))).toList();if(candidates.isEmpty())return;java.util.Set<String> published=new java.util.HashSet<>(jdbc.sql("SELECT record_id FROM dataset_record_workflow WHERE dataset_id=:dataset AND record_id IN (:records) AND status='PUBLISHED'").param("dataset",datasetId).param("records",candidates).query(String.class).list());values.removeIf(v->((Number)v.get("createdBy")).longValue()!=actorId&&!published.contains(String.valueOf(v.get("id"))));}
     private long authoritativeVisibleCount(long datasetId,long actorId){long published=jdbc.sql("SELECT count(*) FROM dataset_record_workflow WHERE dataset_id=:dataset AND status='PUBLISHED'").param("dataset",datasetId).query(Long.class).single();long owned=mongo.count(Query.query(new Criteria().andOperator(Criteria.where("deleted").ne(true),Criteria.where("archived").ne(true),Criteria.where("createdBy").is(actorId))),collection(datasetId));long ownedPublished=jdbc.sql("SELECT count(*) FROM dataset_record_workflow WHERE dataset_id=:dataset AND owner_id=:owner AND status='PUBLISHED'").param("dataset",datasetId).param("owner",actorId).query(Long.class).single();return Math.max(0,published+owned-ownedPublished);}
     private List<Map<String,Object>> selectFields(List<Map<String,Object>> available,List<String> requested){if(requested==null||requested.isEmpty())return available;java.util.Set<String> keys=new java.util.LinkedHashSet<>();for(String value:requested)for(String part:value.split(","))if(!part.isBlank())keys.add(part.trim());Map<String,Map<String,Object>> index=new LinkedHashMap<>();for(Map<String,Object> field:available)index.put(String.valueOf(field.get("key")),field);if(!index.keySet().containsAll(keys))throw BusinessException.badRequest("导出字段包含未知字段");return keys.stream().map(index::get).toList();}
-    public void validateExportFields(Map<String,Object> dataset,List<String> requested){selectFields(fields(dataset),requested);}
+    public void validateExportFields(Map<String,Object> dataset,List<String> requested){selectFields(exportFields(dataset),requested);}
     public void auditExportPreflightFailure(long datasetId,String format,List<String> requested,UserPrincipal actor,Exception error){Map<String,Object> details=new LinkedHashMap<>();details.put("datasetId",datasetId);details.put("format",format);details.put("fields",requested==null?List.of():requested);details.put("stage","PREFLIGHT");details.put("errorType",error.getClass().getSimpleName());details.put("result","FAILED");audit.recordAs(actor.id(),actor.username(),"EXPORT_FAILED","DATASET","导出请求预检失败",details);}
-    public List<Map<String,Object>> exportFieldDescriptors(Map<String,Object> dataset){List<Map<String,Object>> result=new ArrayList<>();for(Map<String,Object> field:fields(dataset)){Map<String,Object> value=new LinkedHashMap<>();value.put("label",field.get("label"));value.put("value",field.get("key"));value.put("sensitive",sensitive(field));value.put("maskType",maskType(field));result.add(value);}return result;}
+    public List<Map<String,Object>> exportFieldDescriptors(Map<String,Object> dataset){List<Map<String,Object>> result=new ArrayList<>();for(Map<String,Object> field:exportFields(dataset)){Map<String,Object> value=new LinkedHashMap<>();value.put("label",field.get("label"));value.put("value",field.get("key"));value.put("sensitive",sensitive(field));value.put("maskType",maskType(field));result.add(value);}return result;}
 
     private void validateRecord(List<Map<String, Object>> fields, Map<String, Object> data) {
         if (data == null) throw BusinessException.badRequest("记录数据不能为空");
@@ -504,7 +519,7 @@ public class DatasetService {
     }
 
     private Map<String,Object> auditSnapshot(Map<String,Object> source){Map<String,Object> value=new LinkedHashMap<>();
-        for(String key:List.of("id","name","description","category","tags","scientificCategoryId","industryCategoryId","fieldDefinition","dataCount","status",
+        for(String key:List.of("id","name","description","category","tags","scientificCategoryId","industryCategoryId","recordCodePrefix","fieldDefinition","dataCount","status",
                 "dataScopeId","version","templateId","templateVersion"))value.put(key,source.get(key));
         return value;}
 
@@ -527,6 +542,7 @@ public class DatasetService {
         value.put("id", rs.getLong("id")); value.put("name", rs.getString("name"));
         value.put("description", rs.getString("description")); value.put("category", rs.getString("category"));
         value.put("tags", rs.getString("tags")); value.put("fieldDefinition", readFields(rs.getString("field_definition")));
+        value.put("recordCodePrefix",rs.getString("record_code_prefix"));
         value.put("scientificCategoryId",rs.getObject("scientific_category_id"));value.put("industryCategoryId",rs.getObject("industry_category_id"));
         value.put("dataCount", rs.getLong("data_count")); value.put("storageSize", rs.getLong("storage_size"));
         value.put("status", rs.getInt("status")); value.put("creatorId", rs.getLong("creator_id"));
@@ -548,13 +564,14 @@ public class DatasetService {
     private Map<String, Object> recordView(Document document) {
         Map<String, Object> value = new LinkedHashMap<>();
         value.put("id", document.getObjectId("_id").toHexString());
+        value.put("businessCode",businessCode(document));
         value.put("data", document.get("data")); value.put("version", document.getInteger("version", 1));
         value.put("createdBy", document.get("createdBy")); value.put("createdByName", document.get("createdByName"));
         value.put("createdTime", document.get("createdTime")); value.put("updatedTime", document.get("updatedTime"));
         return value;
     }
 
-    private void enrichWorkflow(long datasetId,List<Map<String,Object>> records){if(records.isEmpty())return;List<String> ids=records.stream().map(v->String.valueOf(v.get("id"))).toList();Map<String,String> statuses=new java.util.HashMap<>();jdbc.sql("SELECT record_id,status FROM dataset_record_workflow WHERE dataset_id=:dataset AND record_id IN (:ids)").param("dataset",datasetId).param("ids",ids).query((rs,n)->{statuses.put(rs.getString("record_id"),rs.getString("status"));return 1;}).list();records.forEach(v->v.put("workflowStatus",statuses.getOrDefault(String.valueOf(v.get("id")),"DRAFT")));}
+    private void enrichWorkflow(long datasetId,List<Map<String,Object>> records){if(records.isEmpty())return;List<String> ids=records.stream().map(v->String.valueOf(v.get("id"))).toList();Map<String,Map<String,String>> workflow=new java.util.HashMap<>();jdbc.sql("SELECT record_id,status,business_code FROM dataset_record_workflow WHERE dataset_id=:dataset AND record_id IN (:ids)").param("dataset",datasetId).param("ids",ids).query((rs,n)->{Map<String,String> value=new java.util.HashMap<>();value.put("status",rs.getString("status"));if(rs.getString("business_code")!=null)value.put("businessCode",rs.getString("business_code"));workflow.put(rs.getString("record_id"),value);return 1;}).list();records.forEach(v->{Map<String,String> state=workflow.get(String.valueOf(v.get("id")));v.put("workflowStatus",state==null?"DRAFT":state.get("status"));if(state!=null&&state.get("businessCode")!=null)v.put("businessCode",state.get("businessCode"));});}
     private String collection(long datasetId) { return "dataset_data_" + datasetId; }
     private void ensureEventIndex(long datasetId) {
         mongo.indexOps(collection(datasetId)).ensureIndex(new Index().on("outboxEventKey", Sort.Direction.ASC).unique()
@@ -563,12 +580,16 @@ public class DatasetService {
     private ObjectId objectId(String id) {
         try { return new ObjectId(id); } catch (Exception ex) { throw BusinessException.badRequest("记录ID格式不正确"); }
     }
+    String legacyBusinessCode(long datasetId,Document document){String stored=document.getString("businessCode");if(stored!=null&&!stored.isBlank())return stored;String prefix=jdbc.sql("SELECT record_code_prefix FROM data_dataset WHERE id=:id").param("id",datasetId).query(String.class).single();Object created=document.get("createdTime");Instant instant=created instanceof Instant value?value:created instanceof java.util.Date value?value.toInstant():document.getObjectId("_id").getDate().toInstant();return prefix+"-"+BUSINESS_DATE.format(instant)+"-L"+document.getObjectId("_id").toHexString().toUpperCase(java.util.Locale.ROOT);}
+    private String businessCode(Document document){Object dataset=document.get("datasetId");if(!(dataset instanceof Number number))throw new IllegalStateException("记录缺少数据集标识");return legacyBusinessCode(number.longValue(),document);}
+    private String normalizeRecordCodePrefix(String value,long datasetId){String normalized=value==null||value.isBlank()?String.format(java.util.Locale.ROOT,"DS%04d",datasetId):value.trim().toUpperCase(java.util.Locale.ROOT);if(!normalized.matches("^[A-Z][A-Z0-9]{1,15}$"))throw BusinessException.badRequest("记录标识前缀须为2至16位大写字母或数字，并以字母开头");return normalized;}
     private String csvValue(Object value) {
         String text = value == null ? "" : value instanceof String ? value.toString() : json.write(value);
         String stripped=text.stripLeading();if(!text.isEmpty()&&("\t\r\n".indexOf(text.charAt(0))>=0||!stripped.isEmpty()&&"=+-@".indexOf(stripped.charAt(0))>=0))text="'"+text;
         return text;
     }
     private Object exportValue(Map<String,Object> field,Object value){if(value==null||!sensitive(field))return value;String text=value instanceof String?String.valueOf(value):json.write(value);if(text.isBlank())return text;return switch(maskType(field)){case "PHONE"->text.length()<=7?stars(text.length()):text.substring(0,3)+stars(text.length()-7)+text.substring(text.length()-4);case "EMAIL"->{int at=text.indexOf('@');yield at<=0?genericMask(text):text.substring(0,1)+stars(Math.max(3,at-1))+text.substring(at);}case "ID_CARD"->text.length()<=8?genericMask(text):text.substring(0,4)+stars(text.length()-8)+text.substring(text.length()-4);case "NAME"->text.substring(0,1)+stars(Math.max(2,text.length()-1));default->genericMask(text);};}
+    private Object exportValue(Map<String,Object> field,Document document){if(Boolean.TRUE.equals(field.get("system")))return businessCode(document);Document data=document.get("data",Document.class);return exportValue(field,data==null?null:data.get(field.get("key")));}
     private boolean sensitive(Map<String,Object> field){if(Boolean.parseBoolean(String.valueOf(field.getOrDefault("sensitive",false))))return true;String value=(String.valueOf(field.getOrDefault("key",""))+" "+String.valueOf(field.getOrDefault("label",""))).toLowerCase(java.util.Locale.ROOT);return value.matches(".*(phone|mobile|email|idcard|id_number|身份证|手机号|电话|邮箱).*?");}
     private String maskType(Map<String,Object> field){String explicit=String.valueOf(field.getOrDefault("maskType","")).toUpperCase(java.util.Locale.ROOT);if(Set.of("PHONE","EMAIL","ID_CARD","NAME","GENERIC").contains(explicit))return explicit;String value=(String.valueOf(field.getOrDefault("key",""))+" "+String.valueOf(field.getOrDefault("label",""))).toLowerCase(java.util.Locale.ROOT);if(value.matches(".*(phone|mobile|手机号|电话).*") )return "PHONE";if(value.matches(".*(email|邮箱).*") )return "EMAIL";if(value.matches(".*(idcard|id_number|身份证).*") )return "ID_CARD";return "GENERIC";}
     private String genericMask(String text){if(text.length()<=2)return stars(Math.max(3,text.length()));return text.substring(0,1)+stars(Math.max(3,text.length()-2))+text.substring(text.length()-1);}
@@ -597,7 +618,7 @@ public class DatasetService {
     }
 
     public record DatasetBody(String name, String description, String category, String tags,Long scientificCategoryId,Long industryCategoryId,
-                              List<Map<String, Object>> fieldDefinition, long dataScopeId, Long templateId) {}
+                              String recordCodePrefix,List<Map<String, Object>> fieldDefinition, long dataScopeId, Long templateId) {}
     private record TemplateRef(int version, boolean published, String type, String schemaDefinition, String content,
                                String visibility, boolean enabled, long creatorId) {}
     private static final class CountingOutputStream extends FilterOutputStream {private long count;private CountingOutputStream(OutputStream out){super(out);}@Override public void write(int value)throws IOException{out.write(value);count++;}@Override public void write(byte[] buffer,int offset,int length)throws IOException{out.write(buffer,offset,length);count+=length;}long count(){return count;}}

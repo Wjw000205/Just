@@ -7,15 +7,30 @@
 | 认证 | `/api/auth/captcha`、`registration-settings`、`registration-code`、`register`、`login`、`refresh`、`logout` | 注册默认关闭；验证码绑定渠道和目标、5 分钟单次消费；匿名 POST 请求体上限 16KB，验证码/登录有 IP 与全局窗口限流，超限分别返回 413/429；refresh 通过 HttpOnly Cookie 轮换 |
 | 用户 | `/api/user/profile`、`/api/user/password` | 首次登录只能改密/退出 |
 | 模板 | `/api/templates`、`/{id}/versions`、`/{id}/publish`、`/{id}/audit`、`/{id}/favorite` | 版本历史、发布、审核、收藏和冻结保护 |
-| 数据集 | `/api/datasets`、`/{id}/favorite`、`/{id}/records` | 模板约束绑定、收藏、动态字段、幂等写入、受控更正/删除 |
+| 数据集 | `/api/datasets`、`/{id}/favorite`、`/{id}/records` | 模板约束绑定、收藏、动态字段、可读业务标识码、幂等写入、受控更正/删除 |
 | 工作流 | `/api/datasets/{id}/records/{recordId}/workflow/*` | `submit`、`review`、`publish` |
-| 导入导出 | `/api/datasets/{id}/imports`、`/{id}/export` | CSV/JSON/XLSX；导出用 `format`、`fields` |
+| 导入导出 | `/api/datasets/{id}/imports`、`/{id}/export` | CSV/JSON/XLSX；导入结果返回所生成业务码，导出用 `format`、`fields` |
 | 追溯 | `/api/trace/entities`、`relations`、`graph/{id}`、`entities/{id}/evidence` | `direction=forward|reverse|both`，节点证据按数据域与文件权限裁剪 |
+| 业务中心 | `/api/business/modules/{module}`、`/{module}/records/{id}` | 资产总览、材料/工艺/产品/性能库、追溯记录、研发项目/实验/工艺实验/仿真及系统日志；按权限和数据域返回真实业务对象 |
 | 设备 | `/api/devices`、`/{id}/measurements` | 测量写入要求幂等键 |
 | 文件 | `/api/files`、`/api/files/{id}` | multipart 上传、授权下载/预览、逻辑删除 |
 | 集成 | `/api/integrations`、`/{id}/mappings`、`/jobs`、`/dead-letters`、`/dead-letters/{id}/retry`、`/{id}/reconcile`、`/webhook/{systemCode}` | Webhook 支持 `RDP-HMAC-V1` 或 OAuth2 RFC 7662 Bearer；接收返回 202，后台处理/退避/死信状态从管理接口读取；人工重放要求 `integration:retry`、说明和 `PRIVILEGE` 二级确认 |
 | 审计 | `/api/audits`、`POST /api/audits/verify` | 只追加查询与全链验证 |
 | 管理 | `/api/admin/users`、`options`、`status`、`assignments`、`registrations`、`registrations/{id}/review` | 注册审核要求 `user:manage + permission:assign` 和载荷绑定的 `PRIVILEGE` 二次确认；保证至少一名启用管理员 |
+
+## 业务中心接口
+
+`module` 支持 `assets-overview`、`materials`、`processes`、`products`、`performance`、`trace-history`、`rnd-projects`、`experiments`、`process-experiments`、`simulations` 和 `system-logs`。列表查询支持 `keyword`、`pageNum`、`pageSize`，响应包含 `source=LIVE`、实时指标 `metrics`、业务行 `rows`、`total` 与分页信息；资产总览额外返回 `domains` 和 `sources`。
+
+材料、工艺、产品、性能和四类研发模块支持 `POST/PUT/DELETE /api/business/modules/{module}/records[/{id}]`。写入要求 `trace:write` 和目标数据域授权，更新/删除使用 `version` 乐观锁；已有关联追溯关系或附件的对象不能删除。删除还必须携带绑定完整请求目标的一次性 `DELETE` 二级确认凭证，并填写 `reason`。所有成功写入和失败访问均进入审计链。
+
+## 数据记录业务标识码
+
+创建数据集时可提交 `recordCodePrefix`，格式为 2—16 位大写字母或数字且必须以字母开头，例如材料数据集使用 `MAT`、工艺数据集使用 `PROC`。前缀在全平台唯一，数据集创建后不可修改或复用，避免不同业务数据产生含义冲突。
+
+手工新增和 CSV/JSON/XLSX 导入都调用同一记录创建链，成功时自动生成 `{前缀}-{yyyyMMdd}-{流水号}`，例如 `MAT-20260816-000123`。同一 `X-Idempotency-Key` 重试返回原记录和原业务码；不同成功记录的业务码不同。MongoDB ObjectId 仍是内部技术主键，不作为用户操作编号。历史记录通过 V34 获得稳定兼容码 `{前缀}-{yyyyMMdd}-L{原ObjectId}`。
+
+记录列表、详情、工作流证据、高级检索和导入结果均返回 `businessCode`。导出字段中的 `_businessCode` 表示“业务标识码”，默认参与 CSV/JSON/XLSX 导出；需要显式选择字段时也可将它放入 `fields`。
 
 ## 外部 Webhook 认证
 
